@@ -1,0 +1,87 @@
+<html>
+
+<head>
+<meta http-equiv="Content-Language" content="en-us">
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<title>Kademlia nodes store contact inf</title>
+</head>
+
+<body>
+
+<p>Kademlia nodes store contact information about each other to route query 
+messages.</p>
+<p>For each 0 &lt;= i &lt; 160, every node keeps a list of (IP address, UDP port, Node 
+ID) triples for nodes of distance between 2<sup>i</sup> and 2<sup>i+1</sup> from 
+itself.&nbsp; We call these lists <i>k-</i>buckets.&nbsp;</p>
+<p>Each <i>k-</i>bucket is kept 
+sorted by time last seen -- least-recently seen node at the head, most-recently 
+seen at the tail.&nbsp; For small values of <i>i</i>, the <i>k-</i>buckets will 
+generally be empty (as no appropriate nodes will exist.)&nbsp; Fir large values 
+of <i>i</i>, the lists can grow to size <i>k</i>, where <i>k</i> is a 
+system-wide replication parameter.&nbsp; <i>k</i> is chosen such that any given
+<i>k</i> nodes are very unlikely to fail within an hour of each other (for 
+example, <i>k</i>=20.)</p>
+<p>ID:</p>
+<pre>public class ID : IComparable
+  private byte[] data;
+
+  public ID(byte[] data)
+  public ID(string new_id)
+  private void IDInit(byte[] data)
+  public static ID operator^(ID a, ID b)
+  public static bool operator&lt;(ID a, ID b)
+  public static bool operator&gt;(ID a, ID b)
+  public static bool operator==(ID a, ID b)
+  public static bool operator!=(ID a, ID b)
+  public int DifferingBit(ID other)
+  public ID RandomizeBeyond(int bit)
+  private static void FlipBit(byte[] data, int bit)
+  public static ID HostID()
+</pre>
+<p>Node triple (IP address, UDP port, Node ID):</p>
+<pre>public class Contact
+{
+  private ID nodeID;
+  private Uri nodeEndpoint;
+</pre>
+<p><i>k</i>-buckets:</p>
+<pre>
+public class BucketList
+  private List&lt;List&lt;Contact&gt;&gt; buckets;
+  private List&lt;DateTime&gt; accessTimes; // last bucket write or explicit touch</pre>
+<p>Constructor:</p>
+<pre>public BucketList(ID ourID)
+{
+  this.ourID = ourID;
+  buckets = new List&lt;List&lt;Contact&gt;&gt;(NUM_BUCKETS);
+  accessTimes = new List&lt;DateTime&gt;();
+
+  // Set up each bucket
+  for(int i = 0; i &lt; NUM_BUCKETS; i++) 
+  {
+    buckets.Add(new List&lt;Contact&gt;(BUCKET_SIZE));
+    accessTimes.Add(default(DateTime));
+  }
+}</pre>
+<p>This creates 160 buckets, each with a list of 20 Contact records (<i>k</i>).&nbsp;&nbsp; 
+This is odd, because, given:</p>
+<p><i>For each 0 &lt;= i &lt; 160, every node keeps a list of (IP address, UDP port, Node 
+ID) triples for nodes of distance between 2<sup>i</sup> and 2<sup>i+1</sup> from 
+itself.&nbsp; We call these lists k-buckets.&nbsp;</i></p>
+<p>It seems like we would keep the following &quot;contacts&quot;:</p>
+<p>bucket[0] = 2<sup>1</sup> - 2<sup>0 </sup>= 1<br>
+bucket[1] = 2<sup>2</sup> - 2<sup>1</sup> = 2<br>
+bucket[2] = 2<sup>3</sup> - 2<sup>2</sup> = 4<br>
+...<br>
+bucket[159] = 2<sup>160</sup> - 2<sup>159</sup> = huge number</p>
+<p>So I'm not understanding this concept of &quot;distance between...from itself.&quot;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+
+</body>
+
+</html>
