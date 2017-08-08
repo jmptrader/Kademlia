@@ -59,10 +59,6 @@
   </PropertyGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.Targets" />
   <ItemGroup>
-    <Reference Include="log4net, Version=1.2.10.0, Culture=neutral, PublicKeyToken=1b44e1d426115821, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\lib\RavenEmbeddedClient\log4net.dll</HintPath>
-    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core">
       <RequiredTargetFramework>3.5</RequiredTargetFramework>
@@ -81,8 +77,10 @@
     <Compile Include="Contact.cs" />
     <Compile Include="Dht.cs" />
     <Compile Include="ID.cs" />
+    <Compile Include="IKademliaEndpoint.cs" />
     <Compile Include="IKademliaNode.cs" />
     <Compile Include="KademliaNode.cs" />
+    <Compile Include="KademliaRepository.cs" />
     <Compile Include="Messages\FindNode.cs" />
     <Compile Include="Messages\FindNodeResponse.cs" />
     <Compile Include="Messages\FindValue.cs" />
@@ -95,6 +93,10 @@
     <Compile Include="Messages\StoreData.cs" />
     <Compile Include="Messages\StoreQuery.cs" />
     <Compile Include="Messages\StoreResponse.cs" />
+    <Compile Include="Persistence\CompleteTag.cs" />
+    <Compile Include="Persistence\DhtElement.cs" />
+    <Compile Include="Persistence\IKademliaRepository.cs" />
+    <Compile Include="Persistence\KademliaResource.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -113,19 +115,5 @@
       <ProductName>Windows Installer 3.1</ProductName>
       <Install>true</Install>
     </BootstrapperPackage>
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\Metrics\Metrics.csproj">
-      <Project>{73003F98-4A4E-4D9F-A0A0-20CBEBB09631}</Project>
-      <Name>Metrics</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Persistence\Persistence.csproj">
-      <Project>{DF93835A-ED54-41C5-A878-6DB1411104E5}</Project>
-      <Name>Persistence</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\UdpBinding\UdpBinding.csproj">
-      <Project>{7667D3D1-795F-48E1-B271-BE245159EE34}</Project>
-      <Name>UdpBinding</Name>
-    </ProjectReference>
   </ItemGroup>
 </Project>

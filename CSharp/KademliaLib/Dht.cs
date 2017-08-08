@@ -25,15 +25,14 @@
  ******************************************************************************************/
 
 using System;
-using System.Net;
 using System.Collections.Generic;
 using System.Xml.Linq;
 using System.Linq;
 using System.ServiceModel;
 using Persistence;
 using System.Configuration;
-using Metrics;
-using log4net;
+// using Metrics;
+// using log4net;
 
 namespace Kademlia
 {
@@ -46,7 +45,7 @@ namespace Kademlia
 	public class Dht
 	{
 		private const int MAX_SIZE = 8 * 1024; // 8K is big
-        private static readonly ILog log = LogManager.GetLogger(typeof(Dht));
+        // private static readonly ILog log = LogManager.GetLogger(typeof(Dht));
 		
 		private KademliaNode dhtNode;
 		
@@ -57,7 +56,7 @@ namespace Kademlia
         /// <param name="dhtNode">The KademliaNode that is used to communicate using the protocol</param>
         /// <param name="alreadyBootstrapped">Checks if the node have or not to bootstrap</param>
         /// <param name="btpNode">The node to bootstrap with (can be leaved null)</param>
-		public Dht(KademliaNode dhtNode = null, bool alreadyBootstrapped = false, string btpNode = "")
+		public Dht(IKademliaRepository repo, KademliaNode dhtNode = null, bool alreadyBootstrapped = false, string btpNode = "")
 		{
             if (dhtNode != null)
             {
@@ -65,33 +64,36 @@ namespace Kademlia
             }
             else
             {
-                dhtNode = new KademliaNode();
+                dhtNode = new KademliaNode(repo);
             }
             if (!alreadyBootstrapped)
             {
                 if (btpNode == "")
                 {
                     int ourPort = dhtNode.GetPort();
-                    log.Info("We are on UDP port " + ourPort.ToString());
+                    // log.Info("We are on UDP port " + ourPort.ToString());
 
-                    log.Info("Getting bootstrap list...");
+                    // log.Info("Getting bootstrap list...");
 
                     AppSettingsReader asr = new AppSettingsReader();
                     
                     XDocument xmlDoc = XDocument.Load((string)asr.GetValue("KademliaNodesFile", typeof(string)));
 
-                    List<EndpointAddress> nodes = new List<EndpointAddress>(from node in xmlDoc.Descendants("Node")
-                                select new EndpointAddress("soap.udp://" + node.Element("Host").Value + ":" + node.Element("Port").Value + "/kademlia"));
+                    //List<EndpointAddress> nodes = new List<EndpointAddress>(from node in xmlDoc.Descendants("Node")
+                    //            select new EndpointAddress("soap.udp://" + node.Element("Host").Value + ":" + node.Element("Port").Value + "/kademlia"));
+
+					// TODO: Implement
+					List<IKademliaEndpoint> nodes = new List<IKademliaEndpoint>();
 
                     foreach (var node in nodes)
                     {
                         if (dhtNode.AsyncBootstrap(nodes))
                         {
-                            log.Debug("OK!");
+                            // log.Debug("OK!");
                         }
                         else
                         {
-                            log.Debug("Failed.");
+                            // log.Debug("Failed.");
                         }
                     }
                 }
@@ -99,35 +101,40 @@ namespace Kademlia
                 {
                     try
                     {
-                        log.Debug("Bootstrapping with " + btpNode);
-                        EndpointAddress bootstrapNode = new EndpointAddress(btpNode);
+						// log.Debug("Bootstrapping with " + btpNode);
+						// EndpointAddress bootstrapNode = new EndpointAddress(btpNode);
+
+						// TODO: IMPLEMENT
+						IKademliaEndpoint bootstrapNode = null;
+
                         if (dhtNode.Bootstrap(bootstrapNode))
                         {
-                            log.Debug("OK!");
+                            // log.Debug("OK!");
                         }
                         else
                         {
-                            log.Debug("Failed.");
+                            // log.Debug("Failed.");
                         }
                     }
                     catch (Exception ex)
                     {
-                        log.Error("Bad entry!", ex);
+                        // log.Error("Bad entry!", ex);
                     }
                 }
             }
             else
             {
-                log.Info("Self Bootstrapping");
+                // log.Info("Self Bootstrapping");
                 dhtNode.Bootstrap();
             }
 			// Join the network officially
-			log.Info("Trying to join network....");
-			if(dhtNode.JoinNetwork()) {
-				log.Info("Online");
-			} else {
-				log.Warn("Unable to connect to Kademlia overlay!\n"
-				                   + "Check that nodes list has accessible nodes.");
+			// log.Info("Trying to join network....");
+			if(dhtNode.JoinNetwork())
+			{
+				// log.Info("Online");
+			} else
+			{
+				// log.Warn("Unable to connect to Kademlia overlay!\n" + "Check that nodes list has accessible nodes.");
 			}
 		}
 		
@@ -139,6 +146,8 @@ namespace Kademlia
 		public KademliaResource Get(string key)
 		{
             IList<KademliaResource> found = dhtNode.Get(key);
+
+			/*
 			if(found.Count > 0) {
                 IList<KademliaResource> ordered = found.AsParallel().OrderByDescending(
                     d => QualityCalculator.calculateQualityCoefficient(
@@ -149,6 +158,9 @@ namespace Kademlia
 			} else {
 				return null; // Nothing there
 			}
+			*/
+
+			return found.Count > 0 ? found[0] : null;
 		}
 		
 		/// <summary>
@@ -159,6 +171,8 @@ namespace Kademlia
 		public IList<KademliaResource> GetAll(string key)
 		{
             IList<KademliaResource> found = dhtNode.Get(key);
+
+			/*
             if (found.Count > 0)
             {
                 return found.AsParallel().OrderByDescending(
@@ -171,6 +185,9 @@ namespace Kademlia
             {
                 return found;
             }
+			*/
+
+			return found;
 		}
 		
 		/// <summary>
