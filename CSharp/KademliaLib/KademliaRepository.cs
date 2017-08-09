@@ -9,10 +9,103 @@ using Persistence.Tag;
 
 namespace Kademlia
 {
-public class KademliaRepository : IKademliaRepository
+	// TODO: Implements an in-memory repo.  Need to abstract out implementation details.
+	public class KademliaRepository : IKademliaRepository
 	{
 		// private Repository _repository;
-		private TimeSpan _elementValidity;
+		private TimeSpan _elementValidity = new TimeSpan(24, 0, 0);
+
+		// ============================================================================================
+
+		// TODO: abstract out, as this is the in-memory implementation.
+
+		private Dictionary<string, KademliaResource> resources = new Dictionary<string, KademliaResource>();
+
+		private List<KademliaResource> GetAllResources()
+		{
+			return new List<KademliaResource>(resources.Values);
+		}
+
+		private bool TryGetByKey(string hash, out KademliaResource res)
+		{
+			return resources.TryGetValue(hash, out res);
+		}
+
+		// TODO: Is this correct?
+		private void Save(KademliaResource rs)
+		{
+			resources[rs.Tag.TagHash] = rs;
+		}
+
+		private KademliaResource GetResource(string hash)
+		{
+			KademliaResource rs;
+
+			resources.TryGetValue(hash, out rs);
+
+			return rs;
+		}
+
+		// ============================================================================================
+
+		// TODO: not sure what this does or if it's properly represented.
+		private Dictionary<string, Dictionary<string, List<DhtElement>>> elements = new Dictionary<string, Dictionary<string, List<DhtElement>>>();
+
+		private void AddElement(string id, string key, DhtElement el)
+		{
+			Dictionary<string, List<DhtElement>> idVal;
+
+			if (!elements.TryGetValue(id, out idVal))
+			{
+				idVal = new Dictionary<string, List<DhtElement>>();
+				idVal[key] = new List<DhtElement>();
+				elements[id] = idVal;
+			}
+
+			if (!idVal.ContainsKey(key))
+			{
+				idVal[key] = new List<DhtElement>();
+			}
+
+			idVal[key].Add(el);
+		}
+
+		private void SetElement(string id, string key, DhtElement el, DateTime pubtime)
+		{
+			Dictionary<string, List<DhtElement>> idVal;
+
+			if (!elements.TryGetValue(id, out idVal))
+			{
+				idVal = new Dictionary<string, List<DhtElement>>();
+				idVal[key] = new List<DhtElement>();
+				elements[id] = idVal;
+			}
+
+			int idx = idVal[key].FindIndex(q => q == el);
+
+			if (idx == -1)
+			{
+				// TODO: Does this scenario happen?
+				el.Publication = pubtime;			// TODO: Is this correct?
+				idVal[key].Add(el);
+			}
+			else
+			{
+				idVal[key][idx].Publication = pubtime;
+			}
+		}
+
+		private void RemoveElement(string id, string key, List<DhtElement> elementsToRemove)
+		{
+			Dictionary<string, List<DhtElement>> idVal;
+
+			if (elements.TryGetValue(id, out idVal))
+			{
+				idVal[key].RemoveAll(q => elementsToRemove.Contains(q));
+			}
+		}
+
+		// ============================================================================================
 
 		/// <summary>
 		/// Stores a tag as resource into the kademlia repository. If the resource already exists the method tries to add the 
@@ -32,63 +125,52 @@ public class KademliaRepository : IKademliaRepository
 			Console.WriteLine("Storing resource from peer " + peer);
 			DhtElement dhtElem = new DhtElement(peer, pubtime, this._elementValidity);
 
-			/*
-			RepositoryResponse resp = _repository.GetByKey<KademliaResource>(tag.TagHash, rs);
-			if (resp == RepositoryResponse.RepositoryLoad)
+			bool found = TryGetByKey(tag.TagHash, out rs);
+
+			if (found)
 			{
 				if (!rs.Urls.Contains(dhtElem))
 				{
-					_repository.ArrayAddElement(rs.Id, "Urls", dhtElem);
+					AddElement(rs.Id, "Urls", dhtElem);
 				}
 				else
 				{
-					log.Debug("Urls " + peer.ToString() + " already known");
-				}
-			}
-			else if (resp == RepositoryResponse.RepositoryMissingKey)
-			{
-				rs = new KademliaResource(tag, dhtElem);
-				if (_repository.Save(rs) == RepositoryResponse.RepositorySuccess)
-				{
-					List<string> pks = new List<string>(generatePrimaryKey(tag));
-					List<KademliaKeyword> keys = new List<KademliaKeyword>();
-					if (_repository.GetByKeySet(pks.ToArray(), keys) > 0)
-					{
-						foreach (KademliaKeyword k in keys)
-						{
-							if (!k.Tags.Contains(rs.Id))
-							{
-								_repository.ArrayAddElement(k.Id, "Tags", rs.Id);
-							}
-							pks.Remove(k.Id);
-						}
-						foreach (String pk in pks)
-						{
-							KademliaKeyword localKey = new KademliaKeyword(pk, rs.Id);
-							_repository.Save(localKey);
-						}
-					}
-					else
-					{
-						log.Error("Unexpected reposnde while getting keywords");
-						return false;
-					}
-
-				}
-				else
-				{
-					log.Error("Unexpected response while inserting Tag with key " + tag.TagHash);
-					return false;
+					// log.Debug("Urls " + peer.ToString() + " already known");
 				}
 			}
 			else
 			{
-				log.Error("Unexpected response while testing presence of the key " + tag.TagHash);
-				return false;
+				rs = new KademliaResource(tag, dhtElem);
+				Save(rs);
+
+				// This seems to have to do with key searches, which we ignore.
+				/*
+				List<string> pks = new List<string>(generatePrimaryKey(tag));
+				List<KademliaKeyword> keys = new List<KademliaKeyword>();
+				if (_repository.GetByKeySet(pks.ToArray(), keys) > 0)
+				{
+					foreach (KademliaKeyword k in keys)
+					{
+						if (!k.Tags.Contains(rs.Id))
+						{
+							_repository.ArrayAddElement(k.Id, "Tags", rs.Id);
+						}
+						pks.Remove(k.Id);
+					}
+					foreach (String pk in pks)
+					{
+						KademliaKeyword localKey = new KademliaKeyword(pk, rs.Id);
+						_repository.Save(localKey);
+					}
+				}
+				*/
 			}
-			*/
+
 			return true;
 		}
+
+		// WE DO NOT IMPLEMENT SEARCH BY KEYWORD
+		/*
 		/// <summary>
 		/// Performs search query over the repository. This split query in pieces and search for keywords that contains those pieces.
 		/// Then for each keyword the method loads all the related resource. 
@@ -99,7 +181,6 @@ public class KademliaRepository : IKademliaRepository
 		{
 			List<KademliaResource> resources = new List<KademliaResource>();
 
-			/*
 			List<KademliaKeyword> keys = new List<KademliaKeyword>();
 			string[] queryParts = query.Split(' ');
 			_repository.GetAllByCondition(kw =>
@@ -120,9 +201,26 @@ public class KademliaRepository : IKademliaRepository
 				tids.AddRange(kw.Tags);
 			}
 			_repository.GetByKeySet(tids.ToArray(), resources);
-			*/
 			return resources.ToArray();
 		}
+		*/
+		// INSTEAD, WE GET THE RESOURCE ASSOCIATED WITH THE KEY.
+		// TODO: What happens when we have multiple resources associated with the same key, as the original test implied can happen?
+		public KademliaResource[] SearchFor(string key)
+		{
+			List<KademliaResource> resources = new List<KademliaResource>();
+			KademliaResource rs;
+
+			if (TryGetByKey(key, out rs))
+			{
+				resources.Add(rs);
+			}
+
+			return resources.ToArray();
+		}
+
+		// TODO: Why are we returning a LinkedList?
+		// TODO: This is very much tied to our in-memory implementation.
 
 		/// <summary>
 		/// Returns a list of all resources of the repository.
@@ -130,21 +228,7 @@ public class KademliaRepository : IKademliaRepository
 		/// <returns>Linked List containing all the resources</returns>
 		public LinkedList<KademliaResource> GetAllElements()
 		{
-			LinkedList<KademliaResource> coll = new LinkedList<KademliaResource>();
-
-			/*
-			if (_repository.GetAll<KademliaResource>(coll) == RepositoryResponse.RepositoryLoad)
-			{
-				return coll;
-			}
-			else
-			{
-				return null;
-			}
-			*/
-
-			return coll;
-
+			return new LinkedList<KademliaResource>(GetAllResources());
 		}
 
 		/// <summary>
@@ -181,20 +265,7 @@ public class KademliaRepository : IKademliaRepository
 		/// <returns>The requested resource if it exists, null if not.</returns>
 		public KademliaResource Get(string tagid)
 		{
-			KademliaResource rs = new KademliaResource();
-
-			/*
-			if (_repository.GetByKey<KademliaResource>(tagid, rs) == RepositoryResponse.RepositoryLoad)
-			{
-				return rs;
-			}
-			else
-			{
-				return null;
-			}
-			*/
-
-			return rs;
+			return GetResource(tagid);
 		}
 
 		/// <summary>
@@ -221,6 +292,9 @@ public class KademliaRepository : IKademliaRepository
 			return DateTime.MinValue;
 		}
 
+		// TODO: This assumes a 1:1 mapping of rs.Urls with this concept of "elements"
+		// Also, the original implementation is closely tied to Raven.  What we want to do here is directly set the elem.Publication.
+
 		/// <summary>
 		/// Sets the publication time of a Dht Element in order to avoid expiration
 		/// </summary>
@@ -230,24 +304,20 @@ public class KademliaRepository : IKademliaRepository
 		/// <returns>True if the Dht Element exists and has been refreshed, false otherwise</returns>
 		public bool RefreshResource(string tagid, Uri url, DateTime pubtime)
 		{
-			KademliaResource rs = new KademliaResource();
-			/*
-			RepositoryResponse resp = _repository.GetByKey<KademliaResource>(tagid, rs);
-			if (resp == RepositoryResponse.RepositoryLoad)
+			KademliaResource rs;
+			bool found = TryGetByKey(tagid, out rs);
+			
+			if (found)
 			{
-				int eindex = rs.Urls.ToList().FindIndex(elem =>
+				var dhtElement = rs.Urls.ToList().SingleOrDefault(elem => elem.Url.Equals(url));
+
+				if (dhtElement != null)
 				{
-					return elem.Url.Equals(url);
-				});
-				if (eindex != -1)
-				{
-					_repository.ArraySetElement(tagid, "Urls", eindex, "Publication", pubtime);
+					SetElement(tagid, "Urls", dhtElement, pubtime);
 					return true;
 				}
 			}
 			return false;
-			*/
-			return true;
 		}
 
 		/// <summary>
@@ -256,59 +326,58 @@ public class KademliaRepository : IKademliaRepository
 		/// </summary>
 		public void Expire()
 		{
-			List<KademliaResource> lr = new List<KademliaResource>();
+			List<KademliaResource> lr = GetAllResources();
 			LinkedList<ExpireIteratorDesc> cleanList = new LinkedList<ExpireIteratorDesc>();
 
-			// TODO:
-			// _repository.GetAll<KademliaResource>(lr);
-
-			Parallel.ForEach<KademliaResource, ExpireIteratorDesc>(lr,
-													() => new ExpireIteratorDesc(),
-													(key, loop, iter_index, iter_desc) =>
-													{
-														if (key == null) return iter_desc;
-														if (iter_desc.TagId == null)
-														{
-															iter_desc.TagId = key.Id;
-														}
-														List<DhtElement> dhtElementList = key.Urls.ToList();
-														for (int k = 0; k < dhtElementList.Count; k++)
-														{
-															DhtElement delem = dhtElementList[k];
-															if (DateTime.Compare(delem.Publication.Add(delem.Validity), DateTime.Now) <= 0)
-															{
-																iter_desc.Expired.Add(delem);
-															}
-														}
-														if (iter_desc.Expired.Count == key.Urls.Count)
-														{
-															iter_desc.ToBeDeleted = true;
-														}
-														else
-														{
-															iter_desc.ToBeDeleted = false;
-														}
-														return iter_desc;
-													},
-													(finalResult) => cleanList.AddLast(finalResult)
-			);
-			Parallel.ForEach<ExpireIteratorDesc>(cleanList,
-				(iter_desc) =>
+			Parallel.ForEach(lr,
+				() => new ExpireIteratorDesc(),
+				(key, loop, iter_index, iter_desc) =>
 				{
-					if (iter_desc == null) return;
-					if (iter_desc.ToBeDeleted)
+					if (key == null) return iter_desc;
+					if (iter_desc.TagId == null)
 					{
-						DeleteTag(iter_desc.TagId);
+						iter_desc.TagId = key.Id;
+					}
+					List<DhtElement> dhtElementList = key.Urls.ToList();
+					for (int k = 0; k < dhtElementList.Count; k++)
+					{
+						DhtElement delem = dhtElementList[k];
+						if (DateTime.Compare(delem.Publication.Add(delem.Validity), DateTime.Now) <= 0)
+						{
+							iter_desc.Expired.Add(delem);
+						}
+					}
+					if (iter_desc.Expired.Count == key.Urls.Count)
+					{
+						iter_desc.ToBeDeleted = true;
 					}
 					else
 					{
-						// TODO:
-						// _repository.ArrayRemoveByPosition(iter_desc.TagId, "Urls", iter_desc.Expired.ToArray<DhtElement>());
+						iter_desc.ToBeDeleted = false;
+					}
+					return iter_desc;
+				},
+				(finalResult) => cleanList.AddLast(finalResult)
+			);
+			Parallel.ForEach(cleanList,
+				(iter_desc) =>
+				{
+					if (iter_desc == null) return;
+
+					if (iter_desc.ToBeDeleted)
+					{
+						// DeleteTag(iter_desc.TagId);
+					}
+					else
+					{
+						RemoveElement(iter_desc.TagId, "Urls", iter_desc.Expired);
 					}
 				}
 			);
 		}
 
+		// REMOVES A TAG -- THIS WAS RELATED TO THE ORIGINAL CODE AND THE ABILITY TO HAVE KEYWORDS/TAGS ASSOCIATED WITH DATA.
+		/*
 		/// <summary>
 		/// Deletes a tag with a given identifier. This method finds all keywords containing a reference to the tag to be deleted and
 		/// removes the tag identifier from the keyword's list; then it search for keywords that has an empty list and deletes them.
@@ -318,7 +387,7 @@ public class KademliaRepository : IKademliaRepository
 		/// <returns>False if something went wrong, true otherwise</returns>
 		public bool DeleteTag(string tid)
 		{
-			/*
+			
 			List<KademliaKeyword> results = new List<KademliaKeyword>();
 			this._repository.QueryOverIndex("KademliaKeywords/KeysByTag", "Tid:" + tid, results);
 			foreach (var t in results)
@@ -339,9 +408,10 @@ public class KademliaRepository : IKademliaRepository
 				ids[index++] = t.Id;
 			}
 			this._repository.BulkDelete<KademliaKeyword>(ids);
-			*/
+			
 			return true;
 		}
+		*/
 
 		/// <summary>
 		/// Private class to store Expire method iteration information.
@@ -386,9 +456,9 @@ public class KademliaRepository : IKademliaRepository
 		/// <summary>
 		/// Method used to dispose the repository
 		/// </summary>
-		public void Dispose()
-		{
-			// _repository.Dispose();
-		}
+		//public void Dispose()
+		//{
+		//	 _repository.Dispose();
+		//}
 	}
 }

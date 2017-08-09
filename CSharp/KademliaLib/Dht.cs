@@ -45,99 +45,101 @@ namespace Kademlia
 	public class Dht
 	{
 		private const int MAX_SIZE = 8 * 1024; // 8K is big
-        // private static readonly ILog log = LogManager.GetLogger(typeof(Dht));
-		
+											   // private static readonly ILog log = LogManager.GetLogger(typeof(Dht));
+
 		private KademliaNode dhtNode;
-		
+
 		/// <summary>
 		/// Create a DHT using the given master server, and specify whether to publish our IP.
 		/// PRECONDITION: Create one per app or you will have a node ID collision.
 		/// </summary>
-        /// <param name="dhtNode">The KademliaNode that is used to communicate using the protocol</param>
-        /// <param name="alreadyBootstrapped">Checks if the node have or not to bootstrap</param>
-        /// <param name="btpNode">The node to bootstrap with (can be leaved null)</param>
+		/// <param name="dhtNode">The KademliaNode that is used to communicate using the protocol</param>
+		/// <param name="alreadyBootstrapped">Checks if the node have or not to bootstrap</param>
+		/// <param name="btpNode">The node to bootstrap with (can be leaved null)</param>
 		public Dht(IKademliaRepository repo, KademliaNode dhtNode = null, bool alreadyBootstrapped = false, string btpNode = "")
 		{
-            if (dhtNode != null)
-            {
-                this.dhtNode = dhtNode;
-            }
-            else
-            {
-                dhtNode = new KademliaNode(repo);
-            }
-            if (!alreadyBootstrapped)
-            {
-                if (btpNode == "")
-                {
-                    int ourPort = dhtNode.GetPort();
-                    // log.Info("We are on UDP port " + ourPort.ToString());
+			if (dhtNode != null)
+			{
+				this.dhtNode = dhtNode;
+			}
+			else
+			{
+				dhtNode = new KademliaNode(repo);
+			}
+			if (!alreadyBootstrapped)
+			{
+				if (btpNode == "")
+				{
+					int ourPort = dhtNode.GetPort();
+					// log.Info("We are on UDP port " + ourPort.ToString());
 
-                    // log.Info("Getting bootstrap list...");
+					// log.Info("Getting bootstrap list...");
 
-                    AppSettingsReader asr = new AppSettingsReader();
-                    
-                    XDocument xmlDoc = XDocument.Load((string)asr.GetValue("KademliaNodesFile", typeof(string)));
+					// TODO: Implement:
+					/*
+					AppSettingsReader asr = new AppSettingsReader();
+					XDocument xmlDoc = XDocument.Load((string)asr.GetValue("KademliaNodesFile", typeof(string)));
+					List<EndpointAddress> nodes = new List<EndpointAddress>(from node in xmlDoc.Descendants("Node")
+																			select new EndpointAddress("soap.udp://" + node.Element("Host").Value + ":" + node.Element("Port").Value + "/kademlia"));
+					*/
+					System.Diagnostics.Debugger.Break();
 
-                    //List<EndpointAddress> nodes = new List<EndpointAddress>(from node in xmlDoc.Descendants("Node")
-                    //            select new EndpointAddress("soap.udp://" + node.Element("Host").Value + ":" + node.Element("Port").Value + "/kademlia"));
-
-					// TODO: Implement
 					List<IKademliaEndpoint> nodes = new List<IKademliaEndpoint>();
 
-                    foreach (var node in nodes)
-                    {
-                        if (dhtNode.AsyncBootstrap(nodes))
-                        {
-                            // log.Debug("OK!");
-                        }
-                        else
-                        {
-                            // log.Debug("Failed.");
-                        }
-                    }
-                }
-                else
-                {
-                    try
-                    {
+					foreach (var node in nodes)
+					{
+						if (dhtNode.AsyncBootstrap(nodes))
+						{
+							// log.Debug("OK!");
+						}
+						else
+						{
+							// log.Debug("Failed.");
+						}
+					}
+				}
+				else
+				{
+					try
+					{
 						// log.Debug("Bootstrapping with " + btpNode);
 						// EndpointAddress bootstrapNode = new EndpointAddress(btpNode);
 
 						// TODO: IMPLEMENT
 						IKademliaEndpoint bootstrapNode = null;
 
-                        if (dhtNode.Bootstrap(bootstrapNode))
-                        {
-                            // log.Debug("OK!");
-                        }
-                        else
-                        {
-                            // log.Debug("Failed.");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        // log.Error("Bad entry!", ex);
-                    }
-                }
-            }
-            else
-            {
-                // log.Info("Self Bootstrapping");
-                dhtNode.Bootstrap();
-            }
+						if (dhtNode.Bootstrap(bootstrapNode))
+						{
+							// log.Debug("OK!");
+						}
+						else
+						{
+							// log.Debug("Failed.");
+						}
+					}
+					catch (Exception ex)
+					{
+						// log.Error("Bad entry!", ex);
+					}
+				}
+			}
+			else
+			{
+				// log.Info("Self Bootstrapping");
+				dhtNode.Bootstrap();
+			}
 			// Join the network officially
 			// log.Info("Trying to join network....");
-			if(dhtNode.JoinNetwork())
+			if (dhtNode.JoinNetwork())
 			{
 				// log.Info("Online");
-			} else
+			}
+			else
 			{
 				// log.Warn("Unable to connect to Kademlia overlay!\n" + "Check that nodes list has accessible nodes.");
 			}
 		}
-		
+
 		/// <summary>
 		/// Retrieve a value from the DHT.
 		/// </summary>
@@ -145,7 +147,7 @@ namespace Kademlia
 		/// <returns>the best semantically matching value stored for the key, or null if no values are found</returns>
 		public KademliaResource Get(string key)
 		{
-            IList<KademliaResource> found = dhtNode.Get(key);
+			IList<KademliaResource> found = dhtNode.Get(key);
 
 			/*
 			if(found.Count > 0) {
@@ -162,15 +164,15 @@ namespace Kademlia
 
 			return found.Count > 0 ? found[0] : null;
 		}
-		
+
 		/// <summary>
 		/// Retrieve all applicable values from the DHT.
 		/// </summary>
-        /// <param name="key">The key of the value to retrieve.</param>
+		/// <param name="key">The key of the value to retrieve.</param>
 		/// <returns>All the list of resources found on network, ordered by semantic affinity</returns>
 		public IList<KademliaResource> GetAll(string key)
 		{
-            IList<KademliaResource> found = dhtNode.Get(key);
+			IList<KademliaResource> found = dhtNode.Get(key);
 
 			/*
             if (found.Count > 0)
@@ -189,16 +191,16 @@ namespace Kademlia
 
 			return found;
 		}
-		
+
 		/// <summary>
 		/// Puts a value in the DHT under a key.
 		/// </summary>
-        /// <param name="filename">The filename of resource to store into the network</param>
+		/// <param name="filename">The filename of resource to store into the network</param>
 		public void Put(string filename)
 		{
 			dhtNode.Put(filename);
 		}
-		
+
 		/// <summary>
 		/// Returns the maximum size of individual puts.
 		/// </summary>

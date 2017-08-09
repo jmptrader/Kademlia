@@ -76,9 +76,11 @@
     <Compile Include="BucketList.cs" />
     <Compile Include="Contact.cs" />
     <Compile Include="Dht.cs" />
+    <Compile Include="EndpointFactory.cs" />
     <Compile Include="ID.cs" />
     <Compile Include="IKademliaEndpoint.cs" />
     <Compile Include="IKademliaNode.cs" />
+    <Compile Include="KademliaEndpoint.cs" />
     <Compile Include="KademliaNode.cs" />
     <Compile Include="KademliaRepository.cs" />
     <Compile Include="Messages\FindNode.cs" />
@@ -98,6 +100,7 @@
     <Compile Include="Persistence\IKademliaRepository.cs" />
     <Compile Include="Persistence\KademliaResource.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RepositoryFactory.cs" />
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include="Microsoft.Net.Client.3.5">
