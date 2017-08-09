@@ -21,44 +21,47 @@ namespace Kademlia
 
 		public void HandleFindNode(FindNode question)
 		{
+			Node.HandleFindNode(question);
 		}
 
 		public void HandleFindNodeResponse(FindNodeResponse response)
 		{
+			Node.HandleFindNodeResponse(response);
 		}
 
 		public void HandleFindValue(FindValue question)
 		{
+			Node.HandleFindValue(question);
 		}
 
 		public void HandleFindValueContactResponse(FindValueContactResponse response)
 		{
-			throw new NotImplementedException();
+			Node.HandleFindValueContactResponse(response);
 		}
 
 		public void HandleFindValueDataResponse(FindValueDataResponse response)
 		{
-			throw new NotImplementedException();
+			Node.HandleFindValueDataResponse(response);
 		}
 
 		public void HandlePong(Pong pong)
 		{
-			throw new NotImplementedException();
+			Node.HandlePong(pong);
 		}
 
 		public void HandleStoreData(StoreData r)
 		{
-			throw new NotImplementedException();
+			Node.HandleStoreData(r);
 		}
 
 		public void HandleStoreQuery(StoreQuery storeIt)
 		{
-			throw new NotImplementedException();
+			Node.HandleStoreQuery(storeIt);
 		}
 
 		public void HandleStoreResponse(StoreResponse response)
 		{
-			throw new NotImplementedException();
+			Node.HandleStoreResponse(response);
 		}
 	}
 }
