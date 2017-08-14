@@ -127,7 +127,7 @@ namespace Kademlia
 		/// <summary>
 		/// Make a node on a random available port, using an ID specific to this machine. It uses as address the deault endpoint.
 		/// </summary>
-		public KademliaNode(IKademliaRepository repo) : this(repo, null, ID.HostID(), null) //new EndpointAddress(DEFAULT_ENDPOINT), ID.HostID(), new EndpointAddress(DEFAULT_TRANSPORT_ENDPOINT))
+		public KademliaNode(IKademliaRepository repo) : this(repo, null, ID.CreateHostID(), null) //new EndpointAddress(DEFAULT_ENDPOINT), ID.HostID(), new EndpointAddress(DEFAULT_TRANSPORT_ENDPOINT))
 		{
 			// Nothing to do!
 		}
@@ -145,7 +145,7 @@ namespace Kademlia
 		/// Make a node on a specified address.
 		/// </summary>
 		/// <param name="addr">The address chosen for the node</param>
-		public KademliaNode(IKademliaRepository repo, IKademliaEndpoint addr) : this(repo, addr, ID.HostID(), null) // new EndpointAddress(DEFAULT_TRANSPORT_ENDPOINT))
+		public KademliaNode(IKademliaRepository repo, IKademliaEndpoint addr) : this(repo, addr, ID.CreateHostID(), null) // new EndpointAddress(DEFAULT_TRANSPORT_ENDPOINT))
 		{
 			// Nothing to do!
 		}
@@ -156,7 +156,7 @@ namespace Kademlia
         /// <param name="addr">The address of the node</param>
         /// <param name="transportAddr">The address of the transport layer</param>
         public KademliaNode(IKademliaRepository repo, IKademliaEndpoint addr, IKademliaEndpoint transportAddr)
-            : this(repo, addr, ID.HostID(), transportAddr)
+            : this(repo, addr, ID.CreateHostID(), transportAddr)
         {
             // Nothing to do!
         }
@@ -260,28 +260,17 @@ namespace Kademlia
 		/// Join the network.
 		/// Assuming we have some contacts in our cache, get more by IterativeFindNoding ourselves.
 		/// Then, refresh most (TODO: all) buckets.
-		/// Returns true if we are connected after all that, false otherwise.
 		/// </summary>
         /// <returns>true if we are connected after all that, false otherwise.</returns>
-		public bool JoinNetwork() {
-			// // log.Info("Joining network");
+		public bool JoinNetwork()
+		{
 			IList<Contact> found = IterativeFindNode(nodeID);
-			if(found == null) {
-				// // log.Info("Found <null list>");
-			} else {
-				foreach(Contact c in found) {
-					// // log.Info("Found contact: " + c.ToString());
-				}
-			}			
+
 			// Should get very nearly all of them
 			// RefreshBuckets(); // Put this off until first maintainance.
-			if(contactCache.GetCount() > 0) {
-				// // log.Info("Joined");
-				return true;
-			} else {
-				// // log.Info("Failed to join! No other nodes known!");
-				return false;
-			}
+
+			// Returns true if we joined a network.
+			return contactCache.GetCount() > 0;
 		}
 		#endregion
 		
@@ -444,7 +433,9 @@ namespace Kademlia
 		{
 			// log.Info("Refreshing buckets");
 			IList<ID> toLookup = contactCache.IDsForRefresh(REFRESH_TIME);
-			foreach(ID key in toLookup) {
+
+			foreach(ID key in toLookup)
+			{
 				IterativeFindNode(key);
 			}
 			// log.Info("Refreshed buckets");

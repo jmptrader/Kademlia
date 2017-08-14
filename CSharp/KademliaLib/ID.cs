@@ -322,40 +322,48 @@ namespace Kademlia
 		/// If that ID is taken, returns a random ID.
 		/// </summary>
 		/// <returns>The ID generated for host</returns>
-		public static ID HostID()
+		public static ID CreateHostID()
 		{
-			// If we already have a mutex handle, we're not the first.
-			if(mutex != null) {
+			// If a mutex exists, then we're running multiple nodes from the same program.
+			if (mutex != null)
+			{
 				Console.WriteLine("Using random ID");
 				return RandomID();
 			}
 			
-			// We might be the first
+			// The mutix may also exist if we're running the same app as separate instances in the same machine.
 			string assembly = Assembly.GetEntryAssembly().GetName().Name;
 			string libname = Assembly.GetExecutingAssembly().GetName().Name;
 			string mutexName = libname + "-" + assembly + "-ID";
-			try {
+
+			try
+			{
 				mutex = Mutex.OpenExisting(mutexName);
-				// If that worked, we're not the first
+				// If this did not throw an exception, then we are already running the same app on the machine, so create a new host ID.
 				Console.WriteLine("Using random ID");
 				return RandomID();
-			} catch(Exception ex) {
+			}
+			catch (Exception ex)
+			{
 				// We're the first!
 				mutex = new Mutex(true, mutexName);
 				Console.WriteLine("Using host ID");
 				// TODO: Close on assembly unload?
 			}
 			
-			// Still the first! Calculate hashed ID.
+			// Nope - we have a unique app.  Create the ID from the MAC, combining it with the application name, username and machine name.
 			string app = System.Reflection.Assembly.GetEntryAssembly().GetName().FullName;
 			string user = Environment.UserName;
 			string machine = Environment.MachineName + " " + Environment.OSVersion.VersionString;
 			
 			// Get macs
 			string macs = "";
-			foreach(NetworkInterface i in NetworkInterface.GetAllNetworkInterfaces()) {
+
+			foreach(NetworkInterface i in NetworkInterface.GetAllNetworkInterfaces())
+			{
 				macs += i.GetPhysicalAddress().ToString() + "\n";
 			}
+
 			return ID.Hash(app + user + machine + macs);
 		}
 		
