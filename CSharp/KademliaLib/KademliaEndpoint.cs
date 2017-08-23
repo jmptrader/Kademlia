@@ -11,13 +11,19 @@ namespace Kademlia
 		public IKademliaRepository Repository { get; set; }
 		public KademliaNode Node { get; set; }
 
-		public IKademliaNode CreateNode()
+		public KademliaEndpoint()
 		{
-			Repository = RepositoryFactory.CreateRepository();
-			Node = new KademliaNode(Repository);
-
-			return Node;
+			// TODO: Here we are creating a unique URI for testing purposes.
+			Uri = new Uri("http://" + Guid.NewGuid() + "/");
 		}
+
+		//public IKademliaNode CreateNode()
+		//{
+		//	Repository = RepositoryFactory.CreateRepository();
+		//	Node = new KademliaNode(Repository, this);
+
+		//	return Node;
+		//}
 
 		public void HandleFindNode(FindNode question)
 		{
@@ -42,6 +48,11 @@ namespace Kademlia
 		public void HandleFindValueDataResponse(FindValueDataResponse response)
 		{
 			Node.HandleFindValueDataResponse(response);
+		}
+
+		public void HandlePing(Ping ping)
+		{
+			Node.HandlePing(ping);
 		}
 
 		public void HandlePong(Pong pong)

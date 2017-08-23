@@ -11,10 +11,12 @@ namespace Kademlia
 	public interface IKademliaEndpoint
 	{
 		Uri Uri { get; set; }
-		IKademliaNode CreateNode();
+		// IKademliaNode CreateNode();
+		KademliaNode Node { get; set; }
 		void HandleStoreQuery(StoreQuery storeIt);
 		void HandleFindNode(FindNode question);
 		void HandleFindValue(FindValue question);
+		void HandlePing(Ping pong);
 		void HandlePong(Pong pong);
 		void HandleFindNodeResponse(FindNodeResponse response);
 		void HandleFindValueDataResponse(FindValueDataResponse response);

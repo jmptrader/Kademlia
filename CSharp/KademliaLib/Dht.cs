@@ -117,7 +117,7 @@ namespace Kademlia
 							// log.Debug("Failed.");
 						}
 					}
-					catch (Exception ex)
+					catch // (Exception ex)
 					{
 						// log.Error("Bad entry!", ex);
 					}

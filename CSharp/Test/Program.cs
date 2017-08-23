@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 using Kademlia;
@@ -20,11 +21,16 @@ namespace Test
 			KademliaNode node1 = new KademliaNode(repo1, ep1);
 			KademliaNode node2 = new KademliaNode(repo2, ep2);
 
+			Thread.Sleep(1000);
 
+			// Not sure what this does or why we need to call it.
 			node1.JoinNetwork();
 			node2.JoinNetwork();
 
-			ID babiesID = ID.RandomID();
+			// Bootstrap node 2 by having it ping a known server, node 1, at ep1
+			bool pinged = node2.Bootstrap(ep1);
+
+			Console.ReadLine();
 			node1.Put("Hello World");
 
 			//IList<string> foundVals = node1.Get(babiesID);

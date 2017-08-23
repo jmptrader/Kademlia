@@ -50,11 +50,10 @@ namespace Kademlia
 
 		public Uri Uri { get; set; }
 
-        #region identity
-        private ID nodeID;
-        private IKademliaEndpoint nodeEndpoint;
-        private IKademliaEndpoint transportEndpoint;
-        #endregion
+		// TODO: Should be private
+        public ID nodeID;
+        public IKademliaEndpoint nodeEndpoint;
+        public IKademliaEndpoint transportEndpoint;
 
         #region NetworkState
         private BucketList contactCache;
@@ -118,12 +117,12 @@ namespace Kademlia
 		
 		// How often do we run high-level maintainance (expiration, etc.)
 		private static TimeSpan MAINTAINANCE_INTERVAL = new TimeSpan(0, 10, 0);
-        #endregion
-		
+		#endregion
+
 		#region Setup	
 
 		// TODO: Resolve nulls:
-		
+
 		/// <summary>
 		/// Make a node on a random available port, using an ID specific to this machine. It uses as address the deault endpoint.
 		/// </summary>
@@ -131,7 +130,7 @@ namespace Kademlia
 		{
 			// Nothing to do!
 		}
-		
+
 		/// <summary>
 		/// Make a node with a specified ID.
 		/// </summary>
@@ -170,6 +169,7 @@ namespace Kademlia
         /// <param name="transportAddr">The transport layer address of the node</param>
 		public KademliaNode(IKademliaRepository repo, IKademliaEndpoint addr, ID id, IKademliaEndpoint transportAddr)
 		{
+			addr.Node = this;
 			// Set up all our data
             AppSettingsReader asr = new AppSettingsReader();
             nodeEndpoint = addr;
@@ -392,7 +392,7 @@ namespace Kademlia
                 {
                     datastore.Expire();
                 }
-                catch (Exception e)
+                catch // (Exception e)
                 {
                     // log.Debug("Expire not done");
                 }
@@ -411,7 +411,7 @@ namespace Kademlia
 								// TODO: FIX NULL!!!!
 								IterativeStore(kr.Tag, (DateTime)dhtEl.Publication, null); // new EndpointAddress(dhtEl.Url));
                             }
-                            catch (Exception ex)
+                            catch // (Exception ex)
                             {
                                 // log.Error("Could not replicate", ex);
                             }
@@ -509,7 +509,7 @@ namespace Kademlia
             while (shortlistIndex < shortlist.Count && shortlistIndex < NODES_TO_FIND)
             {
                 // Try the first alpha unexamined contacts
-                bool foundCloser = false; // TODO: Understand what the specs wants
+                // bool foundCloser = false; // TODO: Understand what the specs wants
                 Dictionary<ID, bool> conversationIds = new Dictionary<ID,bool>();
                 for (int i = shortlistIndex; i < shortlistIndex + PARALELLISM && i < shortlist.Count; i++)
                 {
@@ -552,7 +552,7 @@ namespace Kademlia
                     if ((suggestion.NodeID ^ target) < (closest.NodeID ^ target))
                     {
                         closest = suggestion;
-                        foundCloser = true;
+                        // foundCloser = true;
                     }
                     //END OF ANALISYS
                 }
@@ -607,7 +607,7 @@ namespace Kademlia
 			// Until we run out of people to ask or we're done...
 			while(shortlistIndex < shortlist.Count && shortlistIndex < NODES_TO_FIND) {
 				// Try the first alpha unexamined contacts
-                bool foundCloser = false; // TODO: Understand what the specs wants
+                // bool foundCloser = false; // TODO: Understand what the specs wants
                 Dictionary<ID, bool> conversationIds = new Dictionary<ID,bool>();
 				for(int i = shortlistIndex; i < shortlistIndex + PARALELLISM && i < shortlist.Count; i++) {
 					asyncFindValue(shortlist.Values[i], target, ref conversationIds);
@@ -748,11 +748,11 @@ namespace Kademlia
             Ping ping = new Ping(nodeID, nodeEndpoint.Uri);
 
 			// IKademliaNode svc = ChannelFactory<IKademliaNode>.CreateChannel(new NetUdpBinding(), toPing);
-			IKademliaNode svc = toPing.CreateNode();
+			// svc.HandlePing(ping);
+			//IKademliaNode svc = toPing.CreateNode();
 
-            svc.HandlePing(ping);
-
-            conversationIds[ping.ConversationID] = false;
+			nodeEndpoint.HandlePing(ping);
+			conversationIds[ping.ConversationID] = false;
         }
 
 		/// <summary>
@@ -766,19 +766,27 @@ namespace Kademlia
 			Ping ping = new Ping(nodeID, nodeEndpoint.Uri);
 
 			// IKademliaNode svc = ChannelFactory<IKademliaNode>.CreateChannel(new NetUdpBinding(), toPing);
-			IKademliaNode svc = toPing.CreateNode();
+			// svc.HandlePing(ping);
+			// IKademliaNode svc = toPing.CreateNode();
 
-			svc.HandlePing(ping);
+			// TODO: We have to get these endpoints right, and the return message endpoint.
 
-            DateTime called = DateTime.Now;
-			while(DateTime.Now < called.Add(MAX_SYNC_WAIT)) {
+			toPing.HandlePing(ping);
+
+			DateTime called = DateTime.Now;
+			while(DateTime.Now < called.Add(MAX_SYNC_WAIT))
+			{
 				// If we got a response, send it up
 				Pong resp = GetCachedResponse<Pong>(ping.ConversationID);
-				if(resp != null) {
+
+				if (resp != null)
+				{
 					return true; // They replied in time
 				}
+
 				Thread.Sleep(CHECK_INTERVAL); // Otherwise wait for one
 			}
+
 			// log.Info("Ping timeout");
 			return false; // Nothing in time
 		}
@@ -796,10 +804,18 @@ namespace Kademlia
             Console.WriteLine("Handling ping from: " + ping.NodeEndpoint);
             Pong pong = new Pong(nodeID, ping, nodeEndpoint.Uri);
 
-			// TODO: HANDLE NULL!!!
-			IKademliaEndpoint svc = null;
-            // IKademliaNode svc = ChannelFactory<IKademliaNode>.CreateChannel(new NetUdpBinding(), new EndpointAddress(ping.NodeEndpoint));
-            svc.HandlePong(pong);
+			// TODO: Is this right?
+			//IKademliaEndpoint svc = new KademliaEndpoint();
+			//svc.Node = this;			// we're the node...
+			//svc.Uri = pong.NodeEndpoint;
+
+			// was...
+			// IKademliaNode svc = ChannelFactory<IKademliaNode>.CreateChannel(new NetUdpBinding(), new EndpointAddress(ping.NodeEndpoint));
+			// svc.HandlePong(pong);
+
+			// TODO: We have to get these endpoints right, and the return message endpoint.
+
+			nodeEndpoint.HandlePong(pong);
         }
 
         /// <summary>
@@ -1247,7 +1263,7 @@ namespace Kademlia
                     responseCacheLocker.Set();
                     return toReturn; // Pull it out and return it
                 }
-                catch (Exception ex)
+                catch // (Exception ex)
                 {
                     // Couldn't actually cast to type we want.
                     responseCacheLocker.Set();

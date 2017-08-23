@@ -343,7 +343,7 @@ namespace Kademlia
 				Console.WriteLine("Using random ID");
 				return RandomID();
 			}
-			catch (Exception ex)
+			catch // (Exception ex)
 			{
 				// We're the first!
 				mutex = new Mutex(true, mutexName);
