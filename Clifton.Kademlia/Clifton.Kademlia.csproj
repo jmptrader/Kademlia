@@ -9,8 +9,9 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Clifton.Kademlia</RootNamespace>
     <AssemblyName>Clifton.Kademlia</AssemblyName>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -48,7 +49,6 @@
     <Compile Include="Implementations\InMemoryNodeAddress.cs" />
     <Compile Include="Implementations\InMemoryStorage.cs" />
     <Compile Include="Implementations\UdpAddress.cs" />
-    <Compile Include="Implementations\VirtualComms.cs" />
     <Compile Include="Interfaces.cs" />
     <Compile Include="KBucket.cs" />
     <Compile Include="Node.cs" />

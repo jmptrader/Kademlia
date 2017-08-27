@@ -145,23 +145,15 @@ implement the Kademlia protocol:</p>
 <p>From the above, we can put together a wireframe implementation.&nbsp; The 
 abstractions are implemented as interfaces:</p>
 <pre>public interface IRouter { }
-public interface ICommunication { }
+public interface IAddress { }
 
 public interface IStorage
 {
   string Get(string key);
   string Set(string key, string val);
 }</pre>
-<p>and the concrete classes are mostly stubs:</p>
+<p>and the concrete class is a stub:</p>
 <pre>public class Router
-{
-}
-
-/// &lt;summary&gt;
-/// In-memory virtual communication -- in other words, all nodes are expected 
-/// to be found on and in a single application instance. Used for testing.
-/// &lt;/summary&gt;
-public class VirtualComms : ICommunication
 {
 }</pre>
 <p>The <code>Node</code> class has a minimal implementation for initializing an ID (explained 
@@ -358,8 +350,8 @@ public class Contact
   public IAddress Address { get; set; }
   public ID NodeID { get; set; }
 }</pre>
-<p>The interface IAddress will eventually define methods for obtaining a 
-communication channel.&nbsp; A stub implementation for UDP communication can 
+<p>The interface IAddress will eventually define methods for handling messages 
+that we send.&nbsp; A stub implementation for UDP communication can 
 then be defined:</p>
 <pre>public class UdpAddress : IAddress
 {
@@ -371,7 +363,7 @@ references the contact node:</p>
 <pre>
 public class InMemoryNodeAddress : IAddress
 {
-  public Node Node { get; set; }
+  public Node RecipientNode { get; set; }
 }</pre>
 <h3>K-Buckets</h3>
 <p>This is where reading the spec starts to feel like those annoying word 
@@ -404,12 +396,17 @@ anymore (not that such arbitrary terms were ever obvious), so a quick reminder:<
 least recently seen node (the one with the oldest date) at the head (the first entry) and the most recently 
 seen (the one with the newest date) at the tail (the last entry.)</p>
 <p>Based on this information, we revise our <code>Contact</code> class to include a <code>LastSeen</code> 
-property:</p>
+property as well as away to update it:</p>
 <pre>public class Contact
 {
   public DateTime LastSeen { get; set; }
   public IAddress Address { get; set; }
   public ID NodeID { get; set; }
+
+  public void Touch()
+  {
+    LastSeen = DateTime.Now;
+  }
 }
 </pre>
 <p>We define a <code>BucketList</code> class that contains the 160 buckets of k contacts, 
@@ -580,14 +577,248 @@ public void HaveContact(ID ourId, Contact contact)
 }
 </pre>
 <p>
-&nbsp;</p>
+Now we have the pieces in place for this part of Section 2.2:</p>
 <p>
-&nbsp;</p>
+<font color="#FF00FF">When a Kademlia node receives any message (request or 
+reply) from another node, it updates the appropriate k-bucket for the sender’s 
+node ID. If the sending node already exists in the recipient’s k-bucket, the 
+recipient moves it to the tail of the list. If the node is not already in the 
+appropriate k-bucket and the bucket has fewer than k entries, then the recipient 
+just inserts the new sender at the tail of the list. </font></p>
 <p>
-&nbsp;</p>
+But we have a problem with the next part:</p>
+<p>
+<font color="#FF00FF">If the appropriate k-bucket is full, however, then the 
+recipient pings the k-bucket’s least-recently seen node to decide what to do. If 
+the least- recently seen node fails to respond, it is evicted from the k-bucket 
+and the new sender inserted at the tail. Otherwise, if the least-recently seen 
+node responds, it is moved to the tail of the list, and the new sender’s contact 
+is discarded.</font></p>
+<p>
+While we haven't implemented the protocol yet, 
+we can refactor the <code>HaveContact</code> method to take a <code>Func</code> 
+that we can call to determine what to do (isn't inversion of control awesome?):</p>
+<pre>
+public void HaveContact(Contact contact, Func&lt;Contact, bool&gt; discardHead)
+{
+  contact.Touch();
+
+  // If contact exists, promote it it to the tail.
+  if (Exists(contact.NodeID))
+  {
+    contacts.MoveToTail(contact, c =&gt; c.NodeID == contact.NodeID);
+  }
+  else
+  {
+    // When contact doesn't exist, if there's room to add it, just do so.
+    if (contacts.Count &lt; Constants.K)
+    {
+      contacts.Add(contact);
+    }
+    else if (discardHead(contacts[0]))
+    {
+      // Otherwise, if the least recently seen node doesn't respond to a ping, discard it and
+      // replace it with our new contact.
+      contacts.AddMaximum(contact, Constants.K);
+    }
+    // Otherwise we discard the new contact, as we don't know anything about how reliable it is.
+  }
+}</pre>
+<p>
+and we pass this function in to the <code>BucketList</code> class:</p>
+<pre>public void HaveContact(ID ourId, Contact contact, Func&lt;Contact, bool&gt; discardHead)
+{
+  var distance = ourId ^ contact.NodeID;
+  int bucketIdx = distance.GetBucketIndex();
+  buckets[bucketIdx].HaveContact(contact, discardHead);
+}</pre>
+<p>See how nice it is to have separate classes for the bucket list and the 
+k-bucket?&nbsp; If we didn't do this, all this code would be in one big ugly 
+class.</p>
+<p>The whole point of this process is nicely explained in the Kademlia 
+documentation:</p>
+<p><font color="#FF00FF">k-buckets effectively implement a least-recently seen 
+eviction policy, except that live nodes are never removed from the list. This 
+preference for old contacts is driven by our analysis of Gnutella trace data 
+collected by Saroiu et. al. ... The longer a node has been up, the more likely 
+it is to remain up another hour. By keeping the oldest live contacts around, 
+k-buckets maximize the probability that the nodes they contain will remain 
+online.</font></p>
+<p><font color="#FF00FF">A second benefit of k-buckets is that they provide 
+resistance to certain DoS attacks. One cannot flush nodes’ routing state by 
+flooding the system with new nodes. Kademlia nodes will only insert the new 
+nodes in the k-buckets when old nodes leave the system.</font></p>
+<p>Pretty cool!</p>
+<h2>The Kademlia Protocol</h2>
+<p><font color="#FF00FF">The Kademlia protocol consists of four RPCs: PING, 
+STORE, FIND_NODE, and FIND_VALUE.</font></p>
+<p>Let's explore this a bit before implementing some stubs.</p>
+<h3>Ping</h3>
+<p><font color="#FF00FF">The PING RPC probes a node to see if it is online.</font> </p>
+<p>Obviously, a ping will respond with something that we'll call a &quot;pong.&quot;</p>
+<h3>Store</h3>
+<p><font color="#FF00FF">STORE instructs a node to store a (key, value) pair for 
+later retrieval.</font></p>
+<h3>FindNode</h3>
+<p><font color="#FF00FF">FIND_NODE takes a 160-bit ID as an argument. The 
+recipient of a the RPC returns (IP address, UDP port, Node ID) triples for the k 
+nodes it knows about closest to the target ID. These triples can come from a 
+single k-bucket, or they may come from multiple k-buckets if the closest 
+k-bucket is not full. In any case, the RPC recipient must return k items (unless 
+there are fewer than k nodes in all its k-buckets combined, in which case it 
+returns every node it knows about).</font></p>
+<h3>FindValue</h3>
+<p><font color="#FF00FF">FIND_VALUE behaves like FIND_NODE—returning (IP 
+address, UDP port, Node ID) triples—with one exception. If the RPC recipient has 
+received a STORE RPC for the key, it just returns the stored value.</font></p>
+<p>The implication here is that the key associated with the value should be a 
+parameter as well.</p>
+<h3>And Lastly</h3>
+<p><font color="#FF00FF">In all RPCs, the recipient must echo a 160-bit random 
+RPC ID, which provides some resistance to address forgery, PINGS can also be 
+piggy-backed on RPC replies for the RPC recipient to obtain additional assurance 
+of the sender’s network address.</font></p>
+<p>Both of those statements are a bit confusing, we'll see if we can understand 
+it better later.&nbsp; The questions are:</p>
+<ul>
+	<li>What do we do with this 160-bit random RPC ID and 
+	how does it provide resistance to address forgery?</li>
+<li><font color="#FF0000">What does that last sentence about piggy-backed pings 
+mean?</font></li>
+</ul>
+<p>Based on the SourceForge spec:</p>
+<p><font color="#FF00FF">All RPC packets are required to carry an RPC identifier 
+assigned by the sender and echoed in the reply. This is a quasi-random number of 
+length B (160 bits).</font></p>
+<p>This makes it clearer, as this clearly states what &quot;must echo...&quot; means.&nbsp; 
+Again, reading the original spec requires really reading it <i>carefully.</i></p>
+<h3>Stub Implementation</h3>
+<p>These are added to the IAddress interface:</p>
+<pre>public interface IAddress
+{
+  Contact Ping(Contact sender, IAddress recipient, ID randomID);
+  void Store(Contact sender, IAddress recipient, ID randomID, string key, string val);
+  List&lt;Contact&gt; FindNode(Contact sender, IAddress recipient, ID randomID, ID toFind);
+  (List&lt;Contact&gt; nodes, string val) FindValue(Contact sender, IAddress recipient, ID randomID, string key);
+}</pre>
+<p>Note the use of the C# 7 syntax!</p>
+<p>Our <code>InMemoryNodeAddress</code> class (and any other communication class) must 
+implement these methods, in this case as pass-through's to the node associated 
+with the address:</p>
+<pre>public class InMemoryNodeAddress : IAddress
+{
+  public Node RecipientNode { get; set; }
+
+  public Contact Ping(Contact sender, IAddress recipient, ID randomID)
+  {
+    return RecipientNode.Ping(sender);
+  }
+
+  public void Store(Contact sender, IAddress recipient, ID randomID, string key, string val)
+  {
+    RecipientNode.Store(sender, key, val);
+  }
+
+  public List&lt;Contact&gt; FindNode(Contact sender, IAddress recipient, ID randomID, ID toFind)
+  {
+    return RecipientNode.FindNode(sender, toFind);
+  }
+
+  public (List&lt;Contact&gt; nodes, string val) FindValue(Contact sender, IAddress recipient, ID randomID, string key)
+  {
+    return RecipientNode.FindValue(sender, key);
+  }
+}
+</pre>
+<p>A few points here:</p>
+<ul>
+	<li>When communicating over the wire, the parameters must be appropriately 
+serialized and the response appropriately deserialized.</li>
+	<li>The over-the-wire protocol must be more diligent in verifying the 
+	<code>randomID</code> in the response.</li>
+	<li>Responders have of course not been implemented yet.</li>
+</ul>
+<p>Also, it should be obvious that the <code>Node</code> class needs to 
+implement these methods as well.&nbsp; Note that the <code>Node</code> class is not directly 
+responsible for forming the appropriate packet to serialize and send back to the 
+caller -- this will be handled by the responder to the RPC.&nbsp; The <code>Node</code> 
+class has been refactored to provide some of this implementation, stubs of 
+others.&nbsp; Note the constructor changes as well and the addition of the 
+storage <code>property</code>:</p>
+<pre>public class Node
+{
+  public Contact OurContact { get; set; }
+
+  protected BucketList bucketList;
+  protected IStorage storage;
+
+  protected Node()
+  {
+    bucketList = new BucketList();
+  }
+
+  public Node(Contact us) : this()
+  {
+    OurContact = us;
+  }
+
+  public Contact Ping(Contact sender)
+  {
+    return OurContact;
+  }
+
+  public void Store(Contact sender, string key, string val)
+  {
+    storage.Set(key, val);
+  }
+
+  public List&lt;Contact&gt; FindNode(Contact sender, ID toFind)
+  {
+    return null;
+  }
+
+  public (List&lt;Contact&gt; nodes, string val) FindValue(Contact sender, string key)
+  {
+    return (null, null);
+  }
+}</pre>
+<p>Let's revisit this statement:</p>
+<p><font color="#FF00FF">When a Kademlia node receives any message (request or 
+reply) from another node, it updates the appropriate k-bucket for the sender’s 
+node ID.</font></p>
+<p>and refactor the Node class yet again to implement this requirement:</p>
+<pre>public Contact Ping(Contact sender)
+{
+  bucketList.HaveContact(OurContact.NodeID, sender, (_) =&gt; false);
+  return OurContact;
+}
+
+public void Store(Contact sender, string key, string val)
+{
+  bucketList.HaveContact(OurContact.NodeID, sender, (_) =&gt; false);
+  storage.Set(key, val);
+}
+
+public List&lt;Contact&gt; FindNode(Contact sender, ID toFind)
+{
+  bucketList.HaveContact(OurContact.NodeID, sender, (_) =&gt; false);
+  return null;
+}
+
+public (List&lt;Contact&gt; nodes, string val) FindValue(Contact sender, string key)
+{
+  bucketList.HaveContact(OurContact.NodeID, sender, (_) =&gt; false);
+  return (null, null);
+}</pre>
+<p>Note that we're stubbing the &quot;discard head&quot; function at the moment.</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
 <p>
 <font color="#FF00FF">To locate nodes near a particular ID, Kademlia uses a single routing algorithm 
-from start to finish. </span></font></p>
+from start to finish. </font></p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 

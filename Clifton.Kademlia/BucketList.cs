@@ -1,5 +1,5 @@
-﻿using System.Collections.Generic;
-using System.Linq;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Clifton.Kademlia
 {
@@ -13,11 +13,11 @@ namespace Clifton.Kademlia
 			Constants.ID_LENGTH_BITS.ForEach(() => buckets.Add(new KBucket()));
 		}
 
-		public void HaveContact(ID ourId, Contact contact)
+		public void HaveContact(ID ourId, Contact contact, Func<Contact, bool> discardHead)
 		{
 			var distance = ourId ^ contact.NodeID;
 			int bucketIdx = distance.GetBucketIndex();
-			buckets[bucketIdx].HaveContact(contact);
+			buckets[bucketIdx].HaveContact(contact, discardHead);
 		}
 	}
 }
