@@ -1,0 +1,596 @@
+<html>
+
+<head>
+<meta http-equiv="Content-Language" content="en-us">
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<title>Implementing the Kademlia P2P DH</title>
+</head>
+
+<body>
+
+<p>Implementing the Kademlia P2P DHT from Scratch</p>
+<p>A step-by-step process from specification to implementation</p>
+<h2>Introduction</h2>
+<p>There's quite a few implementations of the Kademlia peer-to-peer (P2P) 
+distributed hash table (DHT) algorithm out there on GitHub.&nbsp; My perusal of 
+the implementations (mainly focusing on C#, but some Python and Go projects as 
+well) on <a href="https://github.com/search?utf8=&#10003;&q=kademlia&type=">GitHub</a> 
+vary from incomplete to WTF?&nbsp; All the implementation pretty much suffer 
+from:</p>
+<ol>
+	<li>Lack of documentation: by this I mean matching code to the 
+	specifications in the original document.&nbsp; Strange code behaviors are 
+	not discussed.</li>
+	<li>Entanglement: several implementations are entangled with &quot;applications&quot;, 
+	such as P2P music streaming and vote tallying</li>
+	<li>Lack of abstraction: pretty much every implementation I've seen does not 
+	abstract out the communication protocol, whether UPD, TCP, or in-memory, 
+	which is particularly useful for testing.</li>
+	<li>Overly complex: some implementations incorporate asynchronous handling 
+	of messages and other behaviors that are best abstracted out of the core 
+	implementation.</li>
+</ol>
+<p>As an aside, I'd have to say this about open source projects:</p>
+<ol>
+	<li>One person open source projects are great when they implement something 
+	simple and compartmentalized.</li>
+	<li>More complex open source solutions work best when there's a team of 
+	people to review everything from architecture to stupid spelling mistakes to 
+	writing and maintaining decent tests and documentation.</li>
+</ol>
+<p>Having many open source projects on GitHub, most of which fail to provide the 
+benefits of a team mentioned in point #2, I actually consider myself to be 
+contributing to the problem, not the solution.</p>
+<h3>What is Kademlia?</h3>
+<p>From Wikipedia:</p>
+<p><i>Kademlia is a distributed hash table for decentralized peer-to-peer 
+computer networks designed by Petar Maymounkov and David Mazières in 2002. It 
+specifies the structure of the network and the exchange of information through 
+node lookups. Kademlia nodes communicate among themselves using UDP. A virtual 
+or overlay network is formed by the participant nodes. Each node is identified 
+by a number or node ID. The node ID serves not only as identification, but the 
+Kademlia algorithm uses the node ID to locate values (usually file hashes or 
+keywords). In fact, the node ID provides a direct map to file hashes and that 
+node stores information on where to obtain the file or resource.</i></p>
+<h3>Who Uses Kademlia?</h3>
+<p>Kademlia is used in file sharing networks.&nbsp; For example,
+<a href="https://en.wikipedia.org/wiki/BitTorrent">BitTorrent</a> uses a DHT 
+based on an implementation of the Kademlia algorithm.&nbsp;
+<a href="https://en.wikipedia.org/wiki/Kad_network">Kad network</a> uses the 
+Kademlia protocol, with <a href="https://en.wikipedia.org/wiki/EMule">eMule</a> 
+being an open source Windows client.</p>
+<h3>The Kademlia Specification</h3>
+<p>The original specification can be found
+<a href="https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf">
+here</a>.&nbsp; We'll reference this spec frequently as the code is developed.&nbsp; 
+A decent slide deck with some nice pictures is
+<a href="https://tams.informatik.uni-hamburg.de/lehre/2004ss/vorlesung/medientechnik/material/kpres.pdf">
+here</a>.&nbsp; Lastly, an excellent specification for Kademlia can be found
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html">
+here</a>.</p>
+<h3>But Why?</h3>
+<p>I've become interested in peer-to-peer networks as a result of my &quot;fly on the 
+wall&quot; involvement with <a href="https://holochain.org/">Holochain</a> (from the 
+same people that were co-authors of the
+<a href="https://www.codeproject.com/Articles/894188/Introducing-Semtrex">
+Semtrex</a> article) and the underlying technologies of blockchains like Bitcoin 
+and Ethereum.&nbsp; I've already written about some of the core technology 
+components, such as
+<a href="https://www.codeproject.com/Articles/1176140/Understanding-Merkle-Trees-Why-use-them-who-uses-t">
+Merkle Trees</a> and a
+<a href="https://www.codeproject.com/Articles/1172340/Hashcash-or-Proof-of-Work">
+Proof of Work</a> algorithm, and a deep understanding of a respected P2P DHT 
+algorithm seems like the next logical step in understanding the whole gestalt of 
+blockchains.&nbsp; </p>
+<p>I also am a firm believer that:</p>
+<ol>
+	<li><a href="https://en.wikipedia.org/wiki/List_of_cryptocurrencies">As 
+	wikipedia puts it</a> &quot;New cryptocurrency can be created any time.&quot;&nbsp; 
+	These things are here and are not going to go away.&nbsp; It's chaos right 
+	now, there's lots of questions and problems, but
+	<a href="http://www.businessinsider.com/bitcoin-price-security-equity-sec-2017-7">
+	even the SEC is looking at how to regulate cryptocurrencies</a>, and I 
+	suspect the IRS is trying to figure out how to tax these things.</li>
+	<li>The underlying technology to not just cryptocurrency but any blockchain 
+	that implement <a href="https://en.wikipedia.org/wiki/Smart_contract">smart 
+	contracts</a> essentially must include a peer-to-peer distributed hash 
+	table, at least with regards to how blockchain technology is being discussed 
+	and applied (using a blockchain in a centralized scenario is sort of 
+	pointless except perhaps for logging purposes.)&nbsp; Understanding how this 
+	works is important.</li>
+	<li>Centralized data, except for performance reasons, is
+	<a href="http://sandhill.com/article/is-data-decentralization-the-new-trend/">
+	on its way out</a>.&nbsp; As that last link states: &quot;The more the data 
+	management industry consolidates, the more opposing forces decentralize the 
+	market.&quot;&nbsp; And peer-to-peer decentralizing has built in redundancy 
+	protecting from single-point data loss and access failures.&nbsp; Not that 
+	decentralizing has its own problems -- security will probably be the main 
+	one, if it isn't already.&nbsp; As an aside, read this short paper on
+	<a href="https://arxiv.org/pdf/1506.03471.pdf">Enigma</a>.</li>
+</ol>
+<p>So while this is a personal venture, it is also a recognition that there are 
+some interesting and complicated technologies coming down the road that need to 
+be properly understood, and protocols like Kademlia are a good starting point 
+for looking at a P2P DHT implementation.</p>
+<h2>High Level Architecture</h2>
+<p>In this document, <font color="#FF00FF">fuchsia text</font> is used when 
+quoting from the Kademlia specification.</p>
+<p>There are four components to the high level architecture necessary to 
+implement the Kademlia protocol:</p>
+<ol>
+	<li>Node: The concept of a node.&nbsp; Each node has a private 160-bit ID (a 
+	SHA-1 hash).&nbsp; <font color="#FF00FF">Keys are opaque, 160-bit quantities 
+	(e.g., the SHA-1 hash of some larger data). Participating computers each 
+	have a node ID in the 160-bit key space. </font>(From the Introduction)</li>
+	<li>Storage: Each node stores key-value pairs, where the key is also a 
+	160-bit SHA-1 hash.&nbsp;&nbsp; <font color="#FF00FF">(key,value) pairs are 
+	stored on nodes with IDs “close” to the key for some notion of closeness.</font>&nbsp; 
+	The storage mechanism, whether in-memory, key-value database, file system, 
+	or other, is not specified and is a good point for abstraction. (From the 
+	Introduction)</li>
+	<li>Routing: Nearby servers for a given key are located with an efficient 
+	routing algorithm.&nbsp; <font color="#FF00FF">A node- ID-based routing 
+	algorithm lets anyone efficiently locate servers near any given target key. </font>
+	(From the Introduction)</li>
+	<li>Communication protocol: a means of communicating between nodes (usually 
+	separate computers) must exist.&nbsp; The original Kademlia specification 
+	states that <font color="#FF00FF">every node keeps a list of (IP address, 
+	UDP port, Node ID)</font> of nearby nodes.&nbsp; As with storage, this is a 
+	good place for abstraction so that different protocols can be easily 
+	employed. (Section 2.2 of the spec)</li>
+</ol>
+<p>This is expressed in the following diagram:</p>
+<p><img border="0" src="highlevel.png" width="625" height="271"></p>
+<h3>Wireframe Implementation</h3>
+<p>From the above, we can put together a wireframe implementation.&nbsp; The 
+abstractions are implemented as interfaces:</p>
+<pre>public interface IRouter { }
+public interface ICommunication { }
+
+public interface IStorage
+{
+  string Get(string key);
+  string Set(string key, string val);
+}</pre>
+<p>and the concrete classes are mostly stubs:</p>
+<pre>public class Router
+{
+}
+
+/// &lt;summary&gt;
+/// In-memory virtual communication -- in other words, all nodes are expected 
+/// to be found on and in a single application instance. Used for testing.
+/// &lt;/summary&gt;
+public class VirtualComms : ICommunication
+{
+}</pre>
+<p>The <code>Node</code> class has a minimal implementation for initializing an ID (explained 
+next):</p>
+<pre>public class Node
+{
+  public ID NodeID { get; }
+
+  public Node()
+  {
+    NodeID = ID.RandomID();
+  }
+
+  public Node(ID id)
+  {
+    NodeID = id;
+  }
+
+  public Node(byte[] id)
+  {
+    NodeID = new ID(id);
+  }
+}</pre>
+<p>and there's a simple in-memory storage wrapping a <code>Dictionary</code>:</p>
+<pre>/// &lt;summary&gt;
+/// Implements in-memory storage for key-value pairs.
+/// &lt;/summary&gt;
+public class InMemoryStorage : IStorage
+{
+  protected Dictionary&lt;string, string&gt; storage;
+
+  public InMemoryStorage()
+  {
+    storage = new Dictionary&lt;string, string&gt;();
+  }
+
+  public string Get(string key)
+  {
+    return storage[key];
+  }
+
+  public void Set(string key, string val)
+  {
+    storage[key] = val;
+  }
+}</pre>
+<h3>The ID Class (Section 2.1)</h3>
+<p>This class is heavily borrowed from zencoders peer-to-peer music player, the 
+original source can be found
+<a href="https://github.com/zencoders/sambatyon/blob/master/Kademlia/Kademlia/ID.cs">
+here</a>.&nbsp; I stripped out a variety of things, but the core implementation 
+remains: </p>
+<p><img border="0" src="id.png" width="231" height="394"></p>
+<p>Why do we need this?&nbsp; Well, as the specification states:</p>
+<p><font color="#FF00FF">Many of Kademlia’s benefits result from its use of a 
+novel XOR metric for distance between points in the key space. XOR is symmetric, 
+allowing Kademlia participants to receive lookup queries from precisely the same 
+distribution of nodes contained in their routing tables...Kademlia effectively 
+treats nodes as leaves in a binary tree, with each node’s position determined by 
+the shortest unique prefix of its ID...</font><span style="font-size: 12.0pt; font-family: 'Times New Roman',serif; color: #FF00FF">The 
+Kademlia protocol ensures that every node knows of at least one node in each of 
+its subtrees, if that subtree contains a node. With this guarantee, any node can 
+locate any other node by its ID. </span></p>
+<p>The ID class implements the distance computations and other algorithmic 
+pieces necessary to manage the 160-bit ID, which is at the heart of Kademlia's 
+routing algorithm.&nbsp; Portions of this implementation are discussed next.</p>
+<h2>The Concept of Closeness (Section 2.1)</h2>
+<p><font color="#FF00FF">Each Kademlia node has a 160-bit node ID. Node IDs are 
+currently just random 160-bit identifiers, though they could equally well be 
+constructed as in Chord. Every message a node transmits includes its node ID, 
+permitting the recipient to record the sender’s existence if necessary.</font></p>
+<p><font color="#FF00FF">Keys, too, are 160-bit identifiers. To assign (key,value) 
+pairs to particular nodes, Kademlia relies on a notion of distance between two 
+identifiers. Given two 160-bit identifiers, x and y, Kademlia defines the 
+distance between them as their bitwise exclusive or (XOR) interpreted as an 
+integer, d(x,y) = x ® y.</font></p>
+<p>This is implemented as:</p>
+<pre>public static ID operator ^(ID a, ID b)
+{
+  byte[] xoredData = new byte[ID_LENGTH];
+
+  for (int i = 0; i &lt; ID_LENGTH; i++)
+  {
+    xoredData[i] = (byte)(a.data[i] ^ b.data[i]);
+  }
+
+  return new ID(xoredData);
+}</pre>
+<p><font color="#FF00FF">We next note that XOR captures the notion of distance 
+implicit in our binary- tree-based sketch of the system. In a fully-populated 
+binary tree of 160-bit IDs, the magnitude of the distance between two IDs is the 
+height of the smallest subtree containing them both. When a tree is not fully 
+populated, the closest leaf to an ID x is the leaf whose ID shares the longest 
+common prefix of x. </font></p>
+<p>This is handled by the <code>&lt;</code> and <code>&gt;</code> operators used to measure distance:</p>
+<pre>public static bool operator &lt;(ID a, ID b)
+{
+  for (int i = 0; i &lt; ID_LENGTH; i++)
+  {
+    if (a.data[i] &lt; b.data[i])
+    {
+      return true; // If first mismatch is a &lt; b, a &lt; b
+    }
+    else if (a.data[i] &gt; b.data[i])
+    {
+      return false; // If first mismatch is a &gt; b, a &gt; b
+    }
+  }
+
+  return false; // No mismatches
+}
+
+public static bool operator &gt;(ID a, ID b)
+{
+  for (int i = 0; i &lt; ID_LENGTH; i++)
+  {
+    if (a.data[i] &lt; b.data[i])
+    {
+      return false; // If first mismatch is a &lt; b, a &lt; b
+    }
+    else if (a.data[i] &gt; b.data[i])
+    {
+      return true; // If first mismatch is a &gt; b, a &gt; b
+    }
+  }
+
+  return false; // No mismatches
+}</pre>
+<p><font color="#FF00FF">If there are empty branches in the tree, there might be more 
+than one leaf with the longest common prefix. In that case, the closest leaf to 
+x will be the closest leaf to ID x produced by flipping the bits in x 
+corresponding to the empty branches of the tree.</font></p>
+<p><font color="#FF0000">TODO: Why the randomization?</font></p>
+<pre>public ID RandomizeBeyond(int bit)
+{
+  byte[] randomized = new byte[ID_LENGTH];
+  data.CopyTo(randomized, 0);
+
+  FlipBit(randomized, bit); // Invert pivot bit
+
+  // And randomly flip the rest
+  for(int i = bit + 1; i &lt; 8 * ID_LENGTH; i++) 
+  {
+    if(rnd.NextDouble() &lt; 0.5) 
+    {
+      FlipBit(randomized, i);
+    }
+  }
+
+  return new ID(randomized);
+}
+
+/// &lt;summary&gt;
+/// Flips the given bit in the byte array.
+/// Byte array must be ID_LENGTH long.
+/// &lt;/summary&gt;
+/// &lt;param name=&quot;data&quot;&gt;Data to work on&lt;/param&gt;
+/// &lt;param name=&quot;bit&quot;&gt;Bit used to generate the mask&lt;/param&gt;
+private static void FlipBit(byte[] data, int bit)
+{
+  int byteIndex = bit / 8;
+  int byteBit = bit % 8;
+  byte mask = (byte) (1 &lt;&lt; byteBit);
+
+  data[byteIndex] = (byte) (data[byteIndex] ^ mask); // Use a mask to flip the bit
+}
+</pre>
+<h2>Node State (Section 2.2)</h2>
+<p><font color="#FF00FF">Kademlia nodes store contact information about each 
+other to route query messages. For each 0 &lt; i &lt; 160, every node keeps a list of 
+(IP address, UDP port, Node ID) triples for nodes of distance between 2<sup>i</sup> and 
+2<sup>i+1</sup> from itself. We call these lists k-buckets. Each k-bucket is kept sorted 
+by time last seen—least-recently seen node at the head, most-recently seen at 
+the tail. For small values of i, the k-buckets will generally be empty (as no 
+appropriate nodes will exist). For large values of i, the lists can grow up to 
+size k, where k is a system-wide replication parameter. k is chosen such that 
+any given k nodes are very unlikely to fail within an hour of each other (for 
+example k = 20).</font></p>
+<p>That phrase &quot;fall within an hour of each other&quot; is determined by an analysis 
+of the <a href="https://en.wikipedia.org/wiki/Chord_(peer-to-peer)">Chord P2P 
+DHT</a>, which can be read in the Kademlia spec.</p>
+<h3>Abstracting the Triplet</h3>
+<p>The Kademlia spec &quot;hardwires&quot; the contact information as an IP address and 
+UDP port.&nbsp; We want to abstract this so that systems that implement other 
+addressing schemes can 
+be easily implemented.&nbsp; TCP/IP, IPv6, multiple IP addresses for the same 
+node, and in-memory node instances for test purposes are some examples of other 
+addressing schemes.&nbsp; We'll use an interface and wrapper class for this 
+(stubs at the moment):</p>
+<pre>public interface IAddress { }
+
+public class Contact
+{
+  public IAddress Address { get; set; }
+  public ID NodeID { get; set; }
+}</pre>
+<p>The interface IAddress will eventually define methods for obtaining a 
+communication channel.&nbsp; A stub implementation for UDP communication can 
+then be defined:</p>
+<pre>public class UdpAddress : IAddress
+{
+  public IPAddress Address { get; set; }
+  public int Port { get; set; }
+}</pre>
+<p>We can also implement a stub for our in-memory testing, which directly 
+references the contact node:</p>
+<pre>
+public class InMemoryNodeAddress : IAddress
+{
+  public Node Node { get; set; }
+}</pre>
+<h3>K-Buckets</h3>
+<p>This is where reading the spec starts to feel like those annoying word 
+problems in school:</p>
+<p><font color="#FF00FF">For each 0 &lt; i &lt; 160, every node keeps a list of 
+(IP address, UDP port, Node ID) triples for nodes of distance between 2<sup>i</sup> and 
+2<sup>i+1</sup> from itself. We call these lists k-buckets. Each k-bucket is 
+kept sorted by time last seen—least-recently seen node at the head, 
+most-recently seen at the tail.</font></p>
+<p>I believe that the above range for <code>i</code> is wrong: it should be <code>0 &lt;= i &lt; 160</code> as this 
+is necessary to allow for a node ID of 0.</p>
+<p>Reading the spec on the
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#distance">
+SourceForge link</a> makes this a bit clearer:</p>
+<p><i>A Kademlia node organizes its contacts, other nodes known to it, in 
+buckets which hold a maximum of k contacts. These are known as k-buckets.</i></p>
+<p>We can define a couple constants:</p>
+<pre>public const int K = 20;
+public const int ID_LENGTH_BYTES = 20;
+public const int ID_LENGTH_BITS = 160;</pre>
+<p>We therefore need to implement a bucket list that contains 160 buckets, each 
+with k contacts, and these buckets must be kept sorted (or are sortable) by last 
+time seen.&nbsp; The terms &quot;head&quot; and &quot;tail&quot; may not be obvious to people 
+anymore (not that such arbitrary terms were ever obvious), so a quick reminder:</p>
+<ul>
+	<li>The head of the list is the first node (or leftmost node) in the list.</li>
+	<li>The tail of the list is the last node (or rightmost node) in the list.</li>
+</ul>
+<p>Therefore, the contacts in each bucket are kept in oldest-to-newest date/time order -- the 
+least recently seen node (the one with the oldest date) at the head (the first entry) and the most recently 
+seen (the one with the newest date) at the tail (the last entry.)</p>
+<p>Based on this information, we revise our <code>Contact</code> class to include a <code>LastSeen</code> 
+property:</p>
+<pre>public class Contact
+{
+  public DateTime LastSeen { get; set; }
+  public IAddress Address { get; set; }
+  public ID NodeID { get; set; }
+}
+</pre>
+<p>We define a <code>BucketList</code> class that contains the 160 buckets of k contacts, 
+handled in the <code>K_Bucket class</code>:</p>
+<pre>public class KBucket
+{
+  protected List&lt;Contact&gt; contacts;
+
+  public KBucket()
+  {
+    contacts = new List&lt;Contact&gt;(Constants.K);
+  }
+}
+
+public class BucketList
+{
+  protected List&lt;KBucket&gt; buckets;
+
+  public BucketList()
+  {
+    buckets = new List&lt;KBucket&gt;(Constants.ID_LENGTH_BITS);
+    Constants.ID_LENGTH_BITS.ForEach(() =&gt; buckets.Add(new KBucket()));
+  }
+}</pre>
+<p>This creates 3200 <code>Contact</code> entries (160 * 20).&nbsp; We could 
+implement this as a <code>List&lt;List&lt;Contact&gt;&gt;</code> but for semantic clarity, I prefer the 
+above approach.&nbsp; An overly-cute (but useful) extension method is used:</p>
+<pre>public static void ForEach(this int n, Action action)
+{
+  for (int i = 0; i &lt; n; i++)
+  {
+    action();
+  }
+}</pre>
+<h3>Adding a Contact</h3>
+<p><font color="#FF00FF">Each k-bucket is kept sorted by time last 
+seen—least-recently seen node at the head, most-recently seen at the tail.</font></p>
+<p>We can implement an <code>HaveContact</code> method whose purpose is to always maintain 
+a sorted list.&nbsp; This method does two things:</p>
+<ol>
+	<li>Adds a contact to the tail if never been seen before, dropping of a 
+	contact at the head if the bucket size == k</li>
+<li>Moves a contact to the tail if it already exists.</li>
+</ol>
+<p>This is implemented in the <code>KBucket</code> class and assumes that the correct <code>KBucket</code> 
+has been determined already:</p>
+<pre>public bool Exists(ID id)
+{
+  return contacts.Any(c =&gt; c.NodeID == id);
+}
+
+public void HaveContact(Contact contact)
+{
+  if (Exists(contact.NodeID))
+  {
+    contacts.MoveToTail(contact, c =&gt; c.NodeID == contact.NodeID);
+  }
+  else
+  {
+    contacts.AddMaximum(contact, Constants.K);
+  }
+}</pre>
+<p>For readability and to keep the list management separate from the <code>KBucket</code> 
+class, these are implemented as extension methods:</p>
+<pre>public static void MoveToTail&lt;T&gt;(this List&lt;T&gt; list, T item, Predicate&lt;T&gt; pred)
+{
+  int idx = list.FindIndex(pred);
+  list.RemoveAt(idx);
+  list.Add(item);
+}
+
+public static void AddMaximum&lt;T&gt;(this List&lt;T&gt; list, T item, int max)
+{
+  list.Add(item);
+
+  if (list.Count &gt; max)
+  {
+    list.RemoveAt(0);
+  }
+}</pre>
+<p>Lastly, each node has a bucket list:</p>
+<pre>public class Node
+{
+  public ID NodeID { get; }
+
+  <font color="#FF0000">protected BucketList bucketList;</font>
+
+  public Node()
+  {
+    NodeID = ID.RandomID();
+    <font color="#FF0000">bucketList = new BucketList();</font>
+  }
+  ...</pre>
+<h3>What KBucket Does a Contact go Into?</h3>
+<p>Each KBucket represents a range of 2<sup>i</sup> to 2<sup>i+1</sup> nodes, where 0 &lt;= i 
+&lt; 160.&nbsp; Given a 160-bit ID, we can determine which k-bucket the contact 
+goes into.&nbsp; The k-bucket index is based on powers of 2 which can be 
+determined by counting the number of 0 bits from the most significant bit of the 
+ID):</p>
+<pre>public int GetBucketIndex()
+{
+  int idx = Constants.ID_LENGTH_BITS - 1;
+  int msbyte = 0;
+  int msbit = 0x80;
+  bool done = false;
+
+  while (msbyte &lt; Constants.ID_LENGTH_BYTES &amp;&amp; !done)
+  {
+    while (msbit != 0)
+    {
+      if ((id[msbyte] &amp; msbit) == 0)
+      {
+        --idx;
+        msbit &gt;&gt;= 1;
+      }
+      else
+      {
+        done = true;
+        break;
+      }
+    }
+
+    msbit = 0x80;
+    ++msbyte;
+  }
+
+  return idx + (!done ? 1 : 0); // compensate for last --idx
+}</pre>
+<p>An ID of 0 should have a bucket index of 0 (representing 2<sup>^0</sup> 
+through 2<sup>^1</sup> - 1) and an ID with the most significant&nbsp;set should have 
+a bucket index of 159, representing 2<sup>^159</sup> through 2<sup>^160</sup> - 1.&nbsp; 
+A simple test:</p>
+<pre>ID id1 = new ID(new byte[20]);
+int idx1 = id1.GetBucketIndex();
+Console.WriteLine(idx1);
+
+byte[] b2 = new byte[20];
+b2[0] = 0x80;
+ID id2 = new ID(b2);
+int idx2 = id2.GetBucketIndex();
+Console.WriteLine(idx2);</pre>
+<p>
+gives us:</p>
+<p>
+<img border="0" src="bucket1.png" width="219" height="63"></p>
+<p>
+However!&nbsp; As per the
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#distance">
+SourceForge spec</a>: <font color="#FF00FF">The buckets are organized by <b>the 
+distance</b> between the node and the contacts in the bucket.</font></p>
+<p>
+Yes, this is in the Kademlia spec as well, but you have to catch it:</p>
+<p>
+<font color="#FF00FF">for nodes of <b>distance</b> between 2<sup>i</sup> and 2<sup>i+1</sup> 
+<b>from itself</b>.</font> </p>
+<p>
+(My bolding - the language is the Kademlia spec is more obtuse.)</p>
+<p>
+Adding a contact to a bucket means that we have to provide <i>our node's ID</i> 
+in order to find the correct bucket index.&nbsp; In <code>BucketList</code> we therefore 
+implement:</p>
+<pre>
+public void HaveContact(ID ourId, Contact contact)
+{
+  var distance = ourId ^ contact.NodeID;
+  int bucketIdx = distance.GetBucketIndex();
+  buckets[bucketIdx].HaveContact(contact);
+}
+</pre>
+<p>
+&nbsp;</p>
+<p>
+&nbsp;</p>
+<p>
+&nbsp;</p>
+<p>
+<font color="#FF00FF">To locate nodes near a particular ID, Kademlia uses a single routing algorithm 
+from start to finish. </span></font></p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+
+</body>
+
+</html>
