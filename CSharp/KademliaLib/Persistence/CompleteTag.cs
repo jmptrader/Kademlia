@@ -24,65 +24,45 @@
  *
  ******************************************************************************************/
 
+using System;
+using System.Security.Cryptography;
 using System.Text;
-using System.Runtime.Serialization;
 
 namespace Persistence
 {
 	namespace Tag
 	{
-		[DataContractAttribute]
 		public class CompleteTag
 		{
-			/// <summary>
-			/// Tag Default constructor.
-			/// </summary>
+			public string Key { get; set; }
+			public string Value { get; set; }
+			public string Hash { get; set; }
+
 			public CompleteTag() { }
 
-			/// <summary>
-			/// Method used for Serialization purpose
-			/// </summary>
-			/// <param name="info"></param>
-			/// <param name="ctxt"></param>
-			public CompleteTag(SerializationInfo info, StreamingContext ctxt)
+			public CompleteTag(string key, string val)
 			{
-				Value = (string)info.GetValue("Value", typeof(string));
-				FileHash = (string)info.GetValue("FileHash", typeof(string));
-				TagHash = (string)info.GetValue("TagHash", typeof(string));
+				Key = key;
+				Value = val;
+				ComputeHash(key);
 			}
 
-			[DataMemberAttribute]
-			public string Value
+			protected void ComputeHash(string key)
 			{
-				get;
-				set;
-			}
+				//var algo = SHA256.Create();
+				//byte[] hash = algo.ComputeHash(Encoding.ASCII.GetBytes(key));
+				//Hash = Convert.ToBase64String(hash);
+				HashAlgorithm hasher = new SHA1CryptoServiceProvider(); // Keeping this around results in exceptions
+				byte[] hash = hasher.ComputeHash(Encoding.UTF8.GetBytes(key));
+				StringBuilder sb = new StringBuilder();
 
-			[DataMemberAttribute]
-			public string FileHash
-			{
-				get;
-				set;
-			}
+				for (int i = 0; i < hash.Length; i++)
+				{
+					sb.Append(hash[i].ToString("x2"));
+				}
 
-			[DataMemberAttribute]
-			public string TagHash
-			{
-				get;
-				set;
-			}
-
-			/// <summary>
-			/// Method used for serialization purpose.
-			/// </summary>
-			/// <param name="info"></param>
-			/// <param name="context"></param>
-			public void GetObjectData(SerializationInfo info, StreamingContext context)
-			{
-				info.AddValue("Value", Value);
-				info.AddValue("FileHash", FileHash);
-				info.AddValue("TagHash", TagHash);
+				Hash = sb.ToString();
 			}
 		}
 	}
-}//namespace Persistence.Tag
+}

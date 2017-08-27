@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using Kademlia.Messages;
 
 using Persistence;
@@ -7,14 +8,25 @@ namespace Kademlia
 {
 	public class KademliaEndpoint : IKademliaEndpoint
 	{
+		// For testing, we keep a dictionary of all actual endpoints created in-memory.
+		public static Dictionary<string, IKademliaEndpoint> actualEndpoints = new Dictionary<string, IKademliaEndpoint>();
+
 		public Uri Uri { get; set; }
 		public IKademliaRepository Repository { get; set; }
 		public KademliaNode Node { get; set; }
 
-		public KademliaEndpoint()
+		public KademliaEndpoint(string endpointName)
 		{
 			// TODO: Here we are creating a unique URI for testing purposes.
-			Uri = new Uri("http://" + Guid.NewGuid() + "/");
+			string fullPath = ("http://" + endpointName + "/").ToLower();  // Uri ToString is always all lowercase.
+			Uri = new Uri(fullPath);
+			actualEndpoints[fullPath] = this;
+		}
+
+		public KademliaEndpoint(Uri uri)
+		{
+			// Here we create a psuedo endpoint to send the something to, like a Pong
+			Uri = uri;
 		}
 
 		//public IKademliaNode CreateNode()
@@ -52,12 +64,20 @@ namespace Kademlia
 
 		public void HandlePing(Ping ping)
 		{
+			// Send ping message to Uri.
+			// Here we simulate handling the ping with the Node associated with this Uri.
+			// The endpoint pinging us is in ping.NodeEndpoint
 			Node.HandlePing(ping);
 		}
 
 		public void HandlePong(Pong pong)
 		{
-			Node.HandlePong(pong);
+			// Send pong message to Uri.
+			// Here we simulate handling the ping with the Node associated with this Uri.
+			// The endpoint ponging us is in pong.NodeEndpoint.
+			// Since we don't know the actual endpoint node, we have to look it up in our simulator using the this pseudo-construct.
+			IKademliaEndpoint endpoint = actualEndpoints[Uri.ToString()];
+			endpoint.Node.HandlePong(pong);
 		}
 
 		public void HandleStoreData(StoreData r)

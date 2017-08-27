@@ -15,8 +15,8 @@ namespace Test
 		{
 			KademliaRepository repo1 = new KademliaRepository();
 			KademliaRepository repo2 = new KademliaRepository();
-			KademliaEndpoint ep1 = new KademliaEndpoint();
-			KademliaEndpoint ep2 = new KademliaEndpoint();
+			KademliaEndpoint ep1 = new KademliaEndpoint("Node1");
+			KademliaEndpoint ep2 = new KademliaEndpoint("Node2");
 
 			KademliaNode node1 = new KademliaNode(repo1, ep1);
 			KademliaNode node2 = new KademliaNode(repo2, ep2);
@@ -30,8 +30,7 @@ namespace Test
 			// Bootstrap node 2 by having it ping a known server, node 1, at ep1
 			bool pinged = node2.Bootstrap(ep1);
 
-			Console.ReadLine();
-			node1.Put("Hello World");
+			node1.Store("mykey", "Hello World");
 
 			//IList<string> foundVals = node1.Get(babiesID);
 			//foreach (string s in foundVals)

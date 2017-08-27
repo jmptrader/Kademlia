@@ -7,12 +7,12 @@ namespace Kademlia
 {
 	public static class EndpointFactory
 	{
-		public static IKademliaEndpoint Create(string nodeName)
-		{
-			// TODO: Do something with nodeName
-			var endpoint = new KademliaEndpoint();
+		//public static IKademliaEndpoint Create(string nodeName)
+		//{
+		//	// TODO: Do something with nodeName
+		//	var endpoint = new KademliaEndpoint();
 
-			return endpoint;
-		}
+		//	return endpoint;
+		//}
 	}
 }

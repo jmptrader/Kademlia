@@ -26,10 +26,7 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using Persistence.Tag;
-using System.Runtime.Serialization;
 
 namespace Persistence
 {
@@ -37,17 +34,44 @@ namespace Persistence
 	/// Class that describes a Resource shared with Kademlia.
 	/// A Kademlia Resource contains information about Tag and a list of suppliers (stored as set of Dht Elements).
 	/// </summary>
-	[Serializable]
-	[DataContractAttribute]
 	public class KademliaResource
 	{
+		/// <summary>
+		/// Identifier of the Resource that is the Hash of the tag
+		/// </summary>
+		public string Id
+		{
+			get
+			{
+				if (Tag != null)
+				{
+					return Tag.Hash;
+				}
+				else
+				{
+					return null;
+				}
+
+			}
+		}
+
+		/// <summary>
+		/// Tag Information
+		/// </summary>
+		public CompleteTag Tag { get; set; }
+
+		/// <summary>
+		/// Set of Dht Elements that are the suppliers for the resource
+		/// </summary>
+		public HashSet<DhtElement> Urls { get; set; }
+
 		/// <summary>
 		/// Default constructor
 		/// </summary>
 		public KademliaResource()
 		{
-			this.Tag = null;
-			this.Urls = new HashSet<DhtElement>();
+			Tag = null;
+			Urls = new HashSet<DhtElement>();
 
 		}
 		/// <summary>
@@ -85,55 +109,6 @@ namespace Persistence
 				//                this.Urls.Union<DhtElement>(urls, new DhtElementComparer());
 			}
 		}
-		/// <summary>
-		/// Method used for serialization purpose
-		/// </summary>
-		/// <param name="info"></param>
-		/// <param name="ctxt"></param>
-		public KademliaResource(SerializationInfo info, StreamingContext ctxt) : this()
-		{
-			this.Tag = (CompleteTag)info.GetValue("Tag", typeof(CompleteTag));
-			this.Urls = (HashSet<DhtElement>)info.GetValue("Urls", typeof(HashSet<DhtElement>));
-		}
-		/// <summary>
-		/// Identifier of the Resource that is the Hash of the tag
-		/// </summary>
-		public string Id
-		{
-			get
-			{
-				if (this.Tag != null)
-				{
-					return this.Tag.TagHash;
-				}
-				else
-				{
-					return null;
-				}
-
-			}
-			set
-			{
-			}
-		}
-		/// <summary>
-		/// Tag Information
-		/// </summary>
-		[DataMemberAttribute]
-		public CompleteTag Tag
-		{
-			get;
-			set;
-		}
-		/// <summary>
-		/// Set of Dht Elements that are the suppliers for the resource
-		/// </summary>
-		[DataMemberAttribute]
-		public HashSet<DhtElement> Urls
-		{
-			get;
-			set;
-		}
 
 		/*
 		/// <summary>
@@ -168,24 +143,13 @@ namespace Persistence
 		*/
 
 		/// <summary>
-		/// Method used for serialization purpose
-		/// </summary>
-		/// <param name="info"></param>
-		/// <param name="context"></param>
-		public void GetObjectData(SerializationInfo info, StreamingContext context)
-		{
-			info.AddValue("Tag", this.Tag);
-			info.AddValue("Urls", this.Urls);
-		}
-
-		/// <summary>
 		/// Method that merges the Dht Elements of the current resource with the ones of an another resource.
 		/// </summary>
 		/// <param name="other">The other resource</param>
 		/// <returns></returns>
 		public bool MergeTo(KademliaResource other)
 		{
-			if (this.Tag.FileHash == other.Tag.FileHash)
+			if (Tag.Hash == other.Tag.Hash)
 			{
 				Console.WriteLine("Merged!");
 				foreach (DhtElement e in other.Urls)

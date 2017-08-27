@@ -48,7 +48,7 @@ namespace Kademlia
     {
         // private static readonly ILog log = LogManager.GetLogger(typeof(KademliaNode));
 
-		public Uri Uri { get; set; }
+		// public Uri Uri { get; set; }
 
 		// TODO: Should be private
         public ID nodeID;
@@ -100,7 +100,7 @@ namespace Kademlia
         #region timers
         private long max_time = 5000000; // 5 secs. TODO: put it to 500 ms in ticks
         private const int CHECK_INTERVAL = 100;
-        private TimeSpan MAX_SYNC_WAIT = new TimeSpan(5000000); // 5 secs. TODO: put it to 500 ms in ticks
+        private int MAX_SYNC_WAIT = 500; // 500ms;
 		private TimeSpan MAX_CACHE_TIME = new TimeSpan(0, 0, 30);
 		
 		// How much clock skew do we tolerate?
@@ -298,12 +298,13 @@ namespace Kademlia
 		/// <summary>
 		/// Store something in the DHT as the original publisher.
 		/// </summary>
-		public void Put(string val)
+		public void Store(string key, string val)
 		{
-            CompleteTag fileTag = new CompleteTag();
-			fileTag.Value = val;
-            datastore.StoreResource(fileTag, this.transportEndpoint.Uri, DateTime.Now);
-			IterativeStore(fileTag, DateTime.Now);
+			CompleteTag tag = new CompleteTag(key, val);
+			// Store the value in our datastore, indicating where it's stored and when.
+            datastore.StoreResource(tag, nodeEndpoint.Uri, DateTime.Now);
+			IterativeStore(tag, DateTime.Now);
+			// MTC - It seems this TODO is obsolete, as IterateStore looks like it handles this.
 			// TODO: republish on suggested nodes.
 		}
 		
@@ -313,7 +314,7 @@ namespace Kademlia
 		/// <param name="key">the querystring to serach into the network</param>
 		/// <returns>A list of kademlia resource from the network corresponding to the request</returns>
         /// <seealso cref="Persistence.KademliaResource"/>
-		public IList<KademliaResource> Get(string key)
+		public IList<KademliaResource> FindValue(string key)
 		{
             KademliaResource[] results = datastore.SearchFor(key);
             IList<KademliaResource> found;
@@ -350,13 +351,13 @@ namespace Kademlia
 
                 foreach(KademliaResource el in found)
                 {
-                    if (toRet.ContainsKey(el.Tag.FileHash))
+                    if (toRet.ContainsKey(el.Tag.Hash))
                     {
-                        toRet[el.Tag.FileHash].MergeTo(el);
+                        toRet[el.Tag.Hash].MergeTo(el);
                     }
                     else
                     {
-                        toRet[el.Tag.FileHash] = el;
+                        toRet[el.Tag.Hash] = el;
                     }
                 }
 
@@ -453,7 +454,7 @@ namespace Kademlia
         /// <param name="endpoint">Endpoint address to associate with the tag (usually the same of the node)</param>
         private void IterativeStore(CompleteTag tag, DateTime originalInsertion, IKademliaEndpoint svc = null) // EndpointAddress endpoint = null)
 		{
-            IList<Contact> closest = IterativeFindNode(ID.FromString(tag.TagHash));
+            IList<Contact> closest = IterativeFindNode(ID.FromString(tag.Hash));
             // log.Info("Storing at " + closest.Count + " nodes");
             foreach (Contact c in closest)
             {
@@ -477,6 +478,7 @@ namespace Kademlia
 		/// <returns>A list of contact close to the target</returns>
 		private IList<Contact> IterativeFindNode(ID target)
 		{
+			// TODO: Why are we comparing the target ID (which I changed to a hash of the key to be stored) with the nodeID????
             if (target != nodeID)
             {
                 contactCache.Touch(target);
@@ -675,7 +677,7 @@ namespace Kademlia
 		private void SyncStore(Contact storeAt, CompleteTag tag, DateTime originalInsertion, IKademliaEndpoint svc) // EndpointAddress endpoint)
 		{
 			// Make a message
-            ID tagID = ID.FromString(tag.TagHash);
+            ID tagID = ID.FromString(tag.Hash);
 			StoreQuery storeIt = new StoreQuery(nodeID, tagID, originalInsertion, svc.Uri);
 			
 			// Record having sent it
@@ -763,6 +765,7 @@ namespace Kademlia
 		private bool SyncPing(IKademliaEndpoint toPing)
 		{
 			// Send message
+			// nodeEndpoint is our endpoint
 			Ping ping = new Ping(nodeID, nodeEndpoint.Uri);
 
 			// IKademliaNode svc = ChannelFactory<IKademliaNode>.CreateChannel(new NetUdpBinding(), toPing);
@@ -772,9 +775,9 @@ namespace Kademlia
 			// TODO: We have to get these endpoints right, and the return message endpoint.
 
 			toPing.HandlePing(ping);
+			DateTime expires = DateTime.Now.AddMilliseconds(MAX_SYNC_WAIT);
 
-			DateTime called = DateTime.Now;
-			while(DateTime.Now < called.Add(MAX_SYNC_WAIT))
+			while (DateTime.Now < expires)
 			{
 				// If we got a response, send it up
 				Pong resp = GetCachedResponse<Pong>(ping.ConversationID);
@@ -815,7 +818,9 @@ namespace Kademlia
 
 			// TODO: We have to get these endpoints right, and the return message endpoint.
 
-			nodeEndpoint.HandlePong(pong);
+			// Send pong to pinger.  We are the ponger.
+			IKademliaEndpoint ponger = new KademliaEndpoint(ping.NodeEndpoint);
+			ponger.HandlePong(pong);
         }
 
         /// <summary>

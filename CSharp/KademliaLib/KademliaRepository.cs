@@ -34,7 +34,7 @@ namespace Kademlia
 		// TODO: Is this correct?
 		private void Save(KademliaResource rs)
 		{
-			resources[rs.Tag.TagHash] = rs;
+			resources[rs.Tag.Hash] = rs;
 		}
 
 		private KademliaResource GetResource(string hash)
@@ -125,7 +125,7 @@ namespace Kademlia
 			Console.WriteLine("Storing resource from peer " + peer);
 			DhtElement dhtElem = new DhtElement(peer, pubtime, this._elementValidity);
 
-			bool found = TryGetByKey(tag.TagHash, out rs);
+			bool found = TryGetByKey(tag.Hash, out rs);
 
 			if (found)
 			{

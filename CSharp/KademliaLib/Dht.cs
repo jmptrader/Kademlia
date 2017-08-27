@@ -147,7 +147,7 @@ namespace Kademlia
 		/// <returns>the best semantically matching value stored for the key, or null if no values are found</returns>
 		public KademliaResource Get(string key)
 		{
-			IList<KademliaResource> found = dhtNode.Get(key);
+			IList<KademliaResource> found = dhtNode.FindValue(key);
 
 			/*
 			if(found.Count > 0) {
@@ -172,7 +172,7 @@ namespace Kademlia
 		/// <returns>All the list of resources found on network, ordered by semantic affinity</returns>
 		public IList<KademliaResource> GetAll(string key)
 		{
-			IList<KademliaResource> found = dhtNode.Get(key);
+			IList<KademliaResource> found = dhtNode.FindValue(key);
 
 			/*
             if (found.Count > 0)
@@ -196,10 +196,10 @@ namespace Kademlia
 		/// Puts a value in the DHT under a key.
 		/// </summary>
 		/// <param name="filename">The filename of resource to store into the network</param>
-		public void Put(string filename)
-		{
-			dhtNode.Put(filename);
-		}
+		//public void Put(string filename)
+		//{
+		//	dhtNode.Store(filename);
+		//}
 
 		/// <summary>
 		/// Returns the maximum size of individual puts.

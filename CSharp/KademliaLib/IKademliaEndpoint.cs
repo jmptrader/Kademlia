@@ -16,7 +16,7 @@ namespace Kademlia
 		void HandleStoreQuery(StoreQuery storeIt);
 		void HandleFindNode(FindNode question);
 		void HandleFindValue(FindValue question);
-		void HandlePing(Ping pong);
+		void HandlePing(Ping ping);
 		void HandlePong(Pong pong);
 		void HandleFindNodeResponse(FindNodeResponse response);
 		void HandleFindValueDataResponse(FindValueDataResponse response);
