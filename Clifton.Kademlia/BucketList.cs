@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Clifton.Kademlia
 {
@@ -26,14 +27,20 @@ namespace Clifton.Kademlia
 
 		/// <summary>
 		/// Algorithm idea from https://github.com/zencoders/sambatyon/blob/master/Kademlia/Kademlia/BucketList.cs, starting on line 208.
+		/// Brute force distance lookup of all known contacts, sorted by distance, then we take at most k (20) of the closest.
 		/// </summary>
 		/// <param name="toFind">The ID for which we want to find close contacts.</param>
 		/// <param name="exclude">The ID to exclude (the requestor's ID)</param>
 		public List<Contact> GetCloseContacts(ID toFind, ID exclude)
 		{
-			List<Contact> contacts = new List<Contact>();
+			var contacts = buckets.
+				SelectMany(b => b.Contacts).
+				Where(c => c.NodeID != exclude).
+				Select(c => new { contact = c, distance = c.NodeID ^ toFind }).
+				OrderBy(d => d.distance).
+				Take(Constants.K);
 
-			return contacts;
+			return contacts.Select(c=>c.contact).ToList();
 		}
 	}
 }

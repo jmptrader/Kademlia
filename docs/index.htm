@@ -861,7 +861,28 @@ shortest distance to the ID are returned, in ascending (shortest to greatest)
 distance.&nbsp; This algorithm is modified from the <code>ClosestContacts</code> algorithm
 <a href="https://github.com/zencoders/sambatyon/blob/master/Kademlia/Kademlia/BucketList.cs">
 here</a>, starting on line 208.&nbsp; (To a large extent, it really helps to 
-understand the code by matching the code to the specification.)</p>
+understand the code by matching the code to the specification.)&nbsp; Using Linq, 
+we have:</p>
+<pre>/// &lt;summary&gt;
+/// Algorithm idea from https://github.com/zencoders/sambatyon/blob/master/Kademlia/Kademlia/BucketList.cs, starting on line 208.
+/// Brute force distance lookup of all known contacts, sorted by distance, then we take at most k (20) of the closest.
+/// &lt;/summary&gt;
+/// &lt;param name=&quot;toFind&quot;&gt;The ID for which we want to find close contacts.&lt;/param&gt;
+/// &lt;param name=&quot;exclude&quot;&gt;The ID to exclude (the requestor's ID)&lt;/param&gt;
+public List&lt;Contact&gt; GetCloseContacts(ID toFind, ID exclude)
+{
+  var contacts = buckets.
+    SelectMany(b =&gt; b.Contacts).
+    Where(c =&gt; c.NodeID != exclude).
+    Select(c =&gt; new { contact = c, distance = c.NodeID ^ toFind }).
+    OrderBy(d =&gt; d.distance).
+    Take(Constants.K);
+
+  return contacts.Select(c=&gt;c.contact).ToList();
+}</pre>
+<p>Linq is amazing!&nbsp; Note that the <code>where</code> clause takes care of the other 
+requirement &quot;The recipient should not return a triple containing the requestor's 
+ID.&quot;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>

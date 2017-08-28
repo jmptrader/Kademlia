@@ -1,0 +1,1094 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<!-- saved from url=(0071)http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html -->
+<html style="font-size: 16px;"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta content="Apache Forrest" name="Generator">
+<meta name="Forrest-version" content="0.8-dev">
+<meta name="Forrest-skin-name" content="pelt">
+<title>Kademlia: A Design Specification</title>
+<link type="text/css" href="./Kademlia_ A Design Specification_files/basic.css" rel="stylesheet">
+<link media="screen" type="text/css" href="./Kademlia_ A Design Specification_files/screen.css" rel="stylesheet">
+<link media="print" type="text/css" href="./Kademlia_ A Design Specification_files/print.css" rel="stylesheet">
+<link type="text/css" href="./Kademlia_ A Design Specification_files/profile.css" rel="stylesheet">
+<script src="./Kademlia_ A Design Specification_files/getBlank.js.download" language="javascript" type="text/javascript"></script><style type="text/css">
+:root .ss-deals-link,
+:root .enhanced-listing,
+:root .ads,
+:root #stackcommerce-header,
+:root #leadform,
+:root #fad
+{ display: none !important; }</style><script src="./Kademlia_ A Design Specification_files/getMenu.js.download" language="javascript" type="text/javascript"></script><style type="text/css">.menuitemgroup{display: none;}</style><script src="./Kademlia_ A Design Specification_files/fontsize.js.download" language="javascript" type="text/javascript"></script>
+<link rel="shortcut icon" href="http://xlattice.sourceforge.net/">
+<style type="text/css">
+:root #content > #center > .dose > .dosesingle,
+:root #content > #right > .dose > .dosesingle
+{ display: none !important; }</style></head>
+<body onload="init()" style="font-size: 16px;">
+<script type="text/javascript">ndeSetTextSize();</script>
+<div id="top">
+<!--+
+    |header
+    +-->
+<div class="header">
+<!--+
+    |start group logo
+    +-->
+<!--+
+    |end group logo
+    +-->
+<!--+
+    |start Project Logo
+    +-->
+<div class="projectlogoA1">
+<a href="http://xlattice.sourceforge.net/"><img class="logoImage" alt="XLattice" src="./Kademlia_ A Design Specification_files/xlattice.batik.jpg" title="XLattice is a communications infrastructure for peer-to-peer (p2p) networks."></a>
+</div>
+<!--+
+    |end Project Logo
+    +-->
+<!--+
+    |start Search
+    +-->
+<div class="searchbox">
+<form action="http://www.google.com/search" method="get" class="roundtopsmall">
+<input value="xlattice.sourceforge.net" name="sitesearch" type="hidden"><input onfocus="getBlank (this, &#39;Search the site with google&#39;);" size="25" name="q" id="query" type="text" value="Search the site with google">&nbsp; 
+                    <input name="Search" value="Search" type="submit">
+</form>
+</div>
+<!--+
+    |end search
+    +-->
+<!--+
+    |start Tabs
+    +-->
+<ul id="tabs">
+<li>
+<a class="unselected" href="http://xlattice.sourceforge.net/index.html">intro</a>
+</li>
+<li>
+<a class="unselected" href="http://xlattice.sourceforge.net/model-apps/index.html">model apps</a>
+</li>
+<li>
+<a class="unselected" href="http://xlattice.sourceforge.net/nodes/index.html">nodes</a>
+</li>
+<li class="current">
+<a class="selected" href="http://xlattice.sourceforge.net/components/index.html">components</a>
+</li>
+<li>
+<a class="unselected" href="http://xlattice.sourceforge.net/applications/index.html">applications</a>
+</li>
+<li>
+<a class="unselected" href="http://xlattice.sourceforge.net/community/index.html">community</a>
+</li>
+</ul>
+<!--+
+    |end Tabs
+    +-->
+</div>
+</div>
+<div id="main">
+<div id="publishedStrip">
+<!--+
+    |start Subtabs
+    +-->
+<div id="level2tabs"></div>
+<!--+
+    |end Endtabs
+    +-->
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>Last Published: 02/12/2010 23:49:57
+</div>
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+             
+             &nbsp;
+           </div>
+<!--+
+    |start Menu, mainarea
+    +-->
+<!--+
+    |start Menu
+    +-->
+<div id="menu">
+<div onclick="SwitchMenu(&#39;menu_selected_1.1&#39;, &#39;../../../skin/&#39;)" id="menu_selected_1.1Title" class="menutitle" style="background-image: url(&#39;../../../skin/images/chapter_open.gif&#39;);">components</div>
+<div id="menu_selected_1.1" class="selectedmenuitemgroup" style="display: block;">
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/index.html" title="Components">index</a>
+</div>
+<div onclick="SwitchMenu(&#39;menu_1.1.2&#39;, &#39;../../../skin/&#39;)" id="menu_1.1.2Title" class="menutitle">util</div>
+<div id="menu_1.1.2" class="menuitemgroup">
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/util/index.html" title="Index">index</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/util/api/index.html" title="API">api</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/util/src" title="Source">source</a>
+</div>
+</div>
+<div onclick="SwitchMenu(&#39;menu_1.1.3&#39;, &#39;../../../skin/&#39;)" id="menu_1.1.3Title" class="menutitle">corexml</div>
+<div id="menu_1.1.3" class="menuitemgroup">
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/corexml/index.html" title="Index">index</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/corexml/api/" title="API">api</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/corexml/corexml/src" title="Source">source</a>
+</div>
+</div>
+<div onclick="SwitchMenu(&#39;menu_1.1.4&#39;, &#39;../../../skin/&#39;)" id="menu_1.1.4Title" class="menutitle">crypto</div>
+<div id="menu_1.1.4" class="menuitemgroup">
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/crypto/index.html" title="Index">index</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/crypto/api/" title="API">api</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/crypto/src/" title="Source">source</a>
+</div>
+</div>
+<div onclick="SwitchMenu(&#39;menu_1.1.5&#39;, &#39;../../../skin/&#39;)" id="menu_1.1.5Title" class="menutitle">transport</div>
+<div id="menu_1.1.5" class="menuitemgroup">
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/transport/index.html" title="Index">index</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/transport/api/" title="API">api</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/transport/src/" title="Source">source</a>
+</div>
+</div>
+<div onclick="SwitchMenu(&#39;menu_selected_1.1.6&#39;, &#39;../../../skin/&#39;)" id="menu_selected_1.1.6Title" class="menutitle" style="background-image: url(&#39;../../../skin/images/chapter_open.gif&#39;);">protocol</div>
+<div id="menu_selected_1.1.6" class="selectedmenuitemgroup" style="display: block;">
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/protocol/index.html" title="Index">index</a>
+</div>
+<div onclick="SwitchMenu(&#39;menu_selected_1.1.6.2&#39;, &#39;../../../skin/&#39;)" id="menu_selected_1.1.6.2Title" class="menutitle" style="background-image: url(&#39;../../../skin/images/chapter_open.gif&#39;);">examples</div>
+<div id="menu_selected_1.1.6.2" class="selectedmenuitemgroup" style="display: block;">
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/protocol/examples.html" title="Overview">overview</a>
+</div>
+<div onclick="SwitchMenu(&#39;menu_selected_1.1.6.2.2&#39;, &#39;../../../skin/&#39;)" id="menu_selected_1.1.6.2.2Title" class="menutitle" style="background-image: url(&#39;../../../skin/images/chapter_open.gif&#39;);">kademlia</div>
+<div id="menu_selected_1.1.6.2.2" class="selectedmenuitemgroup" style="display: block;">
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/index.html" title="Index">index</a>
+</div>
+<div class="menupage">
+<div class="menupagetitle">specs</div>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/references.html" title="Kademlia">references</a>
+</div>
+</div>
+<div onclick="SwitchMenu(&#39;menu_1.1.6.2.3&#39;, &#39;../../../skin/&#39;)" id="menu_1.1.6.2.3Title" class="menutitle">stun</div>
+<div id="menu_1.1.6.2.3" class="menuitemgroup">
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/protocol/stun/index.html" title="Index">index</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/protocol/stun/specs.html" title="Stun">specs</a>
+</div>
+</div>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/protocol/api/" title="API">api</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/protocol/src/" title="Source">source</a>
+</div>
+</div>
+<div onclick="SwitchMenu(&#39;menu_1.1.7&#39;, &#39;../../../skin/&#39;)" id="menu_1.1.7Title" class="menutitle">overlay</div>
+<div id="menu_1.1.7" class="menuitemgroup">
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/overlay/index.html" title="Index">index</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/overlay/api/" title="API">api</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/overlay/src/" title="Source">source</a>
+</div>
+</div>
+<div onclick="SwitchMenu(&#39;menu_1.1.8&#39;, &#39;../../../skin/&#39;)" id="menu_1.1.8Title" class="menutitle">node</div>
+<div id="menu_1.1.8" class="menuitemgroup">
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/node/index.html" title="Index">index</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/node/api/" title="API">api</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/node/src/" title="Source">source</a>
+</div>
+</div>
+<div onclick="SwitchMenu(&#39;menu_1.1.9&#39;, &#39;../../../skin/&#39;)" id="menu_1.1.9Title" class="menutitle">httpd</div>
+<div id="menu_1.1.9" class="menuitemgroup">
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/httpd/index.html" title="Index">index</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/httpd/api/" title="API">api</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/httpd/src/" title="Source">source</a>
+</div>
+</div>
+<div onclick="SwitchMenu(&#39;menu_1.1.10&#39;, &#39;../../../skin/&#39;)" id="menu_1.1.10Title" class="menutitle">jpl</div>
+<div id="menu_1.1.10" class="menuitemgroup">
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/jpl/index.html" title="Index">index</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/jpl/api/" title="API">api</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/jpl/src/" title="Source">source</a>
+</div>
+</div>
+<div onclick="SwitchMenu(&#39;menu_1.1.11&#39;, &#39;../../../skin/&#39;)" id="menu_1.1.11Title" class="menutitle">projmgr</div>
+<div id="menu_1.1.11" class="menuitemgroup">
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/projmgr/index.html" title="Index">index</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/projmgr/api/" title="API">api</a>
+</div>
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/projmgr/src/" title="Source">source</a>
+</div>
+</div>
+<div onclick="SwitchMenu(&#39;menu_1.1.12&#39;, &#39;../../../skin/&#39;)" id="menu_1.1.12Title" class="menutitle">cpp</div>
+<div id="menu_1.1.12" class="menuitemgroup">
+<div class="menuitem">
+<a href="http://xlattice.sourceforge.net/components/cpp/index.html" title="Index">index</a>
+</div>
+</div>
+</div>
+<div id="credit"></div>
+<div id="roundbottom">
+<img style="display: none" class="corner" height="15" width="15" alt="" src="./Kademlia_ A Design Specification_files/rc-b-l-15-1body-2menu-3menu.png"></div>
+<!--+
+  |alternative credits
+  +-->
+<div id="credit2"></div>
+</div>
+<!--+
+    |end Menu
+    +-->
+<!--+
+    |start content
+    +-->
+<div id="content">
+<div title="Portable Document Format" class="pdflink">
+<a class="dida" href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.pdf"><img alt="PDF -icon" src="./Kademlia_ A Design Specification_files/pdfdoc.gif" class="skin"><br>
+        PDF</a>
+</div>
+<h1>Kademlia: A Design Specification</h1>
+<div id="minitoc-area">
+<ul class="minitoc">
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#intro">Introduction</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#constants">Network Characterization</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#node">The Node</a>
+<ul class="minitoc">
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#nodeID">NodeID</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#key">Keys</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#distance">Distance: the Kademlia Metric</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#bucket">The K-Bucket</a>
+<ul class="minitoc">
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#size">Bucket Size</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#contacts">Contacts</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#sort">Sorting</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#updates">Updates</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#rationale">Rationale</a>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#protocol">Protocol</a>
+<ul class="minitoc">
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#PING">PING</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#STORE">STORE</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE">FIND_NODE</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_VALUE">FIND_VALUE</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#lookup">Node Lookup</a>
+<ul class="minitoc">
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#alpha">Alpha and Parallelism</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#iterativeStore">iterativeStore</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#iterativeFindNode">iterativeFindNode</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#iterativeFindValue">iterativeFindValue</a>
+</li>
+</ul>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#refresh">Refresh</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#join">Join</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#replication">Replication Rules</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#expiration">Expiration Rules</a>
+</li>
+</ul>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#implementation">Implementation Suggestions</a>
+<ul class="minitoc">
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#contact">Contact</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#convoys">Possible Convoy Effects</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#rng">Random Number Generation</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#store">STORE</a>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#tExpire">tExpire</a>
+</li>
+</ul>
+</li>
+<li>
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#problems">Possible Problems with Kademlia</a>
+</li>
+</ul>
+</div>
+    
+<a name="N1000C"></a><a name="intro"></a>
+<h2 class="underlined_10">Introduction</h2>
+<div class="section">
+<p>Kademlia is a communications protocol for peer-to-peer networks.  
+        It is one of many
+        versions of a DHT, a <strong>Distributed Hash Table</strong>.</p>
+</div>
+
+    
+<a name="N10019"></a><a name="constants"></a>
+<h2 class="underlined_10">Network Characterization</h2>
+<div class="section">
+<p>A Kademlia network is characterized by three constants, which
+        we call <strong>alpha</strong>, <strong>B</strong>, and 
+        <strong>k</strong>.  The first and last
+        are standard terms.  The second is introduced because some
+        Kademlia implementations use a different key length.</p>
+<ul>
+        
+<li>
+<strong>alpha</strong> is a small number representing the degree of
+          parallelism in network calls, usually <strong>3</strong>
+</li>
+        
+<li>
+<strong>B</strong> is the size in bits of the keys used to identify
+          nodes and store and retrieve data; in basic Kademlia this is
+          <strong>160</strong>, the length of an SHA1 digest (hash)</li>
+        
+<li>
+<strong>k</strong> is the maximum number of contacts stored in a
+          bucket; this is normally <strong>20</strong>
+</li>
+      
+</ul>
+<p>It is also convenient to introduce several other constants
+        not found in the original Kademlia papers.</p>
+<ul>
+        
+<li>
+<strong>tExpire</strong> = 86400s, the time after which
+          a key/value pair expires; this is a time-to-live (TTL) from
+          the <em>original</em> publication date
+        </li>
+        
+<li>
+<strong>tRefresh</strong> = 3600s, after which an 
+          otherwise unaccessed bucket must be refreshed
+        </li>
+        
+<li>
+<strong>tReplicate</strong> = 3600s, the interval 
+          between Kademlia replication events, when a node is 
+          required to publish its entire database
+        </li>
+        
+<li>
+<strong>tRepublish</strong> = 86400s, the time after
+          which the original publisher must republish a key/value pair
+        </li>
+      
+</ul>
+<div class="note">
+<div class="label">Note</div>
+<div class="content">The fact that tRepublish and tExpire are equal introduces
+        a race condition.  The STORE for the data being published may 
+        arrive at the node just after it has been expired, so that it
+        will actually be necessary to put the data on the wire.  A
+        sensible implementation would have tExpire significantly
+        longer than tRepublish.  Experience suggests that tExpire=86410
+        would be sufficient.
+      </div>
+</div>
+</div>
+    
+<a name="N10064"></a><a name="node"></a>
+<h2 class="underlined_10">The Node</h2>
+<div class="section">
+<p>A Kademlia network consists of a number of cooperating
+        <strong>nodes</strong> that
+        communicate with one another and store information for one
+        another.  Each node has a <strong>nodeID</strong>, a quasi-unique
+        binary number that identifies it in the network.</p>
+<p>Within the network, a block of data, a <strong>value</strong>, 
+        can also be associated with 
+        a binary number of the same fixed length B, the value's 
+        <strong>key</strong>.</p>
+<p>A node needing a value searches for it at the nodes it considers 
+        closest to the key.  A node needing to save a value stores it at
+        the nodes it considers closest to the key associated with the 
+        value.
+      </p>
+<a name="N1007E"></a><a name="nodeID"></a>
+<h3 class="underlined_5">NodeID</h3>
+<p>NodeIDs are binary numbers of length B = 160 bits.  In basic
+          Kademlia, each node chooses its own ID by some unspecified
+          quasi-random procedure.  It is important that nodeIDs be
+          uniformly distributed; the network design relies upon this.</p>
+<p>
+<em>While the protocol does not mandate this, there are 
+          possibleadvantages
+          to the node's using the same nodeID whenever it joins the 
+          network, rather than generating a new, session-specific
+          nodeID.</em>
+</p>
+<a name="N1008B"></a><a name="key"></a>
+<h3 class="underlined_5">Keys</h3>
+<p>Data being stored in or retrieved from a Kademlia network
+          must also have a key of length B.  These keys should also be
+          uniformly distributed.  There are several ways to guarantee
+          this; the most common is to take a hash, such as the 160 bit
+          SHA1 digest, of the value. </p>
+<a name="N10094"></a><a name="distance"></a>
+<h3 class="underlined_5">Distance: the Kademlia Metric</h3>
+<p>Kademlia's operations are based upon the use of exclusive
+          OR, XOR, as a metric.  The distance between any two keys or
+          nodeIDs x and y is defined as </p>
+<pre class="code">          distance(x, y) = x ^ y
+        </pre>
+<p>where <strong>^</strong> represents the XOR operator.  The result
+          is obtained by taking the bytewise exclusive OR of each byte
+        of the operands.</p>
+<div class="note">
+<div class="label">Note</div>
+<div class="content">Kademlia follows Pastry in interpreting keys (including
+          nodeIDs) as <strong>bigendian</strong> numbers.  This means that the
+          low order byte in the byte array representing the key is
+          the most significant byte and so if two keys are close together
+          then the low order bytes in the distance array will be zero.</div>
+</div>
+<a name="N100AD"></a><a name="bucket"></a>
+<h3 class="underlined_5">The K-Bucket</h3>
+<p>A Kademlia node organizes its <strong>contacts</strong>, other
+          nodes known to it, in <strong>buckets</strong> which hold a maximum
+          of k contacts.  These are known as k-buckets.</p>
+<p>The buckets are organized by the distance between the
+          node and the contacts in the bucket.  Specifically, for
+          bucket j, where 0 &lt;= j &lt; k, we are guaranteed that</p>
+<pre class="code">      2^j &lt;= distance(node, contact) &lt; 2^(j+1)
+        </pre>
+<p>Given the very large address space, this means that
+          bucket zero has only one possible member, the key which differs
+          from the nodeID only in the high order bit, and for all 
+          practical purposes is never populated, except perhaps
+          in testing.  On other hand, if nodeIDs are evenly distributed,
+          it is very likely that half of all nodes will lie in the range 
+          of bucket B-1 = 159.</p>
+<a name="N100C5"></a><a name="size"></a>
+<h4>Bucket Size</h4>
+<p>The Kademlia paper says that k is set to a value such that
+            it is very unlikely that in a large network all contacts
+            in any one bucket will have disappeared within an hour.  Anyone
+            attempting to calculate this probability should take into 
+            consideration policies that lead to long-lived contacts being
+            kept in the table in preference to more recent contacts.  </p>
+<a name="N100CE"></a><a name="contacts"></a>
+<h4>Contacts</h4>
+<p>A <strong>contact</strong> is at least a triple:</p>
+<ul>
+            
+<li>the bigendian <strong>nodeID</strong> for the other node</li>
+            
+<li>its IP address</li>
+            
+<li>its UDP port address</li>
+          
+</ul>
+<p>The IP address and port address should also be treated as
+          bigendian numbers.</p>
+<p>Kademlia's designers do not appear to have taken into
+            consideration the use of IPv6 addresses or TCP/IP instead 
+            of UDP or the possibility
+            of a Kademlia node having multiple IP addresses.</p>
+<a name="N100EF"></a><a name="sort"></a>
+<h4>Sorting</h4>
+<p>Within buckets contacts are sorted by the time of the most recent 
+          communication, with those which have most recently communicated
+          at the end of the list and those which have least recently
+          communicated at the front, regardless of whether the node or
+          the contact initiated the sequence of messages.</p>
+<a name="N100F8"></a><a name="updates"></a>
+<h4>Updates</h4>
+<p>Whenever a node receives a communication from another, 
+            it updates the corresponding bucket.  If the contact 
+            already exists, it is moved to the end of the bucket.  
+            Otherwise, if the bucket is not full, the new contact is
+            added at the end.  If the bucket is full, the node pings
+            the contact at the head of the bucket's list.  If that 
+            least recently seen 
+            contact fails to respond in an <em>(unspecified)</em> 
+            reasonable time, it is dropped from the list, and the 
+            new contact is added at the tail.  Otherwise the new 
+            contact is ignored for bucket updating purposes.</p>
+<div class="warning">
+<div class="label">Warning</div>
+<div class="content">In a large, busy network, it is possible that while 
+            a node is waiting for a reply from the contact at the
+            head of the list there will be another communication
+            from a contact not in the bucket.  This is most likely
+            for bucket B-1 = 159, which is responsible for roughly half
+            of the nodes in the network.  Behaviour in this case 
+            is unspecified and seems likely to provide an opening
+            for a DOS (Denial of Service) attack. </div>
+</div>
+<a name="N10107"></a><a name="rationale"></a>
+<h4>Rationale</h4>
+<p>Experience has shown that nodes tend to group into
+          two clearly distinguished categories, the transient and 
+          the long-lived.  This update
+          policy gives strong preference to the long-lived and so promotes
+          network stability.  It also provides a degree of protection
+          from certain types of denial of service (DOS) attacks,
+          including, possibly, Sybil attacks, discussed below.</p>
+</div>
+
+    
+<a name="N10112"></a><a name="protocol"></a>
+<h2 class="underlined_10">Protocol</h2>
+<div class="section">
+<p>The original Kademlia paper, 
+              <a href="http://xlattice.sourceforge.net/components/protocol/kademlia/references.html#maymo02">maymo02</a>,
+      says that the Kademlia protocol consists of four remote 
+      procedure calls ("RPCs") but then goes on to specify procedures 
+      that must be followed in executing these as well as certain
+      other protocols.  It seems best to add these procedures and
+      other protocols to what we call here the Kademlia protocol. 
+      </p>
+<a name="N1011E"></a><a name="PING"></a>
+<h3 class="underlined_5">PING</h3>
+<p>This RPC involves one node sending a PING message to 
+          another, which presumably replies with a PONG.  </p>
+<p>This has a two-fold effect: the recipient of the PING
+          must update the bucket corresponding to the sender;  and,
+          if there is a reply, the sender must update the bucket 
+          appropriate to the recipient.</p>
+<p> All RPC packets are required to carry an RPC identifier 
+          assigned by the sender and echoed in the reply.  This is
+          a quasi-random number of length B (160 bits).</p>
+<div class="note">
+<div class="label">Note</div>
+<div class="content"> Implementations using shorter message
+          identifiers must consider the <strong>birthday paradox</strong>, which
+          in effect makes the probability of a collision depend upon
+          half the number of bits in the identifier.  For example, a
+          32-bit RPC identifier would yield a probability of collision 
+          proportional to 2^-16, an uncomfortably small number in a busy 
+          network.
+          <br>
+<br>
+          If the identifiers are initialized to zero or are generated by 
+          the same random number generator with the same seed, the probability
+          will be very high indeed. 
+        </div>
+</div>
+<p>It must be possible to piggyback PINGs onto RPC replies
+          to force or permit the originator, the sender of the RPC, to provide
+          additional information to its recipient.
+          <strong>This might be a different IP address or a preferred
+            protocol for future communications.</strong>
+        
+</p>
+<a name="N1013C"></a><a name="STORE"></a>
+<h3 class="underlined_5">STORE</h3>
+<p>The sender of the STORE RPC provides a key and a block
+          of data and requires that the recipient store the data and
+          make it available for later retrieval by that key.</p>
+<p>This is a primitive operation, not an iterative one.</p>
+<div class="note">
+<div class="label">Note</div>
+<div class="content">While this is not formally specified, it is clear that the
+          initial STORE message must contain in addition to the 
+          message ID at least the data to be stored (including its
+          length) and the associated key.  As the transport may be UDP,
+          the message needs to also contain at least the nodeID of the sender,
+          and the reply the nodeID of the recipient.
+          <br>
+<br>
+          The reply to any RPC should also contain an indication of the 
+          result of the operation.  For example, in a STORE while no maximum 
+          data length has been specified,
+          it is clearly possible that the receiver might not be able to
+          store the data, either because of lack of space or because of
+          an I/O error.
+          </div>
+</div>
+<a name="N1014E"></a><a name="FIND_NODE"></a>
+<h3 class="underlined_5">FIND_NODE</h3>
+<p>The FIND_NODE RPC includes a 160-bit key.  
+          The recipient of the RPC returns up to k triples 
+          (IP address, port, nodeID) for the contacts that it knows to
+          be closest to the key.</p>
+<p>The recipient must return k triples if at all possible.
+          It may only return fewer than k if it is returning all
+          of the contacts that it has knowledge of.</p>
+<p>This is a primitive operation, not an iterative one.</p>
+<div class="note">
+<div class="label">Note</div>
+<div class="content">The name of this RPC is misleading.  Even if the 
+          key to the RPC is the nodeID of an existing contact or
+          indeed if it is the nodeID of the recipient itself, the
+          recipient is still required to return k triples.
+          A more descriptive name would be FIND_CLOSE_NODES.
+          <br>
+<br>
+          The recipient of a FIND_NODE should never return a triple
+            containing the nodeID of the requestor.  If the requestor
+            does receive such a triple, it should discard it.  A node 
+            must never put its own nodeID into a bucket as a contact.
+        </div>
+</div>
+<a name="N10163"></a><a name="FIND_VALUE"></a>
+<h3 class="underlined_5">FIND_VALUE</h3>
+<p>A FIND_VALUE RPC includes a B=160-bit key.  If a corresponding
+          value is present on the recipient, the associated data is 
+          returned.  Otherwise the RPC is equivalent to a FIND_NODE
+          and a set of k triples is returned.</p>
+<p>This is a primitive operation, not an iterative one.</p>
+<a name="N1016F"></a><a name="lookup"></a>
+<h3 class="underlined_5">Node Lookup</h3>
+<p>This section describes the algorithm that Kademlia uses
+          for locating the k nodes nearest to a key.  It must be understood
+          that these are not necessarily closest in a strict sense.
+          Also, the algorithm is <strong>iterative</strong> although the paper 
+          describes it as recursive.</p>
+<p>The search begins by selecting alpha contacts from the
+          non-empty k-bucket closest to the bucket appropriate to the
+          key being searched on.  If there are fewer than alpha contacts in
+          that bucket, contacts are selected from other buckets.  The
+          contact closest to the target key, <strong>closestNode</strong>, 
+          is noted.</p>
+<div class="note">
+<div class="label">Note</div>
+<div class="content">The criteria for selecting the contacts within the
+          closest bucket are not specified.  Where there are fewer than alpha
+          contacts within that bucket and contacts are obtained from
+          other buckets, there are no rules for selecting the other
+          buckets or which contacts are to be used from such buckets.</div>
+</div>
+<p>The first alpha contacts selected are used to create a 
+          <strong>shortlist</strong> for the search.
+        </p>
+<p>The node then sends parallel, asynchronous FIND_* RPCs
+          to the alpha contacts in the shortlist.  Each contact, if it is live,
+          should normally return k triples.  If any of the alpha contacts
+          fails to reply, it is removed from the shortlist,
+          at least temporarily.</p>
+<p>The node then fills the shortlist with contacts from the
+          replies received.  These are those closest to the target.
+          From the shortlist it selects another alpha contacts.  The only 
+          condition for this selection is that they have not already
+          been contacted.  Once again a FIND_* RPC is sent to each
+          in parallel.</p>
+<p>Each such parallel search updates <strong>closestNode</strong>,
+          the closest node seen so far.</p>
+<p>The sequence of parallel searches is continued until either 
+          no node in the sets returned is closer than the closest node 
+          already seen or the initiating node has accumulated k probed
+          and known to be active contacts.</p>
+<p>If a cycle doesn't find a closer node, if 
+          <strong>closestNode</strong> is unchanged, then the initiating
+          node sends a FIND_* RPC to each of the k closest nodes that it
+          has not already queried.</p>
+<p>At the end of this process, the node will have accumulated
+          a set of k active contacts or (if the RPC was FIND_VALUE) may have
+          found a data value.
+          Either a set of triples or the value is returned to the caller.</p>
+<div class="note">
+<div class="label">Note</div>
+<div class="content">The original algorithm description is not clear in detail.
+          However, it appears that the initiating node maintains a 
+          <strong>shortlist</strong> of k closest nodes.  
+          During each iteration alpha of these are 
+          selected for probing and marked accordingly.  If a probe 
+          succeeds, that shortlisted node is marked as active.  If 
+          there is no reply
+          after an unspecified period of time, the node is dropped from
+          the shortlist.  As each set of replies comes back, it is used
+          to improve the shortlist: closer nodes in the reply replace
+          more distant (unprobed?) nodes in the shortlist.  Iteration
+          continues until k nodes have been successfully probed or there
+          has been no improvement.
+        </div>
+</div>
+<a name="N101A7"></a><a name="alpha"></a>
+<h4>Alpha and Parallelism</h4>
+<p>Kademlia uses a value of 3 for alpha, the degree of
+            parallelism used.  It appears that (see
+              <a href="http://xlattice.sourceforge.net/components/protocol/kademlia/references.html#stutz06">stutz06</a>)
+              this value is optimal.</p>
+<p>There are at least three approaches to managing 
+            parallelism.  The first is to launch alpha probes and
+            wait until all have succeeded or timed out before iterating.
+            This is termed <strong>strict parallelism</strong>.  The second
+            is to limit the number of probes in flight to alpha; whenever
+            a probe returns a new one is launched.  We might call this
+            <strong>bounded parallelism</strong>.  A third is to iterate after 
+            what seems to be a reasonable delay (duration unspecified),
+            so that the number of probes in flight is some low multiple
+            of alpha.  This is <strong>loose parallelism</strong> and 
+            the approach used by Kademlia.</p>
+<a name="N101C0"></a><a name="iterativeStore"></a>
+<h4>iterativeStore</h4>
+<p>This is the Kademlia store operation.  The initiating 
+            node does an iterativeFindNode,
+            collecting a set of k closest contacts, and then sends a 
+            primitive STORE RPC to each.</p>
+<p>iterativeStores are used for publishing or replicating
+            data on a Kademlia network.</p>
+<a name="N101CC"></a><a name="iterativeFindNode"></a>
+<h4>iterativeFindNode</h4>
+<p>This is the basic Kademlia node lookup operation.  As described
+            above, the initiating node builds a list of k "closest" 
+            contacts using iterative node lookup and the FIND_NODE RPC.  
+            The list is returned to the caller.</p>
+<a name="N101D5"></a><a name="iterativeFindValue"></a>
+<h4>iterativeFindValue</h4>
+<p>This is the Kademlia search operation.  It is conducted
+            as a node lookup, and so builds a list of k closest 
+            contacts.  However, this is done using the FIND_VALUE RPC
+            instead of the FIND_NODE RPC.  If at any time during the node 
+            lookup the value is returned instead of a set of contacts,
+            the search is abandoned and the value is returned.  Otherwise,
+            if no value has been found, the list of k closest contacts
+            is returned to the caller.
+          </p>
+<p>When an iterativeFindValue succeeds, the initiator 
+            must store the key/value pair at the closest node seen which did 
+            <strong>not</strong> return the value.</p>
+<a name="N101E5"></a><a name="refresh"></a>
+<h3 class="underlined_5">Refresh</h3>
+<p>If no node lookups have been performed in any given bucket's
+          range for tRefresh (an hour in basic Kademlia), 
+          the node selects a random number in that 
+          range and does a <strong>refresh</strong>,
+          an iterativeFindNode using that number as key.
+        </p>
+<a name="N101F1"></a><a name="join"></a>
+<h3 class="underlined_5">Join</h3>
+<p>A node joins the network as follows:</p>
+<ol>
+          
+<li>if it does not already have a nodeID <strong>n</strong>,
+            it generates one
+          </li>
+          
+<li>it inserts the value of some known node <strong>c</strong> into 
+            the appropriate bucket as its first contact</li>
+          
+<li>it does an iterativeFindNode for <strong>n</strong>
+</li>
+          
+<li>it refreshes all buckets further away than its closest
+            neighbor, which will be in the occupied bucket with the 
+            lowest index.</li>
+        
+</ol>
+<p>If the node saved a list of good contacts and used one of
+          these as the "known node" it would be consistent with this 
+          protocol.</p>
+<a name="N10214"></a><a name="replication"></a>
+<h3 class="underlined_5">Replication Rules</h3>
+<ul>
+          
+<li>Data is stored using an <strong>iterativeStore</strong>,
+            which has the effect of replicating it over the k nodes 
+            closest to the key.</li>
+          
+<li>Each node republishes each key/value pair that it contains
+            at intervals of tReplicate seconds (every hour).  The 
+            republishing node must not be seen as the original publisher
+            of the key/value pair.
+          </li>
+          
+<li>The original publisher of a key/value pair republishes it
+            every tRepublish seconds (every 24 hours).</li>
+          
+<li>When an iterativeFindValue succeeds, the initiator 
+            must store the key/value pair at the closest node seen which did 
+            <strong>not</strong> return the value.</li>
+        
+</ul>
+<a name="N1022F"></a><a name="expiration"></a>
+<h3 class="underlined_5">Expiration Rules</h3>
+<ul>
+          
+<li>All key/value pairs expire tExpire seconds (24 hours) 
+            after the original publication.</li>
+          
+<li>All key/value pairs are assigned an <strong>expiration time</strong>
+            which is "exponentially inversely proportional to the number of nodes
+            between the current node and the node whose ID is 
+            closest to the key", where this number is "inferred from 
+            the bucket structure of the current node".</li>
+        
+</ul>
+<p>The writer would calculate the expiration time when
+          the key/value pair is stored using something similar 
+          to the following: </p>
+<ul>  
+          
+<li>find the index <strong>j</strong> of the bucket corresponding
+            to the key</li>
+          
+<li> count the total number of contacts <strong>Ca</strong> in buckets 
+            0..j-1</li>
+          
+<li> count the number of contacts <strong>Cb</strong> in 
+            bucket <strong>j</strong> closer than the key</li>
+          
+<li> if <strong>C</strong> = Ca + Cb, then the interval to the 
+            expiration time is
+            <ul>
+              
+<li>24 hours if C &gt; k</li>
+              
+<li>24h * exp( k / C ) otherwise</li>
+            
+</ul>
+          
+</li>  
+        
+</ul>
+<div class="note">
+<div class="label">Note</div>
+<div class="content">
+          The requirement that data expires tExpire (one day) after the
+          <em>original</em> publication date is more than ambiguous
+          and would seem to mean that no data can ever be republished.
+          <br>
+<br>
+
+          In any case, the system is required to mark the stored 
+          key/value pair with an original publication timestamp.
+          If this is to be accurate, the timestamp must be set by 
+          the publisher, which means that clocks must be at least
+          loosely synchronized across the network.
+          <br>
+<br>
+          It would seem sensible to mark the key/value pair with a time
+          to live (TTL) from the arrival of the data, tExpire 
+          (one day) or a fraction thereof.
+        </div>
+</div>
+</div>
+    
+<a name="N10278"></a><a name="implementation"></a>
+<h2 class="underlined_10">Implementation Suggestions</h2>
+<div class="section">
+<a name="N1027D"></a><a name="contact"></a>
+<h3 class="underlined_5">Contact</h3>
+<p>It would seem useful to add to the Contact data structure
+          at least:</p>
+<ul>
+          
+<li>an RTT (round trip time) value or a set of such values,
+            measured in ms</li>
+          
+<li>more IP addresses, together with perhaps
+            <ul>
+              
+<li>protocol used (TCP/IP, UDP)</li>
+              
+<li>NAT information, if applicable</li>
+              
+<li>whether the address is local and so reachable 
+                by broadcast</li>
+            
+</ul>
+          
+</li>
+        
+</ul>
+<p>Adding an RTT or set of RTTs to the Contact data structure
+          would enable better decisions to be made when selecting which
+          to use.</p>
+<p>The round trip 
+          time (RTT) to the contact could be as measured using
+          a PING RPC or using a conventional Internet network ping.</p>
+<a name="N102A1"></a><a name="convoys"></a>
+<h3 class="underlined_5">Possible Convoy Effects</h3>
+<p>Implementors should take care to avoid convoy effects.
+          These occur when a number of processes need to use a 
+          resource in turn.  There is a tendency for such bursts
+          of activity to drift towards synchronization, which can
+          be disasterous.  In Kademlia all nodes are requird to 
+          republish their contents every hour (tReplicate).  A
+          convoy effect might lead to this being synchronized 
+          across the network, which would appear to users as the
+          network dying every hour.</p>
+<a name="N102AA"></a><a name="rng"></a>
+<h3 class="underlined_5">Random Number Generation</h3>
+<p>Implementors should remember that random number generators
+          are usually not re-entrant and so access from different 
+          threads needs to be synchronized.</p>
+<p>Also, beware of clock
+          granularity: it is possible that where the clock is used
+          to seed the random number generator, successive calls could
+          use the same seed.
+        </p>
+<a name="N102B6"></a><a name="store"></a>
+<h3 class="underlined_5">STORE</h3>
+<p>For efficiency, the STORE RPC should be two-phase.  In the 
+          first phase the initiator sends a key and possibly length and 
+          the recipient replies with either something equivalent to OK
+          or a code signifying that it already has the value or some
+          other status code.  If the reply was OK, then the initiator
+          may send the value.</p>
+<p>Some consideration should also be given to the development
+          of methods for handling hierarchical data.  Some values will
+          be small and will fit in a UDP datagram.  But some messages
+          will be very large, over say 5 GB, and will need to be chunked.
+          The chunks themselves might be very large relative to a UDP
+          packet, typically on the order of 128 KB, so these chunks will
+          have to be shredded into individual UDP packets.</p>
+<a name="N102C2"></a><a name="tExpire"></a>
+<h3 class="underlined_5">tExpire</h3>
+<p>As noted earlier, the requirement that tExpire and tRepublish
+          have the same value introduces a race condition: data will
+          frequently be republished immediately after expiration.  It
+          would be sensible to make the expiration interval tExpire
+          somewhat greater than the republication interval tRepublish.
+          The protocol should certainly also allow the recipient of
+          a STORE RPC to reply that it already has the data, to save on
+          expensive network bandwidth.
+        </p>
+</div>
+    
+<a name="N102CC"></a><a name="problems"></a>
+<h2 class="underlined_10">Possible Problems with Kademlia</h2>
+<div class="section">
+<a name="N102D1"></a><a name="sybil"></a>
+<h3 class="underlined_5">The Sybil Attack</h3>
+<p>A paper by John Douceur, 
+          <a href="http://xlattice.sourceforge.net/components/protocol/kademlia/references.html#douceur02">douceur02</a>, 
+          describes a network 
+          attack in which attackers select nodeIDs whose values enable
+          them to position themselves in the network in patterns 
+          optimal for disrupting operations.  For example, to remove
+          a data item from the network, attackers might cluster around 
+          its key, accept any attempts to store the key/value pair, but 
+          never return the value when presented with the key.</p>
+<p>A Sybil variation is the <strong>Spartacus attack</strong>, where an 
+          attacker joins the network claiming to have the same nodeID
+          as another member.  As specified, Kademlia has no defense. In
+          particular, a long-lived node can always steal a short-lived
+          node's nodeID.
+        </p>
+<p>Douceur's solution is a requirement that all nodes get their
+          nodeIDs from a central server which is responsible at least for 
+          making sure that the distribution of nodeIDs is even.</p>
+<p>A weaker solution would be
+          to require that nodeIDs be derived from the node's network
+          address or some other quasi-unique value.</p>
+</div>
+  
+</div>
+<!--+
+    |end content
+    +-->
+<div class="clearboth">&nbsp;</div>
+</div>
+<div id="footer">
+<!--+
+    |start bottomstrip
+    +-->
+<div class="lastmodified">
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>Last Published: 02/12/2010 23:49:57
+</div>
+<div class="copyright">
+        Copyright ©
+         2003-2006 The XLattice Project</div>
+<div class="host">
+<a href="http://sourceforge.net/"><img class="logoImage" alt="" src="./Kademlia_ A Design Specification_files/sflogo.php"></a>
+</div>
+<div id="feedback">
+    Send feedback about the website to:
+  <a id="feedbackto" href="mailto:webmaster@http://xlattice.org?subject=Feedback%C2%A0components/protocol/kademlia/specs.html">webmaster@xlattice.org</a>
+</div>
+<!--+
+    |end bottomstrip
+    +-->
+</div>
+
+
+</body></html>

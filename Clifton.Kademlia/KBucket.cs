@@ -6,6 +6,8 @@ namespace Clifton.Kademlia
 {
 	public class KBucket
 	{
+		public List<Contact> Contacts { get { return contacts; } }
+
 		public bool Exists(ID id)
 		{
 			return contacts.Any(c => c.NodeID == id);
