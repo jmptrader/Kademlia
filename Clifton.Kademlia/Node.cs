@@ -41,7 +41,7 @@ namespace Clifton.Kademlia
 		public List<Contact> FindNode(Contact sender, ID toFind)
 		{
 			bucketList.HaveContact(OurContact.NodeID, sender, (_) => false);
-			List<Contact> contacts = bucketList.GetCloseContacts(toFind);
+			List<Contact> contacts = bucketList.GetCloseContacts(toFind, sender.NodeID);
 
 			return contacts;
 		}
