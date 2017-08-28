@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.26430.16
+VisualStudioVersion = 15.0.26403.7
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Kademlia", "Kademlia.csproj", "{07C0CD14-D301-44B4-8B1A-7FD5D68F03CB}"
 EndProject
@@ -9,7 +9,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Test", "..\Test\Test.csproj
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clifton.Kademlia", "..\..\Clifton.Kademlia\Clifton.Kademlia.csproj", "{09B2544A-C451-43CF-8BF0-7229601CF27B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BucketTest", "BucketTest\BucketTest.csproj", "{E28D9F55-4C1C-445D-A495-0472A18DBC51}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnitTests", "..\..\Clifton.Kademlia\UnitTests\UnitTests.csproj", "{EFA0342E-15F2-4D83-8D0B-EDAE32275500}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -42,14 +42,14 @@ Global
 		{09B2544A-C451-43CF-8BF0-7229601CF27B}.Release|Any CPU.Build.0 = Release|Any CPU
 		{09B2544A-C451-43CF-8BF0-7229601CF27B}.Release|x86.ActiveCfg = Release|Any CPU
 		{09B2544A-C451-43CF-8BF0-7229601CF27B}.Release|x86.Build.0 = Release|Any CPU
-		{E28D9F55-4C1C-445D-A495-0472A18DBC51}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{E28D9F55-4C1C-445D-A495-0472A18DBC51}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{E28D9F55-4C1C-445D-A495-0472A18DBC51}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{E28D9F55-4C1C-445D-A495-0472A18DBC51}.Debug|x86.Build.0 = Debug|Any CPU
-		{E28D9F55-4C1C-445D-A495-0472A18DBC51}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{E28D9F55-4C1C-445D-A495-0472A18DBC51}.Release|Any CPU.Build.0 = Release|Any CPU
-		{E28D9F55-4C1C-445D-A495-0472A18DBC51}.Release|x86.ActiveCfg = Release|Any CPU
-		{E28D9F55-4C1C-445D-A495-0472A18DBC51}.Release|x86.Build.0 = Release|Any CPU
+		{EFA0342E-15F2-4D83-8D0B-EDAE32275500}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EFA0342E-15F2-4D83-8D0B-EDAE32275500}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EFA0342E-15F2-4D83-8D0B-EDAE32275500}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{EFA0342E-15F2-4D83-8D0B-EDAE32275500}.Debug|x86.Build.0 = Debug|Any CPU
+		{EFA0342E-15F2-4D83-8D0B-EDAE32275500}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EFA0342E-15F2-4D83-8D0B-EDAE32275500}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EFA0342E-15F2-4D83-8D0B-EDAE32275500}.Release|x86.ActiveCfg = Release|Any CPU
+		{EFA0342E-15F2-4D83-8D0B-EDAE32275500}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

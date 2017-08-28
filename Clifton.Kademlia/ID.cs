@@ -52,21 +52,167 @@ namespace Clifton.Kademlia
 			return idx + (!done ? 1 : 0);	// compensate for last --idx
 		}
 
-		/// <summary>
-		/// This method initialize an id starting from a byte array.
-		/// </summary>
-		/// <param name="data">Data converted</param>
 		private void IDInit(byte[] data)
 		{
 			if (data.Length == Constants.ID_LENGTH_BYTES)
 			{
-				this.id = new byte[Constants.ID_LENGTH_BYTES];
-				data.CopyTo(this.id, 0); // Copy the array into us.
+				id = new byte[Constants.ID_LENGTH_BYTES];
+				data.CopyTo(id, 0);
 			}
 			else
 			{
 				throw new Exception("An ID must be exactly " + Constants.ID_LENGTH_BYTES + " bytes.");
 			}
+		}
+
+		/// <summary>
+		/// Method used to get the hash code according to the algorithm: 
+		/// http://stackoverflow.com/questions/16340/how-do-i-generate-a-hashcode-from-a-byte-array-in-c/425184#425184
+		/// </summary>
+		/// <returns>integer representing the hashcode</returns>
+		public override int GetHashCode()
+		{
+			int hash = 0;
+			for (int i = 0; i < Constants.ID_LENGTH_BYTES; i++)
+			{
+				unchecked
+				{
+					hash *= 31;
+				}
+				hash ^= id[i];
+			}
+			return hash;
+		}
+
+		/// <summary>
+		/// Method used to verify if two objects are equals.
+		/// </summary>
+		/// <param name="obj">The object to compare to</param>
+		/// <returns>true if the objects are equals.</returns>
+		public override bool Equals(object obj)
+		{
+			if (obj is ID)
+			{
+				return this == (ID)obj;
+			}
+			else
+			{
+				return false;
+			}
+		}
+
+		/// <summary>
+		/// Determines the least significant bit at which the given ID differs from this one, from 0 through 8 * ID_LENGTH - 1.
+		/// PRECONDITION: IDs do not match.
+		/// </summary>
+		/// <param name="other">The ID to compare to</param>
+		/// <returns>The least significant bit where can be found the difference</returns>
+		public int DifferingBit(ID other)
+		{
+			ID differingBits = this ^ other;
+			int differAt = 8 * Constants.ID_LENGTH_BYTES - 1;
+
+			// Subtract 8 for every zero byte from the right
+			int i = Constants.ID_LENGTH_BYTES - 1;
+			while (i >= 0 && differingBits.id[i] == 0)
+			{
+				differAt -= 8;
+				i--;
+			}
+
+			// Subtract 1 for every zero bit from the right
+			int j = 0;
+			// 1 << j = pow(2, j)
+			while (j < 8 && (differingBits.id[i] & (1 << j)) == 0)
+			{
+				j++;
+				differAt--;
+			}
+
+			return differAt;
+		}
+
+		public ID RandomizeBeyond(int bit)
+		{
+			byte[] randomized = new byte[Constants.ID_LENGTH_BYTES];
+			id.CopyTo(randomized, 0);
+
+			for (int i = bit + 1; i < 8 * Constants.ID_LENGTH_BYTES; i++)
+			{
+				if (rnd.NextDouble() < 0.5)
+				{
+					FlipBit(randomized, i);
+				}
+			}
+
+			return new ID(randomized);
+		}
+
+		/// <summary>
+		/// Flips the given bit in the byte array.
+		/// Byte array must be ID_LENGTH long.
+		/// </summary>
+		/// <param name="data">Data to work on</param>
+		/// <param name="bit">Bit used to generate the mask</param>
+		protected void FlipBit(byte[] data, int bit)
+		{
+			int byteIndex = bit / 8;
+			int byteBit = bit % 8;
+			byte mask = (byte)(0x80 >> byteBit);
+
+			data[byteIndex] = (byte)(data[byteIndex] ^ mask); // Use a mask to flip the bit
+		}
+
+		/// <summary>
+		/// Compare ourselves to an object
+		/// </summary>
+		/// <param name="obj">An obect to compare to</param>
+		/// <returns>
+		/// 1 if the ID is greater than the object, 0 if the object are equals and -1 if object is greater
+		/// than this.
+		/// </returns>
+		public int CompareTo(object obj)
+		{
+			if (obj is ID)
+			{
+				// Compare as ID.
+				if (this < (ID)obj)
+				{
+					return -1;
+				}
+				else if (this == (ID)obj)
+				{
+					return 0;
+				}
+				else
+				{
+					return 1;
+				}
+			}
+			else
+			{
+				return 1; // We're bigger than random crap
+			}
+		}
+
+		/// <summary>
+		/// Turn this ID into a string.
+		/// </summary>
+		/// <returns>A string representation for the ID</returns>
+		public override string ToString()
+		{
+			return Convert.ToBase64String(id);
+		}
+
+		/// <summary>
+		/// Produce a random ID.
+		/// </summary>
+		/// <returns>random ID generated</returns>
+		public static ID RandomID()
+		{
+			byte[] data = new byte[Constants.ID_LENGTH_BYTES];
+			rnd.NextBytes(data);
+			return new ID(data);
 		}
 
 		/// <summary>
@@ -197,164 +343,6 @@ namespace Clifton.Kademlia
 		public static bool operator !=(ID a, ID b)
 		{
 			return !(a == b); // Already have that
-		}
-
-		/// <summary>
-		/// Method used to get the hash code according to the algorithm: 
-		/// http://stackoverflow.com/questions/16340/how-do-i-generate-a-hashcode-from-a-byte-array-in-c/425184#425184
-		/// </summary>
-		/// <returns>integer representing the hashcode</returns>
-		public override int GetHashCode()
-		{
-			int hash = 0;
-			for (int i = 0; i < Constants.ID_LENGTH_BYTES; i++)
-			{
-				unchecked
-				{
-					hash *= 31;
-				}
-				hash ^= id[i];
-			}
-			return hash;
-		}
-
-		/// <summary>
-		/// Method used to verify if two objects are equals.
-		/// </summary>
-		/// <param name="obj">The object to compare to</param>
-		/// <returns>true if the objects are equals.</returns>
-		public override bool Equals(object obj)
-		{
-			if (obj is ID)
-			{
-				return this == (ID)obj;
-			}
-			else
-			{
-				return false;
-			}
-		}
-
-		/// <summary>
-		/// Determines the least significant bit at which the given ID differs from this one, from 0 through 8 * ID_LENGTH - 1.
-		/// PRECONDITION: IDs do not match.
-		/// </summary>
-		/// <param name="other">The ID to compare to</param>
-		/// <returns>The least significant bit where can be found the difference</returns>
-		public int DifferingBit(ID other)
-		{
-			ID differingBits = this ^ other;
-			int differAt = 8 * Constants.ID_LENGTH_BYTES - 1;
-
-			// Subtract 8 for every zero byte from the right
-			int i = Constants.ID_LENGTH_BYTES - 1;
-			while (i >= 0 && differingBits.id[i] == 0)
-			{
-				differAt -= 8;
-				i--;
-			}
-
-			// Subtract 1 for every zero bit from the right
-			int j = 0;
-			// 1 << j = pow(2, j)
-			while (j < 8 && (differingBits.id[i] & (1 << j)) == 0)
-			{
-				j++;
-				differAt--;
-			}
-
-			return differAt;
-		}
-
-		/// <summary>
-		/// Return a copy of ourselves that differs from us at the given bit and is random beyond that.
-		/// </summary>
-		/// <param name="bit">the bit to start to launch random bits</param>
-		/// <returns>The new ID obtained</returns>
-		public ID RandomizeBeyond(int bit)
-		{
-			byte[] randomized = new byte[Constants.ID_LENGTH_BYTES];
-			id.CopyTo(randomized, 0);
-
-			FlipBit(randomized, bit); // Invert pivot bit
-
-			// And randomly flip the rest
-			for (int i = bit + 1; i < 8 * Constants.ID_LENGTH_BYTES; i++)
-			{
-				if (rnd.NextDouble() < 0.5)
-				{
-					FlipBit(randomized, i);
-				}
-			}
-
-			return new ID(randomized);
-		}
-
-		/// <summary>
-		/// Flips the given bit in the byte array.
-		/// Byte array must be ID_LENGTH long.
-		/// </summary>
-		/// <param name="data">Data to work on</param>
-		/// <param name="bit">Bit used to generate the mask</param>
-		private static void FlipBit(byte[] data, int bit)
-		{
-			int byteIndex = bit / 8;
-			int byteBit = bit % 8;
-			byte mask = (byte)(1 << byteBit);
-
-			data[byteIndex] = (byte)(data[byteIndex] ^ mask); // Use a mask to flip the bit
-		}
-
-		/// <summary>
-		/// Produce a random ID.
-		/// </summary>
-		/// <returns>random ID generated</returns>
-		public static ID RandomID()
-		{
-			byte[] data = new byte[Constants.ID_LENGTH_BYTES];
-			rnd.NextBytes(data);
-			return new ID(data);
-		}
-
-		/// <summary>
-		/// Turn this ID into a string.
-		/// </summary>
-		/// <returns>A string representation for the ID</returns>
-		public override string ToString()
-		{
-			return Convert.ToBase64String(id);
-		}
-
-		/// <summary>
-		/// Compare ourselves to an object
-		/// </summary>
-		/// <param name="obj">An obect to compare to</param>
-		/// <returns>
-		/// 1 if the ID is greater than the object, 0 if the object are equals and -1 if object is greater
-		/// than this.
-		/// </returns>
-		public int CompareTo(object obj)
-		{
-			if (obj is ID)
-			{
-				// Compare as ID.
-				if (this < (ID)obj)
-				{
-					return -1;
-				}
-				else if (this == (ID)obj)
-				{
-					return 0;
-				}
-				else
-				{
-					return 1;
-				}
-			}
-			else
-			{
-				return 1; // We're bigger than random crap
-			}
 		}
 	}
 }

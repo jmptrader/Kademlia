@@ -561,6 +561,41 @@ gives us:</p>
 <p>
 <img border="0" src="bucket1.png" width="219" height="63"></p>
 <p>
+Or if you prefer a unit test:</p>
+<pre>
+/// &lt;summary&gt;
+/// Test bucket indexing by testing all patterns:
+/// 1xxxxx (idx 159)
+/// 01xxxx (idx 158)
+/// 001xxx (idx 157)
+/// etc. that we get the correct index back.
+/// &lt;/summary&gt;
+[TestMethod]
+public void BuckIndexTest()
+{
+  int byteIdx = 0;
+  byte bitIdx = 0x80;
+
+  for (int i = 0; i &lt; Constants.ID_LENGTH_BITS; i++)
+  {
+    // bits 0 to i are 0, set bit i (counting from MSB), and set remaining bits (of the LSB's) to random values.
+    byte[] idbytes = new byte[Constants.ID_LENGTH_BYTES];
+    idbytes[byteIdx] = bitIdx;
+    ID id = new ID(idbytes);
+    id = id.RandomizeBeyond(i);
+    int bucketIdx = id.GetBucketIndex();
+    Assert.IsTrue(bucketIdx == (Constants.ID_LENGTH_BITS - (i+1)), &quot;Bucket index does not match expected index.&quot;);
+
+    bitIdx &gt;&gt;= 1;
+
+    if (bitIdx == 0)
+    {
+      ++byteIdx;
+      bitIdx = 0x80;
+    }
+  }
+}</pre>
+<p>
 However!&nbsp; As per the
 <a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#distance">
 SourceForge spec</a>: <font color="#FF00FF">The buckets are organized by <b>the 
@@ -611,7 +646,7 @@ public void HaveContact(Contact contact, Func&lt;Contact, bool&gt; discardHead)
 {
   contact.Touch();
 
-  // If contact exists, promote it it to the tail.
+  // If contact exists, promote it to the tail.
   if (Exists(contact.NodeID))
   {
     contacts.MoveToTail(contact, c =&gt; c.NodeID == contact.NodeID);
@@ -642,7 +677,32 @@ and we pass this function in to the <code>BucketList</code> class:</p>
 }</pre>
 <p>See how nice it is to have separate classes for the bucket list and the 
 k-bucket?&nbsp; If we didn't do this, all this code would be in one big ugly 
-class.</p>
+class.&nbsp; Also, at this point, a unit test verifying that &quot;last seen&quot; 
+ordering is preserved is useful:</p>
+<pre>/// &lt;summary&gt;
+/// Test that contacts added to a kbucket are in least to most-recently seen order.
+/// &lt;/summary&gt;
+[TestMethod]
+public void LeastSeenOrderingTest()
+{
+  KBucket kbucket = new KBucket();
+  40.ForEach(() =&gt;
+  {
+    kbucket.HaveContact(new Contact(), contact =&gt; false);
+    Thread.Sleep(2); // need to have some time go by.
+  });
+
+  Assert.IsTrue(kbucket.Contacts.Count == Constants.K, &quot;Expected k contacts.&quot;);
+
+  DateTime last = default(DateTime);
+  kbucket.Contacts.ForEach(contact =&gt;
+  {
+    Assert.IsTrue(last &lt; contact.LastSeen, &quot;Contacts are out of order with regards to last seen.&quot;);
+    last = contact.LastSeen;
+  });
+}</pre>
+<p>Granted, this tests only one branch for adding contacts when the bucket is 
+full.&nbsp; We can add more tests later.</p>
 <p>The whole point of this process is nicely explained in the Kademlia 
 documentation:</p>
 <p><font color="#FF00FF">k-buckets effectively implement a least-recently seen 
@@ -883,6 +943,30 @@ public List&lt;Contact&gt; GetCloseContacts(ID toFind, ID exclude)
 <p>Linq is amazing!&nbsp; Note that the <code>where</code> clause takes care of the other 
 requirement &quot;The recipient should not return a triple containing the requestor's 
 ID.&quot;</p>
+<p>This code is ripe for a unit test that verifies the contacts are sorted from 
+least to greatest distance:</p>
+<pre>// Create k contacts of random ID's and verify that they come back in sorted distances from least distance to greatest.
+// We assume that we will never get two occurrances of the same random ID.
+[TestMethod]
+public void CloseContactTest()
+{
+  ID ourID = ID.RandomID();
+  ID toFind = ID.RandomID();
+  BucketList bucketList = new BucketList();
+  Constants.K.ForEach(() =&gt; bucketList.HaveContact(ourID, new Contact() { NodeID = ID.RandomID() }, (contact) =&gt; false));
+  List&lt;Contact&gt; contacts = bucketList.GetCloseContacts(toFind, ourID);
+
+  Assert.IsTrue(contacts.Count == Constants.K, &quot;Expected k contacts returned.&quot;);
+
+  ID distance = contacts[0].NodeID ^ toFind;
+
+  for (int n = 1; n &lt; Constants.K; n++)
+  {
+    ID nextDistance = contacts[n].NodeID ^ toFind;
+    Assert.IsTrue(distance &lt; nextDistance, &quot;Distances are not sorted in least to greatest order.&quot;);
+    distance = nextDistance;
+  }
+}</pre>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
