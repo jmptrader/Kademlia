@@ -8,8 +8,8 @@
 
 <body>
 
-<p>Implementing the Kademlia P2P DHT from Scratch</p>
-<p>A step-by-step process from specification to implementation</p>
+<p>Implementing the Kademlia Peer-to-Peer Distributed Hash Table</p>
+<p>A journey from specification to implementation</p>
 <h2>Introduction</h2>
 <p>There's quite a few implementations of the Kademlia peer-to-peer (P2P) 
 distributed hash table (DHT) algorithm out there on GitHub.&nbsp; My perusal of 
@@ -30,6 +30,14 @@ from:</p>
 	of messages and other behaviors that are best abstracted out of the core 
 	implementation.</li>
 </ol>
+<p>The best C# implementation that I've found is
+<a href="https://github.com/zencoders/sambatyon/blob/master/Kademlia/Kademlia/BucketList.cs">
+zencoders sambatyon repo</a> on GitHub.&nbsp; As far as I can tell, the only 
+significant issue with this implementation is the lack of abtraction -- it's 
+quite entangled with a file-based data store, a UDP communication protocol, and 
+additional but unnecessary information in the store &quot;value&quot; because it's 
+intended to be a peer-to-peer audio player.&nbsp; That said, I reference this 
+implementation wherever I have taken implementation or obtained ideas.</p>
 <p>As an aside, I'd have to say this about open source projects:</p>
 <ol>
 	<li>One person open source projects are great when they implement something 
@@ -649,13 +657,14 @@ resistance to certain DoS attacks. One cannot flush nodes’ routing state by
 flooding the system with new nodes. Kademlia nodes will only insert the new 
 nodes in the k-buckets when old nodes leave the system.</font></p>
 <p>Pretty cool!</p>
-<h2>The Kademlia Protocol</h2>
-<p><font color="#FF00FF">The Kademlia protocol consists of four RPCs: PING, 
-STORE, FIND_NODE, and FIND_VALUE.</font></p>
-<p>Let's explore this a bit before implementing some stubs.</p>
+<h2>The Kademlia Protocol (Section 2.3)</h2>
+<p>This is where we get into the real meat and potatoes of the spec.&nbsp;
+<font color="#FF00FF">The Kademlia protocol consists of four RPCs: PING, 
+STORE, FIND_NODE, and FIND_VALUE.&nbsp; </font>Let's explore this a bit before implementing some stubs.</p>
 <h3>Ping</h3>
 <p><font color="#FF00FF">The PING RPC probes a node to see if it is online.</font> </p>
-<p>Obviously, a ping will respond with something that we'll call a &quot;pong.&quot;</p>
+<p>Obviously, a ping will respond with something that we'll call a &quot;pong.&quot;&nbsp; 
+We'll deal over-the-wire serialization and responses later (much later.)</p>
 <h3>Store</h3>
 <p><font color="#FF00FF">STORE instructs a node to store a (key, value) pair for 
 later retrieval.</font></p>
@@ -786,7 +795,7 @@ storage <code>property</code>:</p>
 <p><font color="#FF00FF">When a Kademlia node receives any message (request or 
 reply) from another node, it updates the appropriate k-bucket for the sender’s 
 node ID.</font></p>
-<p>and refactor the Node class yet again to implement this requirement:</p>
+<p>and refactor the Node class <i>yet again</i> to implement this requirement:</p>
 <pre>public Contact Ping(Contact sender)
 {
   bucketList.HaveContact(OurContact.NodeID, sender, (_) =&gt; false);
@@ -811,7 +820,48 @@ public (List&lt;Contact&gt; nodes, string val) FindValue(Contact sender, string 
   return (null, null);
 }</pre>
 <p>Note that we're stubbing the &quot;discard head&quot; function at the moment.</p>
-<p>&nbsp;</p>
+<h3>FindNode Implementation</h3>
+<p>We'll start with this specification and work out the implementation.</p>
+<p><font color="#FF00FF">FIND_NODE takes a 160-bit ID as an argument. The 
+recipient of the RPC returns (IP address, UDP port, Node ID) triples for the k 
+nodes it knows about closest to the target ID. These triples can come from a 
+single k-bucket, or they may come from multiple k-buckets if the closest 
+k-bucket is not full. In any case, the RPC recipient must return k items (unless 
+there are fewer than k nodes in all its k-buckets combined, in which case it 
+returns every node it knows about).</font></p>
+<p>It's important to also review the notes on
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE">
+SourceForge</a>: </p>
+<p><font color="#FF00FF">The recipient of a FIND_NODE should never return a 
+triple containing the nodeID of the requestor. If the requestor does receive 
+such a triple, it should discard it. A node must never put its own nodeID into a 
+bucket as a contact.</font></p>
+<p>To restate these requirements:</p>
+<ul>
+	<li>The recipient should not return a triple containing the requestor's ID.</li>
+	<li>A node must never put its own node ID into a bucket as a contact.</li>
+</ul>
+<p>The reason for this check is that it prevents would could potentially be 
+infinite recursion in the node lookup algorithm (discussed later).&nbsp; Let's 
+deal with that second point first.&nbsp; </p>
+<pre>public void HaveContact(ID ourId, Contact contact, Func&lt;Contact, bool&gt; discardHead)
+{
+  // A node must never put its own node ID into a bucket as a contact.
+  if (ourId != contact.NodeID)
+  {
+    var distance = ourId ^ contact.NodeID;
+    int bucketIdx = distance.GetBucketIndex();
+    buckets[bucketIdx].HaveContact(contact, discardHead);
+  }
+}</pre>
+<p>Done!&nbsp; </p>
+<p>The implementation is unfortunately a brute force iteration of all the known 
+contacts in the bucket list.&nbsp; The first <i>k</i> nodes that are the 
+shortest distance to the ID are returned, in ascending (shortest to greatest) 
+distance.&nbsp; This algorithm is modified from the <code>ClosestContacts</code> algorithm
+<a href="https://github.com/zencoders/sambatyon/blob/master/Kademlia/Kademlia/BucketList.cs">
+here</a>, starting on line 208.&nbsp; (To a large extent, it really helps to 
+understand the code by matching the code to the specification.)</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>

@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 namespace Clifton.Kademlia
 {
 	public interface IRouter { }
-	public interface ICommunication { }
 
 	public interface IStorage
 	{
@@ -15,5 +14,11 @@ namespace Clifton.Kademlia
 		void Set(string key, string val);
 	}
 
-	public interface IAddress { }
+	public interface IAddress
+	{
+		Contact Ping(Contact sender, IAddress recipient, ID randomID);
+		void Store(Contact sender, IAddress recipient, ID randomID, string key, string val);
+		List<Contact> FindNode(Contact sender, IAddress recipient, ID randomID, ID toFind);
+		(List<Contact> nodes, string val) FindValue(Contact sender, IAddress recipient, ID randomID, string key);
+	}
 }
