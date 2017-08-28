@@ -18,7 +18,7 @@ namespace UnitTests
 			KBucket kbucket = new KBucket();
 			40.ForEach(() =>
 			{
-				kbucket.HaveContact(new Contact(), contact => true);
+				kbucket.HaveContact(new Contact(), contact => false);
 				Thread.Sleep(2);		// need to have some time go by.
 			});
 

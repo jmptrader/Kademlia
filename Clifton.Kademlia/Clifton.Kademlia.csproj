@@ -52,6 +52,7 @@
     <Compile Include="Interfaces.cs" />
     <Compile Include="KBucket.cs" />
     <Compile Include="Node.cs" />
+    <Compile Include="NodeLookup.cs" />
     <Compile Include="Router.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

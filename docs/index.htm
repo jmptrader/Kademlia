@@ -9,7 +9,8 @@
 <body>
 
 <p>Implementing the Kademlia Peer-to-Peer Distributed Hash Table</p>
-<p>A journey from specification to implementation</p>
+<p>A journey from specification to implementation (with some help along the 
+way.)</p>
 <h2>Introduction</h2>
 <p>There's quite a few implementations of the Kademlia peer-to-peer (P2P) 
 distributed hash table (DHT) algorithm out there on GitHub.&nbsp; My perusal of 
@@ -119,7 +120,24 @@ blockchains.&nbsp; </p>
 <p>So while this is a personal venture, it is also a recognition that there are 
 some interesting and complicated technologies coming down the road that need to 
 be properly understood, and protocols like Kademlia are a good starting point 
-for looking at a P2P DHT implementation.</p>
+for looking at a P2P DHT implementation.&nbsp; As to why Kademlia specifically, 
+the summary to the spec says it best:</p>
+<p><i>&quot;With its novel XOR-based metric topology, Kademlia is the first 
+peer-to-peer system to combine provable consistency and performance, 
+latency-minimizing routing, and a symmetric, unidirectional topology. Kademlia 
+furthermore introduces a concurrency parameter, a, that lets people trade a 
+constant factor in bandwidth for asynchronous lowest-latency hop selection and 
+delay-free fault recovery. Finally, Kademlia is the first peer-to-peer system to 
+exploit the fact that node failures are inversely related to uptime.&quot;</i></p>
+<h3>Where did the Name Come From?</h3>
+<p>As <a href="http://www.maymounkov.org/kademlia">Petar Maymounkov</a>, one of 
+the co-creators of Kademlia says: &quot;it is a Turkish word for a “lucky man” and, 
+more importantly, is the name of a mountain peak in Bulgaria.&quot;&nbsp; OK then.</p>
+<h3>Protocol Before Implementation</h3>
+<p>And as Petar stated (same link as above): &quot;The good or bad news (depending on 
+how you look at it) is that Kademlia was baked as a protocol and algorithm 
+before it ever was implemented.&quot;&nbsp; Fascinating.&nbsp; I just would not have 
+the confidence to do that!</p>
 <h2>High Level Architecture</h2>
 <p>In this document, <font color="#FF00FF">fuchsia text</font> is used when 
 quoting from the Kademlia specification.</p>
@@ -721,14 +739,14 @@ nodes in the k-buckets when old nodes leave the system.</font></p>
 <p>This is where we get into the real meat and potatoes of the spec.&nbsp;
 <font color="#FF00FF">The Kademlia protocol consists of four RPCs: PING, 
 STORE, FIND_NODE, and FIND_VALUE.&nbsp; </font>Let's explore this a bit before implementing some stubs.</p>
-<h3>Ping</h3>
+<p><b>Ping</b></p>
 <p><font color="#FF00FF">The PING RPC probes a node to see if it is online.</font> </p>
 <p>Obviously, a ping will respond with something that we'll call a &quot;pong.&quot;&nbsp; 
 We'll deal over-the-wire serialization and responses later (much later.)</p>
-<h3>Store</h3>
+<p><b>Store</b></p>
 <p><font color="#FF00FF">STORE instructs a node to store a (key, value) pair for 
 later retrieval.</font></p>
-<h3>FindNode</h3>
+<p><b>FindNode</b></p>
 <p><font color="#FF00FF">FIND_NODE takes a 160-bit ID as an argument. The 
 recipient of a the RPC returns (IP address, UDP port, Node ID) triples for the k 
 nodes it knows about closest to the target ID. These triples can come from a 
@@ -736,13 +754,13 @@ single k-bucket, or they may come from multiple k-buckets if the closest
 k-bucket is not full. In any case, the RPC recipient must return k items (unless 
 there are fewer than k nodes in all its k-buckets combined, in which case it 
 returns every node it knows about).</font></p>
-<h3>FindValue</h3>
+<p><b>FindValue</b></p>
 <p><font color="#FF00FF">FIND_VALUE behaves like FIND_NODE—returning (IP 
 address, UDP port, Node ID) triples—with one exception. If the RPC recipient has 
 received a STORE RPC for the key, it just returns the stored value.</font></p>
 <p>The implication here is that the key associated with the value should be a 
 parameter as well.</p>
-<h3>And Lastly</h3>
+<p><b>And Lastly</b></p>
 <p><font color="#FF00FF">In all RPCs, the recipient must echo a 160-bit random 
 RPC ID, which provides some resistance to address forgery, PINGS can also be 
 piggy-backed on RPC replies for the RPC recipient to obtain additional assurance 
@@ -761,6 +779,9 @@ assigned by the sender and echoed in the reply. This is a quasi-random number of
 length B (160 bits).</font></p>
 <p>This makes it clearer, as this clearly states what &quot;must echo...&quot; means.&nbsp; 
 Again, reading the original spec requires really reading it <i>carefully.</i></p>
+<p>We'll also have to deal with this fun statement in the spec:
+<font color="#FF00FF">Most operations are implemented in terms of [a] lookup 
+procedure.</font></p>
 <h3>Stub Implementation</h3>
 <p>These are added to the IAddress interface:</p>
 <pre>public interface IAddress
@@ -880,7 +901,7 @@ public (List&lt;Contact&gt; nodes, string val) FindValue(Contact sender, string 
   return (null, null);
 }</pre>
 <p>Note that we're stubbing the &quot;discard head&quot; function at the moment.</p>
-<h3>FindNode Implementation</h3>
+<h3>FindNode Basic Implementation</h3>
 <p>We'll start with this specification and work out the implementation.</p>
 <p><font color="#FF00FF">FIND_NODE takes a 160-bit ID as an argument. The 
 recipient of the RPC returns (IP address, UDP port, Node ID) triples for the k 
@@ -967,6 +988,101 @@ public void CloseContactTest()
     distance = nextDistance;
   }
 }</pre>
+<p>One might think that once the initial bucket index is found, one 
+should be able to find &quot;nearby buckets&quot; by expanding the search to neighboring 
+buckets +/- <i>n</i>, incrementing n until<i> k</i> contacts are found or we've 
+searched the entire bucket list.&nbsp; It looks like this is what
+<a href="https://github.com/bmuller">Brian Muller</a> implemented in the 
+TableTraverser class in his Python version:</p>
+<pre>def next(self):
+  &quot;&quot;&quot;
+  Pop an item from the left subtree, then right, then left, etc.
+  &quot;&quot;&quot;
+  if len(self.currentNodes) &gt; 0:
+    return self.currentNodes.pop()
+
+  if self.left and len(self.leftBuckets) &gt; 0:
+    self.currentNodes = self.leftBuckets.pop().getNodes()
+    self.left = False
+    return self.next()
+
+  if len(self.rightBuckets) &gt; 0:
+    self.currentNodes = self.rightBuckets.pop().getNodes()
+    self.left = True
+    return self.next()
+
+  raise StopIteration</pre>
+<p>However, as Brian himself points out in
+<a href="https://github.com/bmuller/kademlia/issues/28">an issue</a>, and as
+<a href="https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table">
+this Stack Overflow response</a> states: &quot;Since the XOR distance metric folds at 
+each bit-carry (XOR == carry-less addition) it does not map nicely to any 
+routing table layout. In other words, visiting the nearest buckets won't do.&quot;&nbsp; 
+So we'll stick with the brute force algorithm.</p>
+<h3>Node Lookup Implementation</h3>
+<p>Now we get to the business of &quot;<font color="#FF00FF">Most operations are 
+implemented in terms of [a] lookup procedure.</font>&quot;&nbsp; The lookup procedure 
+in the spec is described as (my numbering):</p>
+<ol>
+	<li><font color="#FF00FF">Kademlia employs a recursive algorithm for node 
+	lookups. The lookup initiator starts by picking alpha nodes from its closest 
+	non-empty k-bucket (or, if that bucket has fewer than a entries, it just 
+	takes the alpha closest nodes it knows of).</font></li>
+	<li><font color="#FF00FF">The initiator then sends parallel, asynchronous 
+	FIND_NODE RPCS to the alpha nodes it has chosen, alpha is a system-wide concurrency 
+	parameter, such as 3.</font></li>
+	<li><font color="#FF00FF">In the recursive step, the initiator resends the 
+	FIND_NODE to nodes it has learned about from previous RPCs. (This recursion 
+	can begin before all a of the previous RPCs have returned). </font></li>
+	<li><font color="#FF00FF">Of the k nodes the initiator has heard of closest 
+	to the target, it picks alpha that it has not yet queried and resends the FIND_NODE RPC to them. </font></li>
+	<li><font color="#FF00FF">Nodes that fail to respond quickly are removed 
+	from consideration until and unless they do respond. </font></li>
+	<li><font color="#FF00FF">If a round of FIND_NODES fails to return a node 
+	any closer than the closest already seen, the initiator resends the 
+	FIND_NODE to all of the k closest nodes it has not already queried. </font>
+	</li>
+	<li><font color="#FF00FF">The lookup terminates when the initiator has 
+	queried and gotten responses from the k closest nodes it has seen.</font></li>
+</ol>
+<p>There are some confusing points to this set of requirements:</p>
+<ol>
+	<li>What is this &quot;recursive&quot; thing?&nbsp; The SourceForge spec says that the 
+	algorithm is actually iterative.</li>
+	<li>First, I'm going to assume that, while the node lookup algorithm uses 
+	the FindNode RPC, it is not recursive -- FindNode itself does not initiate 
+	its own node lookup algorithm.&nbsp; Both
+	<a href="https://github.com/bmuller/kademlia">Brian's Python code</a> and 
+	the <a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia">C# 
+	zencoders</a> implementation confirm this: FindNode simply returns the 
+	closest nodes known to the recipient. </li>
+<li>Do operations like Store and GetValue use this algorithm?&nbsp; In the 
+Python code, no -- the node lookup algorithm is implemented in completely 
+separate
+<a href="https://github.com/bmuller/kademlia/blob/master/kademlia/crawling.py">
+NodeSpiderCrawl and ValueSpiderCrawl classes</a>.&nbsp; The node lookup is 
+	not called as part of the Store, FindNode, or FindValue calls -- only 
+	immediate neighbors are returned for FindNode and FindValue.&nbsp; 
+	Conversely, in the C# zencoders algorithm, the answer is yes -- Store calls <code>
+	IList&lt;Contact&gt; closest = IterativeFindNode(ID.FromString(tag.Hash));</code> 
+which is the node lookup algorithm.</li>
+	<li>It makes sense for FindValue to call the node lookup algorithm, and 
+	again, in the C# zencoders implementation, we see this in the call 
+	<code>IterativeFindValue(key, ref found, out close);</code></li>
+</ol>
+<p>The main difference between Brian's Python code and zencoders C# code is that 
+in the Python code, the discovery of closer nodes is handled by a separate 
+crawler.&nbsp; I can see pros and cons to this implementation, however I prefer 
+to stick more with the original specification.</p>
+<h2>Asynchronous Behavior</h2>
+<p>So far, I haven't dealt at all with the issue of simultaneous RPC calls nor 
+performance improvements, particularly in the node lookup algorithm, that can be 
+achieved by processes responses as soon as they come in.&nbsp; The
+<a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia">C# 
+zencoders</a> implementation is very nicely asynchronous, particularly with 
+regards to the node lookup algorithm.&nbsp; </p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
