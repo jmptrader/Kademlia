@@ -5,7 +5,9 @@ namespace Clifton.Kademlia
 {
 	public class Node
 	{
-		public Contact OurContact { get; set; }
+		// TODO: Create read-only version of these or otherwise rework to avoid getters that can change the contents.
+		public Contact OurContact { get; }
+		public BucketList BucketList { get { return bucketList; } }
 
 		protected BucketList bucketList;
 		protected IStorage storage;
@@ -20,9 +22,20 @@ namespace Clifton.Kademlia
 			OurContact = us;
 		}
 
-		public Contact Ping(Contact sender)
+		public Node(IAddress address, ID nodeID) : this()
+		{
+			OurContact = new Contact() { Address = address, NodeID = nodeID };
+		}
+
+		public void SimpleRegistration(Contact sender)
 		{
 			bucketList.HaveContact(OurContact.NodeID, sender, (_) => false);
+		}
+
+		public Contact Ping(Contact sender)
+		{
+			SimpleRegistration(sender);
+
 			return OurContact;
 		}
 

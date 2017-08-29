@@ -11,5 +11,6 @@ namespace Clifton.Kademlia
 		public const int K = 20;
 		public const int ID_LENGTH_BYTES = 20;
 		public const int ID_LENGTH_BITS = 160;
+		public const int ALPHA = 3;
 	}
 }

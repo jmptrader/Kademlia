@@ -101,6 +101,7 @@ namespace Clifton.Kademlia
 			}
 		}
 
+		/*
 		/// <summary>
 		/// Determines the least significant bit at which the given ID differs from this one, from 0 through 8 * ID_LENGTH - 1.
 		/// PRECONDITION: IDs do not match.
@@ -131,6 +132,7 @@ namespace Clifton.Kademlia
 
 			return differAt;
 		}
+		*/
 
 		public ID RandomizeBeyond(int bit)
 		{
@@ -195,13 +197,9 @@ namespace Clifton.Kademlia
 			}
 		}
 
-		/// <summary>
-		/// Turn this ID into a string.
-		/// </summary>
-		/// <returns>A string representation for the ID</returns>
 		public override string ToString()
 		{
-			return Convert.ToBase64String(id);
+			return BitConverter.ToString(id);
 		}
 
 		/// <summary>
@@ -212,6 +210,30 @@ namespace Clifton.Kademlia
 		{
 			byte[] data = new byte[Constants.ID_LENGTH_BYTES];
 			rnd.NextBytes(data);
+
+			return new ID(data);
+		}
+
+		public static ID ZeroID()
+		{
+			byte[] data = new byte[Constants.ID_LENGTH_BYTES];
+
+			return new ID(data);
+		}
+
+		public static ID OneID()
+		{
+			byte[] data = new byte[Constants.ID_LENGTH_BYTES];
+			data[Constants.ID_LENGTH_BYTES - 1] = 1;
+
+			return new ID(data);
+		}
+
+		public static ID MaxID()
+		{
+			byte[] data = new byte[Constants.ID_LENGTH_BYTES];
+			Constants.ID_LENGTH_BYTES.ForEach(n => data[n] = 0xFF);
+
 			return new ID(data);
 		}
 
@@ -226,6 +248,7 @@ namespace Clifton.Kademlia
 			return new ID(hasher.ComputeHash(Encoding.UTF8.GetBytes(key)));
 		}
 
+		/*
 		/// <summary>
 		/// Method that generates an ID starting from a generic string. This is not hashing.
 		/// </summary>
@@ -240,6 +263,8 @@ namespace Clifton.Kademlia
 					 .ToArray()
 					 );
 		}
+		*/
+
 		/// <summary>
 		/// XOR operator.
 		/// This is our distance metric in the DHT.
@@ -303,6 +328,25 @@ namespace Clifton.Kademlia
 			}
 
 			return false; // No mismatches
+		}
+
+		/// <summary>
+		/// Shift all bits left.
+		/// </summary>
+		public static ID operator <<(ID id, int count)
+		{
+			byte[] result = new byte[Constants.ID_LENGTH_BYTES];
+			id.id.CopyTo(result, 0);
+			byte carry = 0;
+
+			for (int i = Constants.ID_LENGTH_BYTES - 1; i >= 0; i--)
+			{
+				byte nextCarry = (byte)((result[i] & 0x80) >> 7);
+				result[i] = (byte)((result[i] << 1) | carry);
+				carry = nextCarry;
+			}
+
+			return new ID(result);
 		}
 
 		/// <summary>

@@ -589,7 +589,7 @@ Or if you prefer a unit test:</p>
 /// etc. that we get the correct index back.
 /// &lt;/summary&gt;
 [TestMethod]
-public void BuckIndexTest()
+public void BucketIndexTest()
 {
   int byteIdx = 0;
   byte bitIdx = 0x80;
@@ -794,29 +794,30 @@ procedure.</font></p>
 <p>Note the use of the C# 7 syntax!</p>
 <p>Our <code>InMemoryNodeAddress</code> class (and any other communication class) must 
 implement these methods, in this case as pass-through's to the node associated 
-with the address:</p>
+with the address (the casting bothers me, <font color="#FF0000">something to 
+refactor</font>):</p>
 <pre>public class InMemoryNodeAddress : IAddress
 {
   public Node RecipientNode { get; set; }
 
   public Contact Ping(Contact sender, IAddress recipient, ID randomID)
   {
-    return RecipientNode.Ping(sender);
+    return ((InMemoryNodeAddress)recipient).RecipientNode.Ping(sender);
   }
 
   public void Store(Contact sender, IAddress recipient, ID randomID, string key, string val)
   {
-    RecipientNode.Store(sender, key, val);
+    ((InMemoryNodeAddress)recipient).RecipientNode.Store(sender, key, val);
   }
 
   public List&lt;Contact&gt; FindNode(Contact sender, IAddress recipient, ID randomID, ID toFind)
   {
-    return RecipientNode.FindNode(sender, toFind);
+    return ((InMemoryNodeAddress)recipient).RecipientNode.FindNode(sender, toFind);
   }
 
   public (List&lt;Contact&gt; nodes, string val) FindValue(Contact sender, IAddress recipient, ID randomID, string key)
   {
-    return RecipientNode.FindValue(sender, key);
+    return ((InMemoryNodeAddress)recipient).RecipientNode.FindValue(sender, key);
   }
 }
 </pre>
@@ -1045,35 +1046,152 @@ in the spec is described as (my numbering):</p>
 	<li><font color="#FF00FF">The lookup terminates when the initiator has 
 	queried and gotten responses from the k closest nodes it has seen.</font></li>
 </ol>
-<p>There are some confusing points to this set of requirements:</p>
+<p>There are some questions points to this set of requirements:</p>
 <ol>
 	<li>What is this &quot;recursive&quot; thing?&nbsp; The SourceForge spec says that the 
 	algorithm is actually iterative.</li>
-	<li>First, I'm going to assume that, while the node lookup algorithm uses 
-	the FindNode RPC, it is not recursive -- FindNode itself does not initiate 
+	<li>I'm going to assume that while the node lookup algorithm uses 
+	the <code>FindNode</code> RPC, it is not recursive -- <code>FindNode</code> itself does not initiate 
 	its own node lookup algorithm.&nbsp; Both
 	<a href="https://github.com/bmuller/kademlia">Brian's Python code</a> and 
 	the <a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia">C# 
-	zencoders</a> implementation confirm this: FindNode simply returns the 
+	zencoders</a> implementation confirm this: <code>FindNode</code> simply returns the 
 	closest nodes known to the recipient. </li>
-<li>Do operations like Store and GetValue use this algorithm?&nbsp; In the 
+<li>Do operations like <code>Store</code> and <code>GetValue</code> use this algorithm?&nbsp; In the 
 Python code, no -- the node lookup algorithm is implemented in completely 
 separate
 <a href="https://github.com/bmuller/kademlia/blob/master/kademlia/crawling.py">
-NodeSpiderCrawl and ValueSpiderCrawl classes</a>.&nbsp; The node lookup is 
-	not called as part of the Store, FindNode, or FindValue calls -- only 
-	immediate neighbors are returned for FindNode and FindValue.&nbsp; 
-	Conversely, in the C# zencoders algorithm, the answer is yes -- Store calls <code>
+<code>NodeSpiderCrawl</code> and <code>ValueSpiderCrawl</code> classes</a>.&nbsp; The node lookup is 
+	not called as part of the <code>Store</code>, <code>FindNode</code>, or <code>FindValue</code> calls -- only 
+	immediate neighbors are returned for <code>FindNode</code> and <code>FindValue</code>.&nbsp; 
+	Conversely, in the C# zencoders algorithm, the answer is yes -- <code>Store</code> calls <code>
 	IList&lt;Contact&gt; closest = IterativeFindNode(ID.FromString(tag.Hash));</code> 
 which is the node lookup algorithm.</li>
 	<li>It makes sense for FindValue to call the node lookup algorithm, and 
 	again, in the C# zencoders implementation, we see this in the call 
 	<code>IterativeFindValue(key, ref found, out close);</code></li>
 </ol>
-<p>The main difference between Brian's Python code and zencoders C# code is that 
-in the Python code, the discovery of closer nodes is handled by a separate 
-crawler.&nbsp; I can see pros and cons to this implementation, however I prefer 
-to stick more with the original specification.</p>
+<p>With regards to node lookup, it appears that the main difference between 
+Brian's Python code and zencoders C# code is that in the Python code, the 
+discovery of closer nodes is handled by a separate crawler.&nbsp; I can see pros 
+and cons to this implementation, particularly in the performance of the <code>Store</code> 
+and <code>FindValue</code> RPC calls, but it's a tradeoff between performance and accuracy (finding the nearest node.)</p>
+<p>A few other points:</p>
+<ul>
+	<li>Statements like &quot;nodes that fail to respond quickly&quot; always bother me -- 
+	any time dependent aspect of an algorithm is suspect.&nbsp;&nbsp; </li>
+	<li>This algorithm clearly demands an asynchronous implementation.&nbsp; 
+	This makes it harder to test, which we'll attempt to deal with later.</li>
+</ul>
+<p>It's worth comparing the original spec with the SourceForge writeup.&nbsp; 
+The algorithm is the same, but reading it expressed in a different way is 
+useful, particularly to disambiguate the meaning of phrases like &quot;it has learned 
+about from previous RPC's&quot; in the original spec.&nbsp; Does this many nodes 
+discovered in the lookup algorithm, or any node from any previous RPC?&nbsp; It 
+appears that &quot;nodes discovered in the lookup algorithm&quot; is the meaning of 
+&quot;previous RPC's.&quot;</p>
+<ol>
+	<li><font color="#FF00FF">The search begins by selecting alpha contacts from 
+	the non-empty k-bucket closest to the bucket appropriate to the key being 
+	searched on. If there are fewer than alpha contacts in that bucket, contacts 
+	are selected from other buckets. The contact closest to the target key, 
+	closestNode, is noted.</font></li>
+	<li><font color="#FF00FF">The first alpha contacts selected are used to 
+	create a shortlist for the search.</font></li>
+	<li><font color="#FF00FF">The node then sends parallel, asynchronous FIND_* 
+	RPCs to the alpha contacts in the shortlist. Each contact, if it is live, 
+	should normally return k triples. If any of the alpha contacts fails to 
+	reply, it is removed from the shortlist, at least temporarily.</font></li>
+	<li><font color="#FF00FF">The node then fills the shortlist with contacts 
+	from the replies received. These are those closest to the target. From the 
+	shortlist it selects another alpha contacts. The only condition for this 
+	selection is that they have not already been contacted. Once again a FIND_* 
+	RPC is sent to each in parallel.</font></li>
+	<li><font color="#FF00FF">Each such parallel search updates closestNode, the 
+	closest node seen so far.</font></li>
+	<li><font color="#FF00FF">The sequence of parallel searches is continued 
+	until either no node in the sets returned is closer than the closest node 
+	already seen or the initiating node has accumulated k probed and known to be 
+	active contacts.</font></li>
+	<li><font color="#FF00FF">If a cycle doesn't find a closer node, if 
+	closestNode is unchanged, then the initiating node sends a FIND_* RPC to 
+	each of the k closest nodes that it has not already queried.</font></li>
+	<li><font color="#FF00FF">At the end of this process, the node will have 
+	accumulated a set of k active contacts or (if the RPC was FIND_VALUE) may 
+	have found a data value. Either a set of triples or the value is returned to 
+	the caller.</font></li>
+</ol>
+<h4>Unit Test</h4>
+<p>Writing a unit test for this is an interesting exercise in testing the 
+algorithm in a controlled manner.&nbsp; We can start with a node that has a 
+bucket list with <i>k</i> nodes, but only the first node knows about the other 
+nodes.&nbsp; We also want to control the ID's so that the test results are 100% 
+reproducible and in such a way that the distance metric is easily worked with.&nbsp; 
+For that, we'll create nodes (up to 159) where the node id is 2<sup>^nodeNum</sup>:
+</p>
+<pre>/// &lt;summary&gt;
+/// Create nodes with known ID's from 1 to 2^n
+/// &lt;/summary&gt;
+private List&lt;Node&gt; CreateNodes(int n)
+{
+  List&lt;Node&gt; nodes = new List&lt;Node&gt;();
+  ID id = ID.OneID();
+  Node node;
+
+  n.ForEach(() =&gt;
+  {
+    var address = new InMemoryNodeAddress();
+    nodes.Add(node = new Node(address, id));
+    address.RecipientNode = node;
+    id &lt;&lt;= 1;
+  });
+
+  return nodes;
+}</pre>
+<p>Now we can write a simple test in which 20 nodes are created, but only the 
+first node knows of the remaining 19.&nbsp; This helps us test the case where 
+the closer contacts return nothing, so all the work is being done by the 
+<code>NodeLookup</code> method, and while the <code>LookupCloserContacts</code> method is called, it does 
+nothing.&nbsp; This test verifies that the first node returned is indeed the 
+closest non-self node to ID 0 and ID(max).&nbsp; Because there's nothing to do, 
+the resulting contact list has only alpha nodes.</p>
+<pre>[TestMethod]
+public void SimpleOneNodeTest()
+{
+  // Create k nodes and register nodes 1 through k-1 onto node 0.
+  List&lt;Node&gt; nodes = CreateNodes(Constants.K);
+  nodes.Skip(1).ForEach(n =&gt; nodes[0].SimpleRegistration(n.OurContact));
+  Router router = new Router();
+  List&lt;Contact&gt; contacts;
+
+  contacts = router.NodeLookup(ID.ZeroID(), nodes[0]);
+  Assert.IsTrue(contacts.Count == 3, &quot;Expected alpha items&quot;);
+  // Don't forget, we exclude ourselves!
+  Assert.IsTrue(contacts[0] == nodes[1].OurContact, &quot;Expected contact 0 to be returned.&quot;);
+
+  contacts = router.NodeLookup(ID.MaxID(), nodes[0]);
+  Assert.IsTrue(contacts.Count == 3, &quot;Expected alpha items&quot;);
+  Assert.IsTrue(contacts[0] == nodes[19].OurContact, &quot;Expected contact 0 to be returned.&quot;);
+}</pre>
+<p>Next, we'd like to create a test that forces the maximum number of traversals 
+-- every node returns a closer contact.&nbsp; We can set this up as a linear 
+(that is, not circular) chain:</p>
+<ul>
+	<li>node 0 knows only about node 1</li>
+	<li>node 1 knows about node 0 and node 2</li>
+	<li>node 2 knows about node 1 and node 3</li>
+	<li>etc.</li>
+	<li>node 19 knows only about node 18</li>
+</ul>
+<p>Therefore, if we ask node 0 for ID(max), it must traverse to node 19 to find 
+that closest node.&nbsp; If we ask node 19 for ID(0), it must traverse to node 0 
+to find the closest match.&nbsp; Note how we get a list of <i>k</i> visited 
+nodes.</p>
+<p>Next, we can circularize the list to test that the routine exits when the no 
+nodes closer can the current one exists.&nbsp; Note how we get a list of alpha 
+visited nodes.</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
 <h2>Asynchronous Behavior</h2>
 <p>So far, I haven't dealt at all with the issue of simultaneous RPC calls nor 
 performance improvements, particularly in the node lookup algorithm, that can be 

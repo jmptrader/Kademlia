@@ -16,7 +16,7 @@ namespace UnitTests
 		/// etc. that we get the correct index back.
 		/// </summary>
 		[TestMethod]
-		public void BuckIndexTest()
+		public void BucketIndexTest()
 		{
 			int byteIdx = 0;
 			byte bitIdx = 0x80;
