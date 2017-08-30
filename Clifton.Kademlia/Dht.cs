@@ -18,9 +18,7 @@ namespace Clifton.Kademlia
 		{
 			Router router = new Router();
 			ID keyID = ID.FromString(key);
-			node.Store(node.OurContact, keyID, val);      // we're storing to ourselves as well as k contacts.
-			List<Contact> contacts = router.Lookup(keyID, node, NodeLookup).contacts;
-			contacts.ForEach(c => c.Address.Store(node.OurContact, c.Address, ID.RandomID(), keyID, val));
+			Store(keyID, val);
 		}
 
 		/// <summary>
@@ -46,7 +44,22 @@ namespace Clifton.Kademlia
 
 			ID keyID = ID.FromString(key);
 			Router router = new Router();
+			(List<Contact> contacts, string val) = router.Lookup(keyID, node, ValueLookup);
 
+			return (contacts == null, val);
+		}
+
+		public (bool found, string val) FindValue(ID keyID)
+		{
+			string ourval;
+
+			// If we have it, return with our value.
+			if (node.Storage.TryGetValue(keyID.ToString(), out ourval))
+			{
+				return (true, ourval);
+			}
+
+			Router router = new Router();
 			(List<Contact> contacts, string val) = router.Lookup(keyID, node, ValueLookup);
 
 			return (contacts == null, val);

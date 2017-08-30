@@ -1595,24 +1595,6 @@ public (List&lt;Contact&gt; nodes, string val) FindValue(Contact sender, ID keyI
 
   return (contacts, val);
 }</pre>
-<p>In the <code>Dht</code> class, we implement a <code>FindValue</code> method:</p>
-<pre>public (bool found, string val) FindValue(string key)
-{
-  string ourval;
-
-  // If we have it, return with our value.
-  if (node.Storage.TryGetValue(key, out ourval))
-  {
-    return (true, ourval);
-  }
-
-  ID keyID = ID.FromString(key);
-  Router router = new Router();
-
-  (List&lt;Contact&gt; contacts, string val) = router.ValueLookup(keyID, node);
-
-  return (contacts == null, val);
-}</pre>
 <p>In the router, the <code>LookupCloserContacts</code> method hardcodes the FindValue call:</p>
 <pre>List&lt;Contact&gt; targetContacts = ourNode.OurContact.Address.FindNode(ourNode.OurContact, c.Address, ID.RandomID(), id);</pre>
 <p>We want to refactor this into an inversion of control pattern, where we pass 
@@ -1631,10 +1613,39 @@ public static (List&lt;Contact&gt; contacts, string val) ValueLookup(IAddress ou
   return ourAddr.FindValue(us, theirAddr, rID, keyID);
 }
 </pre>
+<p>In the end, the <code>Dht</code> class' <code>FindValue</code> method looks 
+like this:</p>
+<pre>public (bool found, string val) FindValue(string key)
+{
+  string ourval;
+
+  // If we have it, return with our value.
+  if (node.Storage.TryGetValue(key, out ourval))
+  {
+    return (true, ourval);
+  }
+
+  ID keyID = ID.FromString(key);
+  Router router = new Router();
+
+  (List&lt;Contact&gt; contacts, string val) = router.Lookup(keyID, node, ValueLookup);
+
+  return (contacts == null, val);
+}</pre>
+<p>The <code>Dht</code>'s <code>Store</code> method has been refactored 
+similarly, but uses <code>NodeLookup</code> instead of <code>ValueLookup</code>:</p>
+<pre>public void Store(string key, string val)
+{
+  Router router = new Router();
+  ID keyID = ID.FromString(key);
+  node.Store(node.OurContact, keyID, val); // we're storing to ourselves as well as k contacts.
+  List&lt;Contact&gt; contacts = router.Lookup(keyID, node, NodeLookup).contacts;
+  contacts.ForEach(c =&gt; c.Address.Store(node.OurContact, c.Address, ID.RandomID(), keyID, val));
+}</pre>
 <h4>FindValue Unit Test</h4>
 <p>So now let's write a unit test that stores the value as we did above, but 
 then asks a node in the chain that we know doesn't have the value to find the 
-value:</p>
+value for the given key:</p>
 <pre>[TestMethod]
 public void FindValueTest()
 {
@@ -1652,8 +1663,51 @@ public void FindValueTest()
   Assert.IsTrue(result.found, &quot;Expected value to be found&quot;);
   Assert.IsTrue(result.val == &quot;1&quot;, &quot;Expected A1 steak sauce.&quot;);
 }</pre>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
+<h2>Review So Far</h2>
+<p>At this point we have implemented all the core pieces of the Kademlia 
+specification, using virtual nodes and in-memory store for the underlying 
+transport and storage systems, and all unit tests verifying the various 
+components of the system pass:</p>
+<p><img border="0" src="unittests.png" width="218" height="393"></p>
+<p>At this point, we have a few but very important things left to do:</p>
+<ol>
+	<li>Make the process thread safe.</li>
+	<li>Implement a TCP server with a subnet field, so we can use a single port 
+	for testing (avoids having to deal with &quot;so-and-so wants access to port 
+	blah&quot; pop-ups that Windows thinks makes you safer) and do testing with 
+	actual over-the-wire communication.&nbsp; This also includes timeout 
+	handling / failure to communicate.</li>
+	<li>Review the remaining details of the specification.</li>
+	<li>Implement parallel node finding to improve performance.</li>
+	<li>Finish the &quot;discard head&quot; implementation.</li>
+	<li>Key republishing (section 2.5)</li>
+	<li>Bucket splitting (section 2.4)</li>
+</ol>
+<p>A word about these statements in the specification:</p>
+<p><font color="#FF00FF">Initially, a node u’s routing tree has a single node— 
+one k-bucket covering the entire ID space. When u learns of a new contact, it 
+attempts to insert the contact in the appropriate k-bucket. If that bucket is 
+not full, the new contact is simply inserted. Otherwise, if the fe-bucket’s 
+range includes u’s own node ID, then the bucket is split into two new buckets, 
+the old contents divided between the two, and the insertion attempt repeated.</font></p>
+<p>This seems to contradict a statement earlier in the spec:
+<font color="#FF00FF">For each 0 &lt; i &lt; 160, every node keeps a list of 
+(IP address, UDP port, Node ID) triples for nodes of distance between 2<sup>i</sup> and 
+2<sup>i+1</sup> from itself. We call these lists k-buckets. </font></p>
+<p>So which is it?&nbsp; A tree, or contiguous list of 160 k-buckets?&nbsp; I 
+haven't come across anyone that actually implements this - instead, each node 
+has a routing tree that has 160 k-buckets.</p>
+<p>An interesting discussion here:
+<a href="https://github.com/mikedeboer/node-k-bucket">
+https://github.com/mikedeboer/node-k-bucket</a></p>
+<p>The guy that wrote the lattice paper:
+<a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00039.html">
+https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00039.html</a></p>
+<p>The original 6 page version: http://www.cs.rice.edu/Conferences/IPTPS02/109.pdf</p>
+<p>Other info:
+<a href="https://stackoverflow.com/questions/32129978/highly-unbalanced-kademlia-routing-table">
+https://stackoverflow.com/questions/32129978/highly-unbalanced-kademlia-routing-table</a></p>
+<p>And the search: https://www.google.com/search?q=kademlia+bucket+splitting&amp;rlz=1C1NHXL_enUS721US721&amp;oq=kademlia+bucket+splitting&amp;aqs=chrome..69i57.4407j0j7&amp;sourceid=chrome&amp;ie=UTF-8</p>
 <h2>Asynchronous Behavior</h2>
 <p>So far, I haven't dealt at all with the issue of simultaneous RPC calls nor 
 performance improvements, particularly in the node lookup algorithm, that can be 
