@@ -22,6 +22,10 @@ from:</p>
 	<li>Lack of documentation: by this I mean matching code to the 
 	specifications in the original document.&nbsp; Strange code behaviors are 
 	not discussed.</li>
+	<li>Not fully implemented: some repos appear to be incomplete attempts or 
+	are
+	<a href="https://www.codeproject.com/Lounge.aspx?msg=5429459#xx5429459xx">
+	obviously buggy</a>.</li>
 	<li>Entanglement: several implementations are entangled with &quot;applications&quot;, 
 	such as P2P music streaming and vote tallying</li>
 	<li>Lack of abstraction: pretty much every implementation I've seen does not 
@@ -31,25 +35,30 @@ from:</p>
 	of messages and other behaviors that are best abstracted out of the core 
 	implementation.</li>
 </ol>
+<p>I know, it's easy to be an armchair critic!</p>
 <p>The best C# implementation that I've found is
 <a href="https://github.com/zencoders/sambatyon/blob/master/Kademlia/Kademlia/BucketList.cs">
-zencoders sambatyon repo</a> on GitHub.&nbsp; As far as I can tell, the only 
-significant issue with this implementation is the lack of abtraction -- it's 
-quite entangled with a file-based data store, a UDP communication protocol, and 
-additional but unnecessary information in the store &quot;value&quot; because it's 
-intended to be a peer-to-peer audio player.&nbsp; That said, I reference this 
-implementation wherever I have taken implementation or obtained ideas.</p>
-<p>As an aside, I'd have to say this about open source projects:</p>
+zencoders sambatyon repo</a> and the best Python implementation I've found (I 
+haven't looked at them all) is <a href="https://github.com/bmuller/kademlia">
+Brian Muller's</a>.&nbsp; As far as I can tell, the only significant issue with 
+these implementations are the lack of abstraction of the transport layer (C# 
+uses UDP and the Python code uses Twisted) and the C# code implementation 
+doesn't appear to abstract out the data store, which is &quot;hard coded&quot; as as a 
+file-based audio player.&nbsp; That said, I reference these 
+implementation frequently.</p>
+<p>As an aside, I'm learning some things about open source projects:</p>
 <ol>
 	<li>One person open source projects are great when they implement something 
 	simple and compartmentalized.</li>
 	<li>More complex open source solutions work best when there's a team of 
 	people to review everything from architecture to stupid spelling mistakes to 
 	writing and maintaining decent tests and documentation.</li>
+	<li>
+	<p>Having many open source projects on GitHub, most of which fail to provide 
+	the benefits of a team mentioned in point #2, I actually consider myself to 
+	be contributing to the problem, not the solution!</p>
+	</li>
 </ol>
-<p>Having many open source projects on GitHub, most of which fail to provide the 
-benefits of a team mentioned in point #2, I actually consider myself to be 
-contributing to the problem, not the solution.</p>
 <h3>What is Kademlia?</h3>
 <p>From Wikipedia:</p>
 <p><i>Kademlia is a distributed hash table for decentralized peer-to-peer 
@@ -259,12 +268,8 @@ integer, d(x,y) = x ® y.</font></p>
 <p>This is implemented as:</p>
 <pre>public static ID operator ^(ID a, ID b)
 {
-  byte[] xoredData = new byte[ID_LENGTH];
-
-  for (int i = 0; i &lt; ID_LENGTH; i++)
-  {
-    xoredData[i] = (byte)(a.data[i] ^ b.data[i]);
-  }
+  byte[] xoredData = new byte[Constants.ID_LENGTH_BYTES];
+  Constants.ID_LENGTH_BYTES.ForEach(n =&gt; xoredData[n] = (byte)(a.id[n] ^ b.id[n]));
 
   return new ID(xoredData);
 }</pre>
@@ -277,76 +282,84 @@ common prefix of x. </font></p>
 <p>This is handled by the <code>&lt;</code> and <code>&gt;</code> operators used to measure distance:</p>
 <pre>public static bool operator &lt;(ID a, ID b)
 {
-  for (int i = 0; i &lt; ID_LENGTH; i++)
-  {
-    if (a.data[i] &lt; b.data[i])
-    {
-      return true; // If first mismatch is a &lt; b, a &lt; b
-    }
-    else if (a.data[i] &gt; b.data[i])
-    {
-      return false; // If first mismatch is a &gt; b, a &gt; b
-    }
-  }
-
-  return false; // No mismatches
+  return Constants.ID_LENGTH_BYTES.Range().SkipWhile(n =&gt; a.id[n] == b.id[n]).IsNext(n =&gt; a.id[n] &lt; b.id[n]);
 }
 
 public static bool operator &gt;(ID a, ID b)
 {
-  for (int i = 0; i &lt; ID_LENGTH; i++)
-  {
-    if (a.data[i] &lt; b.data[i])
-    {
-      return false; // If first mismatch is a &lt; b, a &lt; b
-    }
-    else if (a.data[i] &gt; b.data[i])
-    {
-      return true; // If first mismatch is a &gt; b, a &gt; b
-    }
-  }
-
-  return false; // No mismatches
+  return Constants.ID_LENGTH_BYTES.Range().SkipWhile(n =&gt; a.id[n] == b.id[n]).IsNext(n =&gt; a.id[n] &gt; b.id[n]);
 }</pre>
-<p><font color="#FF00FF">If there are empty branches in the tree, there might be more 
-than one leaf with the longest common prefix. In that case, the closest leaf to 
-x will be the closest leaf to ID x produced by flipping the bits in x 
-corresponding to the empty branches of the tree.</font></p>
-<p><font color="#FF0000">TODO: Why the randomization?</font></p>
-<pre>public ID RandomizeBeyond(int bit)
+<p>A couple extension methods are used:</p>
+<pre>public static IEnumerable&lt;int&gt; Range(this int n)
 {
-  byte[] randomized = new byte[ID_LENGTH];
-  data.CopyTo(randomized, 0);
+  return Enumerable.Range(0, n);
+}
 
-  FlipBit(randomized, bit); // Invert pivot bit
-
-  // And randomly flip the rest
-  for(int i = bit + 1; i &lt; 8 * ID_LENGTH; i++) 
+public static bool IsNext&lt;T&gt;(this IEnumerable&lt;T&gt; source, Func&lt;T, bool&gt; predicate)
+{
+  using (var enumerator = source.GetEnumerator())
   {
-    if(rnd.NextDouble() &lt; 0.5) 
-    {
-      FlipBit(randomized, i);
-    }
+    enumerator.MoveNext();
+    return predicate(enumerator.Current);
   }
-
-  return new ID(randomized);
-}
-
-/// &lt;summary&gt;
-/// Flips the given bit in the byte array.
-/// Byte array must be ID_LENGTH long.
-/// &lt;/summary&gt;
-/// &lt;param name=&quot;data&quot;&gt;Data to work on&lt;/param&gt;
-/// &lt;param name=&quot;bit&quot;&gt;Bit used to generate the mask&lt;/param&gt;
-private static void FlipBit(byte[] data, int bit)
+}</pre>
+<p>I know, you probably think this is excessive.</p>
+<h3>Some Unit Tests</h3>
+<p>These unit tests verify the primitive comparison operations.&nbsp; Given:</p>
+<pre>public static ID ZeroID()
 {
-  int byteIndex = bit / 8;
-  int byteBit = bit % 8;
-  byte mask = (byte) (1 &lt;&lt; byteBit);
+  byte[] data = new byte[Constants.ID_LENGTH_BYTES];
 
-  data[byteIndex] = (byte) (data[byteIndex] ^ mask); // Use a mask to flip the bit
+  return new ID(data);
 }
-</pre>
+
+public static ID OneID()
+{
+  byte[] data = new byte[Constants.ID_LENGTH_BYTES];
+  data[Constants.ID_LENGTH_BYTES - 1] = 1;
+
+  return new ID(data);
+}
+
+public static ID MaxID()
+{
+  byte[] data = new byte[Constants.ID_LENGTH_BYTES];
+  Constants.ID_LENGTH_BYTES.ForEach(n =&gt; data[n] = 0xFF);
+
+  return new ID(data);
+}</pre>
+<p>We have a few tests:</p>
+<pre>[TestMethod]
+public void CompareToTests()
+{
+  Assert.IsTrue(ID.OneID().CompareTo(ID.MaxID()) == -1, &quot;Expected OneID &lt; MaxID&quot;);
+  Assert.IsTrue(ID.OneID().CompareTo(ID.OneID()) == 0, &quot;Expected OneID == OneID&quot;);
+  Assert.IsTrue(ID.MaxID().CompareTo(ID.OneID()) == 1, &quot;Expected MaxID &gt; OneID&quot;);
+}
+
+[TestMethod]
+public void ComparisonTests()
+{
+  Assert.IsTrue(ID.ZeroID() &lt; ID.MaxID(), &quot;Expected ZeroID &lt; MaxID&quot;);
+  Assert.IsTrue(ID.OneID() &lt; ID.MaxID(), &quot;Expected OneID &lt; MaxID&quot;);
+  Assert.IsTrue(ID.ZeroID() &lt; ID.OneID(), &quot;Expected ZeroID &lt; OneID&quot;);
+  Assert.IsTrue(ID.OneID() == ID.OneID(), &quot;Expected OneID == OneID&quot;);
+  Assert.IsTrue(ID.MaxID() &gt; ID.ZeroID(), &quot;Expected MaxID &gt; ZeroID&quot;);
+  Assert.IsTrue(ID.MaxID() &gt; ID.OneID(), &quot;Expected MaxID &gt; OneID&quot;);
+  Assert.IsTrue(ID.OneID() &gt; ID.ZeroID(), &quot;Expected OneID &gt; ZeroID&quot;);
+
+  // edge cases:
+  Assert.IsFalse(ID.ZeroID() &lt; ID.ZeroID(), &quot;Expected OneID == OneID&quot;);
+  Assert.IsFalse(ID.ZeroID() &gt; ID.ZeroID(), &quot;Expected OneID == OneID&quot;);
+  Assert.IsFalse(ID.MaxID() &lt; ID.MaxID(), &quot;Expected OneID == OneID&quot;);
+  Assert.IsFalse(ID.MaxID() &gt; ID.MaxID(), &quot;Expected OneID == OneID&quot;);
+}
+
+[TestMethod]
+public void XorTest()
+{
+  Assert.IsTrue((ID.MaxID() ^ ID.MaxID()) == ID.ZeroID(), &quot;XOR failure.&quot;);
+}</pre>
 <h2>Node State (Section 2.2)</h2>
 <p><font color="#FF00FF">Kademlia nodes store contact information about each 
 other to route query messages. For each 0 &lt; i &lt; 160, every node keeps a list of 
@@ -534,32 +547,29 @@ determined by counting the number of 0 bits from the most significant bit of the
 ID):</p>
 <pre>public int GetBucketIndex()
 {
-  int idx = Constants.ID_LENGTH_BITS - 1;
-  int msbyte = 0;
-  int msbit = 0x80;
-  bool done = false;
-
-  while (msbyte &lt; Constants.ID_LENGTH_BYTES &amp;&amp; !done)
+  return (Constants.ID_LENGTH_BITS - id.Bits().TakeWhile(b =&gt; !b).Count() - 1).Max(0);
+}</pre>
+<p>Some extension method helpers:</p>
+<pre>public static IEnumerable&lt;bool&gt; Bits(this byte[] bytes)
+{
+  IEnumerable&lt;bool&gt; GetBits(byte b)
   {
-    while (msbit != 0)
+    for (int i = 0; i &lt; 8; i++)
     {
-      if ((id[msbyte] &amp; msbit) == 0)
-      {
-        --idx;
-        msbit &gt;&gt;= 1;
-      }
-      else
-      {
-        done = true;
-        break;
-      }
+      yield return (b &amp; 0x80) != 0;
+      b &lt;&lt;= 1;
     }
-
-    msbit = 0x80;
-    ++msbyte;
   }
 
-  return idx + (!done ? 1 : 0); // compensate for last --idx
+  return bytes.SelectMany(GetBits);
+}
+
+/// &lt;summary&gt;
+/// Value cannot be less than min.
+/// &lt;/summary&gt;
+public static int Max(this int a, int min)
+{
+  return (a &lt; min) ? min : a;
 }</pre>
 <p>An ID of 0 should have a bucket index of 0 (representing 2<sup>^0</sup> 
 through 2<sup>^1</sup> - 1) and an ID with the most significant&nbsp;set should have 
@@ -579,7 +589,7 @@ gives us:</p>
 <p>
 <img border="0" src="bucket1.png" width="219" height="63"></p>
 <p>
-Or if you prefer a unit test:</p>
+Or if you prefer some unit tests:</p>
 <pre>
 /// &lt;summary&gt;
 /// Test bucket indexing by testing all patterns:
@@ -612,6 +622,25 @@ public void BucketIndexTest()
       bitIdx = 0x80;
     }
   }
+}
+
+[TestMethod]
+public void EdgeCase0Test()
+{
+  byte[] idbytes = new byte[Constants.ID_LENGTH_BYTES];
+  ID id = new ID(idbytes);
+  int bucketIdx = id.GetBucketIndex();
+  Assert.IsTrue(bucketIdx == 0, &quot;Index should be 0.&quot;);
+}
+
+[TestMethod]
+public void EdgeCaseMaxTest()
+{
+  byte[] idbytes = new byte[Constants.ID_LENGTH_BYTES];
+  Constants.ID_LENGTH_BYTES.ForEach((n) =&gt; idbytes[n] = 0xFF);
+  ID id = new ID(idbytes);
+  int bucketIdx = id.GetBucketIndex();
+  Assert.IsTrue(bucketIdx == Constants.ID_LENGTH_BITS - 1, &quot;Index should be 159.&quot;);
 }</pre>
 <p>
 However!&nbsp; As per the
@@ -1329,7 +1358,6 @@ public void LinearChainForwardCrawlTest()
   Router router = new Router();
   List&lt;Contact&gt; contacts;
 
-  // Create k nodes and register nodes 1 through k-1 onto node 0.
   List&lt;Node&gt; nodes = CreateNodes(Constants.K);
   CreateLinearChain(nodes);
 
@@ -1347,7 +1375,6 @@ public void LinearChainBackwardCrawlTest()
   Router router = new Router();
   List&lt;Contact&gt; contacts;
 
-  // Create k nodes and register nodes 1 through k-1 onto node 0.
   List&lt;Node&gt; nodes = CreateNodes(Constants.K);
   CreateLinearChain(nodes);
 
@@ -1370,7 +1397,6 @@ public void CircularChainForwardCrawlTest()
   Router router = new Router();
   List&lt;Contact&gt; contacts;
 
-  // Create k nodes and register nodes 1 through k-1 onto node 0.
   List&lt;Node&gt; nodes = CreateNodes(Constants.K);
   CreateCircularChain(nodes);
 
@@ -1388,7 +1414,6 @@ public void CircularChainBackwardCrawlTest()
   Router router = new Router();
   List&lt;Contact&gt; contacts;
 
-  // Create k nodes and register nodes 1 through k-1 onto node 0.
   List&lt;Node&gt; nodes = CreateNodes(Constants.K);
   CreateCircularChain(nodes);
 
@@ -1399,6 +1424,102 @@ public void CircularChainBackwardCrawlTest()
   Assert.IsTrue(contacts.Count == Constants.K - 1, &quot;Expected alpha items&quot;);
   Assert.IsTrue(contacts[0] == nodes[0].OurContact, &quot;Expected contact 0 to be returned.&quot;);
 }</pre>
+<h4>Automatic Discovery Unit Tests</h4>
+<p>The node lookup algorithm has the interesting (and intended) affect that 
+nodes discover other nodes when a node gets a request from a node that is not in 
+its list of known nodes.&nbsp; We'll use this helper method for exploring node 
+buckets:</p>
+<pre>/// &lt;summary&gt;
+/// For unit testing...
+/// &lt;/summary&gt;
+/// &lt;returns&gt;A list of tuples representing the bucket index and the count of contacts in each bucket.&lt;/returns&gt;
+public List&lt;(int idx, int count)&gt; GetBucketContactCounts()
+{
+  return buckets.
+    Select(b =&gt; new { bucket = b, idx = b.Index }).
+    Where(b =&gt; b.bucket.Contacts.Count &gt; 0).
+    Select(b =&gt; (b.idx, b.bucket.Contacts.Count)).ToList();
+}</pre>
+<p>A simple unit test illustrates this.&nbsp; Node 1 knows about node 2, but 
+node 2 doesn't know anything else.&nbsp; After a node lookup (or any other RPC 
+actually to node 2), node 2 also knows about node 1:</p>
+<pre>[TestMethod]
+public void SimpleDiscoveryTest()
+{
+  Node node1 = CreateNode(ID.OneID());
+  Node node2 = CreateNode(ID.OneID() &lt;&lt; 1);
+  node1.SimpleRegistration(node2.OurContact);
+
+  // Initial state:
+  Assert.IsTrue(node1.BucketList.GetBucketContactCounts().Count == 1, &quot;Expected only one contact.&quot;);
+  Assert.IsTrue(node2.BucketList.GetBucketContactCounts().Count == 0, &quot;Expected no contacts.&quot;);
+
+  new Router().NodeLookup(ID.ZeroID(), node1);
+
+  // Final state:
+  Assert.IsTrue(node1.BucketList.GetBucketContactCounts().Count == 1, &quot;Expected only one contact.&quot;);
+  Assert.IsTrue(node2.BucketList.GetBucketContactCounts().Count == 1, &quot;Expected one contact.&quot;);
+  Assert.IsTrue(node2.BucketList.GetBucketContactCounts().First().idx == 1, &quot;Expected contact in bucket 1&quot;);
+}</pre>
+<p>What happens in the linear chain, where we start with node 1 and discover 
+that node 19 is the closest node?&nbsp; Because of this condition in the 
+discovery routine:</p>
+<pre>else
+{
+  // If a cycle doesn't find a closer node, if closestNode is unchanged, 
+  // then the initiating node sends a FIND_* RPC to each of the k closest nodes that it has not already queried.
+  workingShortList = new List&lt;Contact&gt;(allContacts);
+  workingShortList.RemoveRange(successfulContacts);
+  workingShortList = workingShortList.Take(Constants.K).ToList();
+}</pre>
+<p>even nodes that are not closer are explored.&nbsp; This results in each node 
+discovering all the other nodes (up to <i>k</i> nodes).&nbsp; Initially, this is 
+the state of known nodes:</p>
+<p><img border="0" src="initialKnown.png" width="477" height="203"></p>
+<p>The green nodes know only their neighbor orange nodes.&nbsp; Node 0 knows 
+about node 1, node 1 knows about nodes 0 and 2, etc.</p>
+<ul>
+	<li>When we search forward for MaxID, the node performing the search 
+	iteratively tests the next node to the right (as it's distance is shorter to 
+	MaxID) and therefore starts adding contacts that it didn't know about.</li>
+<li>When we search for ID==1, the code branch above is executed because we have 
+a path toward the right (where the distance is greater than ID==1) that hasn't 
+been explored.</li>
+	<li>Remember that we're always sorting the working short list by distance! 
+</li>
+</ul>
+<p>Therefore, regardless of how the node is found, any untested contact is 
+checked, regardless of whether it is farther in distance, until we've acquired
+<i>k</i> closest nodes or there are no remaining unchecked nodes.&nbsp; The result is that 
+each node knowing about the other nodes in decreasing count:</p>
+<p><img border="0" src="finalKnown.png" width="477" height="296"></p>
+<ul>
+	<li>Node 0 knows 19 other contactss</li>
+	<li>Node 1 knows 19 other contacts (all the forward contacts plus node 0 
+	which it originally knew)</li>
+	<li>Node 2 knows 18 other contacts (all the forward contacts plus node 1 
+	which it originally knew)</li>
+	<lietc.</li>
+</ul>
+<p>We can write a unit test to verify this:</p>
+<pre>[[TestMethod]
+public void LinearChainDiscoveryTest()
+{  Router router = new Router();
+  List&lt;Node&gt; nodes = CreateNodes(Constants.K);
+  CreateLinearChain(nodes);
+
+  nodes.ForEach(n =&gt; router.NodeLookup(ID.OneID(), n));
+
+  // Final state::
+  nodes.ForEachWithIndex((n, idx) =&gt;
+  {
+    // First two nodes know K-1 contacts.
+    int expectedContacts = Constants.K - 1 - (idx &gt; 1 ? idx - 1 : 0);
+    Assert.IsTrue(n.BucketList.GetBucketContactCounts().Count == expectedContacts, &quot;Expected &quot; + expectedContacts + &quot; contact(s).&quot;);
+  });
+}</pre>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <h2>Asynchronous Behavior</h2>
@@ -1419,6 +1540,46 @@ regards to the node lookup algorithm.&nbsp; </p>
 from start to finish. </font></p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
+
+<p><font color="#FF00FF">If there are empty branches in the tree, there might be more 
+than one leaf with the longest common prefix. In that case, the closest leaf to 
+x will be the closest leaf to ID x produced by flipping the bits in x 
+corresponding to the empty branches of the tree.</font></p>
+<p><font color="#FF0000">TODO: Why the randomization?</font></p>
+<pre>public ID RandomizeBeyond(int bit)
+{
+  byte[] randomized = new byte[ID_LENGTH];
+  data.CopyTo(randomized, 0);
+
+  FlipBit(randomized, bit); // Invert pivot bit
+
+  // And randomly flip the rest
+  for(int i = bit + 1; i &lt; 8 * ID_LENGTH; i++) 
+  {
+    if(rnd.NextDouble() &lt; 0.5) 
+    {
+      FlipBit(randomized, i);
+    }
+  }
+
+  return new ID(randomized);
+}
+
+/// &lt;summary&gt;
+/// Flips the given bit in the byte array.
+/// Byte array must be ID_LENGTH long.
+/// &lt;/summary&gt;
+/// &lt;param name=&quot;data&quot;&gt;Data to work on&lt;/param&gt;
+/// &lt;param name=&quot;bit&quot;&gt;Bit used to generate the mask&lt;/param&gt;
+private static void FlipBit(byte[] data, int bit)
+{
+  int byteIndex = bit / 8;
+  int byteBit = bit % 8;
+  byte mask = (byte) (1 &lt;&lt; byteBit);
+
+  data[byteIndex] = (byte) (data[byteIndex] ^ mask); // Use a mask to flip the bit
+}
+</pre>
 
 </body>
 

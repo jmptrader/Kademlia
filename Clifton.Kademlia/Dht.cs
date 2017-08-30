@@ -6,7 +6,17 @@ using System.Threading.Tasks;
 
 namespace Clifton.Kademlia
 {
-	public class NodeLookup
+	public class Dht
 	{
+		protected Node node;
+
+		public Dht(Node node)
+		{
+			this.node = node;
+		}
+
+		public void Store(string key, string val)
+		{
+		}
 	}
 }

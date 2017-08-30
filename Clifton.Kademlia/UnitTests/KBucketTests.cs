@@ -16,10 +16,13 @@ namespace UnitTests
 		public void LeastSeenOrderingTest()
 		{
 			KBucket kbucket = new KBucket(0);
+			ID id = ID.OneID();
+
 			40.ForEach(() =>
 			{
-				kbucket.HaveContact(new Contact(), contact => false);
-				Thread.Sleep(2);		// need to have some time go by.
+				kbucket.HaveContact(new Contact() { NodeID = id }, contact => false);
+				id <<= 1;				// id's should be different.
+				Thread.Sleep(2);		// need to have some time go by so DateTime's are different.
 			});
 
 			Assert.IsTrue(kbucket.Contacts.Count == Constants.K, "Expected k contacts.");

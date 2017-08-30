@@ -56,6 +56,11 @@ namespace Clifton.Kademlia
 			}
 		}
 
+		public static IEnumerable<int> Range(this int n)
+		{
+			return Enumerable.Range(0, n);
+		}
+
 		public static void MoveToTail<T>(this List<T> list, T item, Predicate<T> pred)
 		{
 			int idx = list.FindIndex(pred);
@@ -141,5 +146,54 @@ namespace Clifton.Kademlia
         {
             return items[1];
         }
+
+		public static IEnumerable<bool> Bits(this byte[] bytes)
+		{
+			IEnumerable<bool> GetBits(byte b)
+			{
+				for (int i = 0; i < 8; i++)
+				{
+					yield return (b & 0x80) != 0;
+					b <<= 1;
+				}
+			}
+
+			return bytes.SelectMany(GetBits);
+		}
+
+		/// <summary>
+		/// Value cannot exceed max.
+		/// </summary>
+		public static int Min(this int a, int max)
+		{
+			return (a > max) ? max : a;
+		}
+
+		/// <summary>
+		/// Value cannot be less than min.
+		/// </summary>
+		public static int Max(this int a, int min)
+		{
+			return (a < min) ? min : a;
+		}
+
+		public static T Next<T>(this IEnumerable<T> source)
+		{
+			using (var enumerator = source.GetEnumerator())
+			{
+				enumerator.MoveNext();
+
+				return enumerator.Current;
+			}
+		}
+
+		public static bool IsNext<T>(this IEnumerable<T> source, Func<T, bool> predicate)
+		{
+			using (var enumerator = source.GetEnumerator())
+			{
+				enumerator.MoveNext();
+				return predicate(enumerator.Current);
+			}
+		}
 	}
 }

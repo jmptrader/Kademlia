@@ -47,7 +47,7 @@ namespace Clifton.Kademlia
         /// <summary>
         /// For unit testing...
         /// </summary>
-        /// <returns></returns>
+        /// <returns>A list of tuples representing the bucket index and the count of contacts in each bucket.</returns>
         public List<(int idx, int count)> GetBucketContactCounts()
         {
             return buckets.
