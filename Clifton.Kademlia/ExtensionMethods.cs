@@ -131,5 +131,15 @@ namespace Clifton.Kademlia
 				}
 			});
 		}
+
+        public static int Mod(this int a, int b)
+        {
+            return(a % b + b) % b;
+        }
+
+        public static T Second<T>(this List<T> items)
+        {
+            return items[1];
+        }
 	}
 }

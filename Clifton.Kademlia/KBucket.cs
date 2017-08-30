@@ -6,6 +6,7 @@ namespace Clifton.Kademlia
 {
 	public class KBucket
 	{
+        public int Index { get; }
 		public List<Contact> Contacts { get { return contacts; } }
 
 		public bool Exists(ID id)
@@ -15,8 +16,9 @@ namespace Clifton.Kademlia
 
 		protected List<Contact> contacts;
 
-		public KBucket()
+		public KBucket(int idx)
 		{
+            Index = idx;
 			contacts = new List<Contact>(Constants.K);
 		}
 

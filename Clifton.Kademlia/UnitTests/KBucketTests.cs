@@ -15,7 +15,7 @@ namespace UnitTests
 		[TestMethod]
 		public void LeastSeenOrderingTest()
 		{
-			KBucket kbucket = new KBucket();
+			KBucket kbucket = new KBucket(0);
 			40.ForEach(() =>
 			{
 				kbucket.HaveContact(new Contact(), contact => false);

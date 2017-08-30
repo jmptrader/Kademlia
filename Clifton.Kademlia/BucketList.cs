@@ -11,7 +11,8 @@ namespace Clifton.Kademlia
 		public BucketList()
 		{
 			buckets = new List<KBucket>(Constants.ID_LENGTH_BITS);
-			Constants.ID_LENGTH_BITS.ForEach(() => buckets.Add(new KBucket()));
+
+            Constants.ID_LENGTH_BITS.ForEach((n) => buckets.Add(new KBucket(n)));
 		}
 
 		public void HaveContact(ID ourId, Contact contact, Func<Contact, bool> discardHead)
@@ -42,5 +43,17 @@ namespace Clifton.Kademlia
 
 			return contacts.Select(c=>c.contact).ToList();
 		}
-	}
+
+        /// <summary>
+        /// For unit testing...
+        /// </summary>
+        /// <returns></returns>
+        public List<(int idx, int count)> GetBucketContactCounts()
+        {
+            return buckets.
+                Select(b => new { bucket = b, idx = b.Index }).
+                Where(b => b.bucket.Contacts.Count > 0).
+                Select(b => (b.idx, b.bucket.Contacts.Count)).ToList();
+        }
+    }
 }

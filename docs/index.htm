@@ -1115,19 +1115,122 @@ appears that &quot;nodes discovered in the lookup algorithm&quot; is the meaning
 	active contacts.</font></li>
 	<li><font color="#FF00FF">If a cycle doesn't find a closer node, if 
 	closestNode is unchanged, then the initiating node sends a FIND_* RPC to 
-	each of the k closest nodes that it has not already queried.</font></li>
+	each of the k closest nodes that it has not already queried.&nbsp; </font>I 
+	find this statement ambiguous -- do we use the alpha list of un-contacted 
+	nodes, or the full list of closest nodes returned by the original &quot;find 
+	closest nodes&quot; call?&nbsp; The implementations I've looked at use the list 
+	of contacts that were accumulated starting from the original alpha contacts.</li>
 	<li><font color="#FF00FF">At the end of this process, the node will have 
 	accumulated a set of k active contacts or (if the RPC was FIND_VALUE) may 
 	have found a data value. Either a set of triples or the value is returned to 
 	the caller.</font></li>
 </ol>
-<h4>Unit Test</h4>
+<p>All of this is implemented (not necessarily very elegantly) in two methods.&nbsp; 
+The outer method performs the looping after initializing the short list:</p>
+<pre>public List&lt;Contact&gt; NodeLookup(ID id, Node ourNode)
+{
+  BucketList bucketList = ourNode.BucketList;
+
+  // Take alpha close contacts, excluding ourselves (we should never be in our own bucket list anyways.)
+  // The first alpha contacts selected are used to create a shortlist for the search.
+  List&lt;Contact&gt; shortList = bucketList.GetCloseContacts(id, ourNode.OurContact.NodeID).Take(Constants.ALPHA).ToList();
+  List&lt;Contact&gt; allContacts = new List&lt;Contact&gt;(shortList);
+
+  // Some work to do?
+  if (shortList.Count &gt; 0)
+  {
+    List&lt;Contact&gt; successfulContacts = new List&lt;Contact&gt;();
+    bool hasNewCloseContact = false;
+    ID distance;
+    distance = shortList[0].NodeID ^ id;
+    List&lt;Contact&gt; workingShortList = new List&lt;Contact&gt;(shortList);
+
+    do
+    {
+      List&lt;Contact&gt; newContacts = LookupCloserContacts(id, ourNode, workingShortList, successfulContacts);
+      allContacts.AddRangeDistinct(newContacts, (a, b) =&gt; a.NodeID == b.NodeID);
+
+      // The node then fills the shortlist with contacts from the replies received. 
+      shortList.AddRangeDistinct(newContacts, (a, b) =&gt; a.NodeID == b.NodeID);
+      shortList = shortList.OrderBy(c =&gt; c.NodeID ^ id).ToList();
+
+      // From the shortlist it selects another alpha contacts.
+      workingShortList = new List&lt;Contact&gt;(shortList);
+
+      // The only condition for this selection is that they have not already been contacted.
+      workingShortList.RemoveRange(successfulContacts, (a, b) =&gt; a.NodeID == b.NodeID);
+      workingShortList = workingShortList.OrderBy(c =&gt; c.NodeID ^ id).Take(Constants.ALPHA).ToList(); // sort by distance!
+
+      // Each such parallel search updates closestNode, the closest node seen so far.
+      // TODO: Make this parallel!
+      hasNewCloseContact = (shortList[0].NodeID ^ id) &lt; distance;
+
+      if (hasNewCloseContact)
+      {
+        distance = shortList[0].NodeID ^ id;
+      }
+      else
+      {
+        // If a cycle doesn't find a closer node, if closestNode is unchanged, 
+        // then the initiating node sends a FIND_* RPC to each of the k closest nodes that it has not already queried.
+        workingShortList = new List&lt;Contact&gt;(allContacts);
+        workingShortList.RemoveRange(successfulContacts);
+        workingShortList = workingShortList.Take(Constants.K).ToList();
+      }
+
+      // Once again a FIND_* RPC is sent to each in parallel.
+
+      // The sequence of parallel searches is continued until either no node in the sets returned is closer 
+      // than the closest node already seen or the initiating node has accumulated k probed 
+      // and known to be active contacts.
+    } while ((!hasNewCloseContact || shortList.Count &lt; Constants.K) &amp;&amp; workingShortList.Count &gt; 0);
+  }
+
+  // Return at most k contacts.
+  return shortList.Take(Constants.K).ToList();
+}</pre>
+<p>and the inner method handles the <code>FindNode</code> call results to the recipient 
+nodes:</p>
+<pre>protected List&lt;Contact&gt; LookupCloserContacts(ID id, Node ourNode, List&lt;Contact&gt; workingShortList, List&lt;Contact&gt; successfulContacts)
+{
+  List&lt;Contact&gt; unsucessfulContacts = new List&lt;Contact&gt;();
+
+  // The known closest node is the first entry.
+  List&lt;Contact&gt; newContacts = new List&lt;Contact&gt;();
+
+  // The node then sends parallel, asynchronous FIND_* RPCs to the alpha contacts in the shortlist. 
+  // Each contact, if it is live, should normally return k triples. 
+  // If any of the alpha contacts fails to reply, it is removed from the shortlist, at least temporarily.
+  workingShortList.ForEach(c =&gt;
+  {
+    List&lt;Contact&gt; targetContacts = ourNode.OurContact.Address.FindNode(ourNode.OurContact, c.Address, ID.RandomID(), id);
+
+    // Let's assume that failure to contact a node results in a null.
+    if (targetContacts != null)
+    {
+      successfulContacts.Add(c);
+
+      // Add the nodes it returns to the new contacts list.
+      newContacts.AddRangeDistinct(targetContacts, (a, b) =&gt; a.NodeID == b.NodeID);
+    }
+    else
+    {
+      unsucessfulContacts.Add(c);
+    }
+  });
+
+  // If any of the alpha contacts fails to reply, it is removed from the shortlist, at least temporarily.
+  workingShortList.RemoveRange(unsucessfulContacts); // These are our references
+
+  return newContacts;
+}</pre>
+<h4>Unit Testing Node Lookup</h4>
 <p>Writing a unit test for this is an interesting exercise in testing the 
 algorithm in a controlled manner.&nbsp; We can start with a node that has a 
 bucket list with <i>k</i> nodes, but only the first node knows about the other 
 nodes.&nbsp; We also want to control the ID's so that the test results are 100% 
 reproducible and in such a way that the distance metric is easily worked with.&nbsp; 
-For that, we'll create nodes (up to 159) where the node id is 2<sup>^nodeNum</sup>:
+For that, we'll create <i>k</i> nodes where the node id is 2<sup>^n</sup>:
 </p>
 <pre>/// &lt;summary&gt;
 /// Create nodes with known ID's from 1 to 2^n
@@ -1148,6 +1251,7 @@ private List&lt;Node&gt; CreateNodes(int n)
 
   return nodes;
 }</pre>
+<h4>Simple One Node Unit Test</h4>
 <p>Now we can write a simple test in which 20 nodes are created, but only the 
 first node knows of the remaining 19.&nbsp; This helps us test the case where 
 the closer contacts return nothing, so all the work is being done by the 
@@ -1187,9 +1291,114 @@ public void SimpleOneNodeTest()
 that closest node.&nbsp; If we ask node 19 for ID(0), it must traverse to node 0 
 to find the closest match.&nbsp; Note how we get a list of <i>k</i> visited 
 nodes.</p>
-<p>Next, we can circularize the list to test that the routine exits when the no 
+<p>Also, we can circularize the list to test that the routine exits when the no 
 nodes closer can the current one exists.&nbsp; Note how we get a list of alpha 
-visited nodes.</p>
+visited nodes.&nbsp; These tests use the following helpers:</p>
+<pre>private void CreateLinearChain(List&lt;Node&gt; nodes)
+{
+  // edge cases:
+  nodes[0].SimpleRegistration(nodes[1].OurContact);
+  nodes[Constants.K - 1].SimpleRegistration(nodes[Constants.K - 2].OurContact);
+
+  // The rest:
+  for (int i = 1; i &lt; Constants.K - 1; i++)
+  {
+    nodes[i].SimpleRegistration(nodes[i - 1].OurContact);
+    nodes[i].SimpleRegistration(nodes[i + 1].OurContact);
+  }
+}
+
+private void CreateCircularChain(List&lt;Node&gt; nodes)
+{
+  for (int i = 0; i &lt; Constants.K; i++)
+  {
+    nodes[i].SimpleRegistration(nodes[(i - 1).Mod(Constants.K)].OurContact);
+    nodes[i].SimpleRegistration(nodes[(i + 1).Mod(Constants.K)].OurContact);
+  }
+}</pre>
+<p>And because -1 % 20 according to C#/C++ is -1 rather than 19, we have this 
+extension method to do the math correctly:</p>
+<pre>public static int Mod(this int a, int b)
+{
+  return(a % b + b) % b;
+}</pre>
+<h4>Linear Chain Forward Crawl Unit Test</h4>
+<pre>[TestMethod]
+public void LinearChainForwardCrawlTest()
+{
+  Router router = new Router();
+  List&lt;Contact&gt; contacts;
+
+  // Create k nodes and register nodes 1 through k-1 onto node 0.
+  List&lt;Node&gt; nodes = CreateNodes(Constants.K);
+  CreateLinearChain(nodes);
+
+  // forward crawl...
+  contacts = router.NodeLookup(ID.MaxID(), nodes[0]);
+  // Note that after the node lookup, the kbuckets have been updated with the requestors.
+
+  Assert.IsTrue(contacts.Count == Constants.K - 1, &quot;Expected alpha items&quot;);
+  Assert.IsTrue(contacts[0] == nodes[Constants.K - 1].OurContact, &quot;Expected contact 0 to be returned.&quot;);
+}</pre>
+<h4>Linear Reverse Crawl Unit Test</h4>
+<pre>[TestMethod]
+public void LinearChainBackwardCrawlTest()
+{
+  Router router = new Router();
+  List&lt;Contact&gt; contacts;
+
+  // Create k nodes and register nodes 1 through k-1 onto node 0.
+  List&lt;Node&gt; nodes = CreateNodes(Constants.K);
+  CreateLinearChain(nodes);
+
+  // backward crawl...
+  contacts = router.NodeLookup(ID.ZeroID(), nodes[Constants.K - 1]);
+  // Note that after the node lookup, the kbuckets have been updated with the requestors.
+
+  Assert.IsTrue(contacts.Count == Constants.K - 1, &quot;Expected alpha items&quot;);
+  Assert.IsTrue(contacts[0] == nodes[0].OurContact, &quot;Expected contact 0 to be returned.&quot;);
+}</pre>
+<h4>Circular Chain Forward Crawl Unit Test</h4>
+<p>This test, and the next one, excersises the branch in the code that handles 
+&quot;If a cycle doesn't find a closer node, if closestNode is unchanged, then the 
+initiating node sends a FIND_* RPC to each of the k closest nodes that it has 
+not already queried.&quot;&nbsp; In the previous tests, there are no remaining 
+contacts to test.&nbsp; In this test and the next one, there are.</p>
+<pre>[TestMethod]
+public void CircularChainForwardCrawlTest()
+{
+  Router router = new Router();
+  List&lt;Contact&gt; contacts;
+
+  // Create k nodes and register nodes 1 through k-1 onto node 0.
+  List&lt;Node&gt; nodes = CreateNodes(Constants.K);
+  CreateCircularChain(nodes);
+
+  // forward crawl...
+  contacts = router.NodeLookup(ID.MaxID(), nodes[0]);
+  // Note that after the node lookup, the kbuckets have been updated with the requestors.
+
+  Assert.IsTrue(contacts.Count == Constants.K - 1, &quot;Expected alpha items&quot;);
+  Assert.IsTrue(contacts[0] == nodes[Constants.K - 1].OurContact, &quot;Expected contact 0 to be returned.&quot;);
+}</pre>
+<h4>Circular Chain Reverse Crawl Unit Test</h4>
+<pre>[TestMethod]
+public void CircularChainBackwardCrawlTest()
+{
+  Router router = new Router();
+  List&lt;Contact&gt; contacts;
+
+  // Create k nodes and register nodes 1 through k-1 onto node 0.
+  List&lt;Node&gt; nodes = CreateNodes(Constants.K);
+  CreateCircularChain(nodes);
+
+  // backward crawl...
+  contacts = router.NodeLookup(ID.ZeroID(), nodes[Constants.K - 1]);
+  // Note that after the node lookup, the kbuckets have been updated with the requestors.
+
+  Assert.IsTrue(contacts.Count == Constants.K - 1, &quot;Expected alpha items&quot;);
+  Assert.IsTrue(contacts[0] == nodes[0].OurContact, &quot;Expected contact 0 to be returned.&quot;);
+}</pre>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <h2>Asynchronous Behavior</h2>
