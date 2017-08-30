@@ -11,6 +11,13 @@
 <p>Implementing the Kademlia Peer-to-Peer Distributed Hash Table</p>
 <p>A journey from specification to implementation (with some help along the 
 way.)</p>
+<h2>TL;DR</h2>
+<p>This is a huge article.&nbsp; The whole point of it is to show how I took the 
+Kademlia peer-to-peer distributed hash table specification and implement it 
+using a couple other open source implementations (one in C#, one in Python) as 
+well as some ancillary documentation to do figure stuff out.&nbsp; Yes, it's a 
+tome.&nbsp; But the benefit for me is that I now have a fully documented code 
+base that maps implementation to specification, something rarely seen.</p>
 <h2>Introduction</h2>
 <p>There's quite a few implementations of the Kademlia peer-to-peer (P2P) 
 distributed hash table (DHT) algorithm out there on GitHub.&nbsp; My perusal of 
@@ -97,9 +104,8 @@ components, such as
 <a href="https://www.codeproject.com/Articles/1176140/Understanding-Merkle-Trees-Why-use-them-who-uses-t">
 Merkle Trees</a> and a
 <a href="https://www.codeproject.com/Articles/1172340/Hashcash-or-Proof-of-Work">
-Proof of Work</a> algorithm, and a deep understanding of a respected P2P DHT 
-algorithm seems like the next logical step in understanding the whole gestalt of 
-blockchains.&nbsp; </p>
+Proof of Work</a> algorithm; a deep understanding of a respected P2P DHT 
+algorithm seemed like the next logical step in understanding the whole gestalt of blockchains.&nbsp; </p>
 <p>I also am a firm believer that:</p>
 <ol>
 	<li><a href="https://en.wikipedia.org/wiki/List_of_cryptocurrencies">As 
@@ -109,7 +115,7 @@ blockchains.&nbsp; </p>
 	<a href="http://www.businessinsider.com/bitcoin-price-security-equity-sec-2017-7">
 	even the SEC is looking at how to regulate cryptocurrencies</a>, and I 
 	suspect the IRS is trying to figure out how to tax these things.</li>
-	<li>The underlying technology to not just cryptocurrency but any blockchain 
+	<li>The underlying technology of not just cryptocurrency but any blockchain 
 	that implement <a href="https://en.wikipedia.org/wiki/Smart_contract">smart 
 	contracts</a> essentially must include a peer-to-peer distributed hash 
 	table, at least with regards to how blockchain technology is being discussed 
