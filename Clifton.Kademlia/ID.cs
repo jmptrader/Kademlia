@@ -107,6 +107,18 @@ namespace Clifton.Kademlia
 		}
 
 		/// <summary>
+		/// Returns a SHA1 of the string.
+		/// </summary>
+		/// <param name="s"></param>
+		/// <returns></returns>
+		public static ID FromString(string s)
+		{
+			HashAlgorithm hasher = new SHA1CryptoServiceProvider(); // Keeping this around results in exceptions
+
+			return new ID(hasher.ComputeHash(Encoding.UTF8.GetBytes(s)));
+		}
+
+		/// <summary>
 		/// Produce a random ID.
 		/// </summary>
 		/// <returns>random ID generated</returns>
@@ -139,17 +151,6 @@ namespace Clifton.Kademlia
 			Constants.ID_LENGTH_BYTES.ForEach(n => data[n] = 0xFF);
 
 			return new ID(data);
-		}
-
-		/// <summary>
-		/// Hash a string to produce an ID
-		/// </summary>
-		/// <param name="key">Key string to convert</param>
-		/// <returns>An ID that represents the hash of the input string</returns>
-		public static ID Hash(string key)
-		{
-			HashAlgorithm hasher = new SHA1CryptoServiceProvider(); // Keeping this around results in exceptions
-			return new ID(hasher.ComputeHash(Encoding.UTF8.GetBytes(key)));
 		}
 
 		/// <summary>

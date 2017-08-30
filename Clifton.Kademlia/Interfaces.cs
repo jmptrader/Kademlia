@@ -10,6 +10,9 @@ namespace Clifton.Kademlia
 
 	public interface IStorage
 	{
+		int Entries();
+		bool HasValue(string key);
+		bool TryGetValue(string key, out string val);
 		string Get(string key);
 		void Set(string key, string val);
 	}
@@ -17,8 +20,8 @@ namespace Clifton.Kademlia
 	public interface IAddress
 	{
 		Contact Ping(Contact sender, IAddress recipient, ID randomID);
-		void Store(Contact sender, IAddress recipient, ID randomID, string key, string val);
-		List<Contact> FindNode(Contact sender, IAddress recipient, ID randomID, ID toFind);
-		(List<Contact> nodes, string val) FindValue(Contact sender, IAddress recipient, ID randomID, string key);
+		void Store(Contact sender, IAddress recipient, ID randomID, ID keyID, string val);
+		(List<Contact> nodes, string val) FindNode(Contact sender, IAddress recipient, ID randomID, ID toFind);
+		(List<Contact> nodes, string val) FindValue(Contact sender, IAddress recipient, ID randomID, ID keyID);
 	}
 }

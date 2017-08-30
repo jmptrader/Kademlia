@@ -20,12 +20,12 @@ namespace UnitTests
 			Router router = new Router();
 			List<Contact> contacts;
 
-			contacts = router.NodeLookup(ID.ZeroID(), nodes[0]);
+			contacts = router.Lookup(ID.ZeroID(), nodes[0], Dht.NodeLookup).contacts;
 			Assert.IsTrue(contacts.Count == 3, "Expected alpha items");
 			// Don't forget, we exclude ourselves!
 			Assert.IsTrue(contacts[0] == nodes[1].OurContact, "Expected contact 0 to be returned.");
 
-			contacts = router.NodeLookup(ID.MaxID(), nodes[0]);
+			contacts = router.Lookup(ID.MaxID(), nodes[0], Dht.NodeLookup).contacts;
 			Assert.IsTrue(contacts.Count == 3, "Expected alpha items");
 			Assert.IsTrue(contacts[0] == nodes[Constants.K - 1].OurContact, "Expected contact 0 to be returned.");
 		}
@@ -40,7 +40,7 @@ namespace UnitTests
             CreateLinearChain(nodes);
 
             // forward crawl...
-            contacts = router.NodeLookup(ID.MaxID(), nodes[0]);
+            contacts = router.Lookup(ID.MaxID(), nodes[0], Dht.NodeLookup).contacts;
             // Note that after the node lookup, the kbuckets have been updated with the requestors.
 
             Assert.IsTrue(contacts.Count == Constants.K - 1, "Expected alpha items");
@@ -57,7 +57,7 @@ namespace UnitTests
             CreateLinearChain(nodes);
 
 			// backward crawl...
-			contacts = router.NodeLookup(ID.ZeroID(), nodes[Constants.K - 1]);
+			contacts = router.Lookup(ID.ZeroID(), nodes[Constants.K - 1], Dht.NodeLookup).contacts;
             // Note that after the node lookup, the kbuckets have been updated with the requestors.
 
             Assert.IsTrue(contacts.Count == Constants.K - 1, "Expected alpha items");
@@ -74,7 +74,7 @@ namespace UnitTests
             CreateCircularChain(nodes);
 
             // forward crawl...
-            contacts = router.NodeLookup(ID.MaxID(), nodes[0]);
+            contacts = router.Lookup(ID.MaxID(), nodes[0], Dht.NodeLookup).contacts;
             // Note that after the node lookup, the kbuckets have been updated with the requestors.
 
             Assert.IsTrue(contacts.Count == Constants.K - 1, "Expected alpha items");
@@ -91,7 +91,7 @@ namespace UnitTests
             CreateCircularChain(nodes);
 
             // backward crawl...
-            contacts = router.NodeLookup(ID.ZeroID(), nodes[Constants.K - 1]);
+            contacts = router.Lookup(ID.ZeroID(), nodes[Constants.K - 1], Dht.NodeLookup).contacts;
             // Note that after the node lookup, the kbuckets have been updated with the requestors.
 
             Assert.IsTrue(contacts.Count == Constants.K - 1, "Expected alpha items");
@@ -103,7 +103,7 @@ namespace UnitTests
         {
             Router router = new Router();
             Node node = CreateNode(ID.OneID());
-            List<Contact> contacts = router.NodeLookup(ID.ZeroID(), node);
+            List<Contact> contacts = router.Lookup(ID.ZeroID(), node, Dht.NodeLookup).contacts;
 
             Assert.IsTrue(contacts.Count == 0, "Expected 0 contacts.");
         }
@@ -119,7 +119,7 @@ namespace UnitTests
 			Assert.IsTrue(node1.BucketList.GetBucketContactCounts().Count == 1, "Expected only one contact.");
 			Assert.IsTrue(node2.BucketList.GetBucketContactCounts().Count == 0, "Expected no contacts.");
 
-			new Router().NodeLookup(ID.ZeroID(), node1);
+			new Router().Lookup(ID.ZeroID(), node1, Dht.NodeLookup);
 
 			// Final state:
 			Assert.IsTrue(node1.BucketList.GetBucketContactCounts().Count == 1, "Expected only one contact.");
@@ -134,7 +134,7 @@ namespace UnitTests
 			List<Node> nodes = CreateNodes(Constants.K);
 			CreateLinearChain(nodes);
 
-			nodes.ForEach(n => router.NodeLookup(ID.MaxID(), n));
+			nodes.ForEach(n => router.Lookup(ID.MaxID(), n, Dht.NodeLookup));
 
 			// Final state:
 			nodes.ForEachWithIndex((n, idx) =>
@@ -146,7 +146,7 @@ namespace UnitTests
 			});
 		}
 
-		public Node CreateNode(ID id)
+		public static Node CreateNode(ID id)
 		{
 			var address = new InMemoryNodeAddress();
 			Node node = new Node(address, id);
@@ -158,7 +158,7 @@ namespace UnitTests
 		/// <summary>
 		/// Create nodes with known ID's from 1 to 2^n
 		/// </summary>
-		private List<Node> CreateNodes(int n)
+		public static List<Node> CreateNodes(int n)
 		{
 			List<Node> nodes = new List<Node>();
 			ID id = ID.OneID();
@@ -175,27 +175,36 @@ namespace UnitTests
 			return nodes;
 		}
 
-        private void CreateLinearChain(List<Node> nodes)
+		public static void CreateLinearChain(List<Node> nodes)
         {
+			int count = nodes.Count;
+
             // edge cases:
             nodes[0].SimpleRegistration(nodes[1].OurContact);
-            nodes[Constants.K - 1].SimpleRegistration(nodes[Constants.K - 2].OurContact);
+            nodes[count - 1].SimpleRegistration(nodes[count - 2].OurContact);
 
             // The rest:
-            for (int i = 1; i < Constants.K - 1; i++)
+            for (int i = 1; i < count - 1; i++)
             {
                 nodes[i].SimpleRegistration(nodes[i - 1].OurContact);
                 nodes[i].SimpleRegistration(nodes[i + 1].OurContact);
             }
         }
 
-        private void CreateCircularChain(List<Node> nodes)
+		public static void CreateCircularChain(List<Node> nodes)
         {
-            for (int i = 0; i < Constants.K; i++)
-            {
-                nodes[i].SimpleRegistration(nodes[(i - 1).Mod(Constants.K)].OurContact);
-                nodes[i].SimpleRegistration(nodes[(i + 1).Mod(Constants.K)].OurContact);
-            }
+			int count = nodes.Count;
+
+			nodes.ForEachWithIndex((n, i) =>
+			{
+				nodes[i].SimpleRegistration(nodes[(i - 1).Mod(count)].OurContact);
+				nodes[i].SimpleRegistration(nodes[(i + 1).Mod(count)].OurContact);
+			});
         }
+
+		public static void CreateStorage(List<Node> nodes)
+		{
+			nodes.ForEach(n => n.Storage = new InMemoryStorage());
+		}
     }
 }

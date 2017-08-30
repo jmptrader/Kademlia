@@ -1331,12 +1331,14 @@ nodes closer can the current one exists.&nbsp; Note how we get a list of alpha
 visited nodes.&nbsp; These tests use the following helpers:</p>
 <pre>private void CreateLinearChain(List&lt;Node&gt; nodes)
 {
+  int count = nodes.Count;
+
   // edge cases:
   nodes[0].SimpleRegistration(nodes[1].OurContact);
-  nodes[Constants.K - 1].SimpleRegistration(nodes[Constants.K - 2].OurContact);
+  nodes[count - 1].SimpleRegistration(nodes[count - 2].OurContact);
 
   // The rest:
-  for (int i = 1; i &lt; Constants.K - 1; i++)
+  for (int i = 1; i &lt; count - 1; i++)
   {
     nodes[i].SimpleRegistration(nodes[i - 1].OurContact);
     nodes[i].SimpleRegistration(nodes[i + 1].OurContact);
@@ -1345,14 +1347,16 @@ visited nodes.&nbsp; These tests use the following helpers:</p>
 
 private void CreateCircularChain(List&lt;Node&gt; nodes)
 {
-  for (int i = 0; i &lt; Constants.K; i++)
+  int count = nodes.Count;
+
+  nodes.ForEachWithIndex((n, i) =&gt;
   {
-    nodes[i].SimpleRegistration(nodes[(i - 1).Mod(Constants.K)].OurContact);
-    nodes[i].SimpleRegistration(nodes[(i + 1).Mod(Constants.K)].OurContact);
-  }
+    nodes[i].SimpleRegistration(nodes[(i - 1).Mod(count)].OurContact);
+    nodes[i].SimpleRegistration(nodes[(i + 1).Mod(count)].OurContact);
+  });
 }</pre>
-<p>And because -1 % 20 according to C#/C++ is -1 rather than 19, we have this 
-extension method to do the math correctly:</p>
+<p>And because <code>-1 % 20</code> according to C#/C++ is -1 rather than 19, we 
+have this extension method to do the modulus operation correctly:</p>
 <pre>public static int Mod(this int a, int b)
 {
   return(a % b + b) % b;
@@ -1505,7 +1509,7 @@ each node knowing about the other nodes in decreasing count:</p>
 	which it originally knew)</li>
 	<li>Node 2 knows 18 other contacts (all the forward contacts plus node 1 
 	which it originally knew)</li>
-	<lietc.</li>
+	ietc.</li>
 </ul>
 <p>We can write a unit test to verify this:</p>
 <pre>[[TestMethod]
@@ -1524,8 +1528,130 @@ public void LinearChainDiscoveryTest()
     Assert.IsTrue(n.BucketList.GetBucketContactCounts().Count == expectedContacts, &quot;Expected &quot; + expectedContacts + &quot; contact(s).&quot;);
   });
 }</pre>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
+<h2>Implementing the DHT Wrapper</h2>
+<p>We have enough pieces now to implement the DHT wrapper that incorporates some 
+higher level functionality.&nbsp; Each DHT is associated with a node.&nbsp; 
+</p>
+<h3>Storing Values</h3>
+<p>According to the spec: <font color="#FF00FF">To store a (key,value) pair, a 
+participant locates the k closest nodes to the key and sends them STORE RPCS</font>.&nbsp; 
+It's not clear what we do if there are no participants.&nbsp; Do we store the 
+key-value ourselves?&nbsp; I would assume so!&nbsp; The zencoders implementation 
+always stores the key-value on our own node before storing it on other nodes.&nbsp; 
+However, the node's STORE is supposed to be a primitive operation, but zencoders 
+implementation is iterative (it also stores to close nodes).</p>
+<p>Our implementation starts with:</p>
+<pre>public class Dht
+{
+  protected Node node;
+
+  public Dht(Node node)
+  {
+    this.node = node;
+  }
+
+  public void Store(string key, string val)
+  {
+    ID keyID = ID.FromString(key);
+    node.Store(node.OurContact, key, val); // we're storing to ourselves as well as k contacts.
+    List&lt;Contact&gt; contacts = node.FindNode(node.OurContact, keyID);
+    contacts.ForEach(c =&gt; c.Address.Store(node.OurContact, c.Address, ID.RandomID(), key, val));
+  }
+}</pre>
+<h4>Store Unit Test</h4>
+<p>We can create <i>k*2</i> (40) chained nodes and verify that the value has been 
+stored in <i>k+1</i> (21) of them (20 for k, 1 for our own node):</p>
+<pre>[TestMethod]
+public void StoreTest()
+{
+  List&lt;Node&gt; nodes = RouterTests.CreateNodes(Constants.K * 2);
+  RouterTests.CreateLinearChain(nodes);
+  RouterTests.CreateStorage(nodes);
+  Dht dht = new Dht(nodes[0]);
+  dht.Store(&quot;A&quot;, &quot;1&quot;);   // steak sauce.
+  int stores = nodes.Sum(n =&gt; n.Storage.Entries());
+  Assert.IsTrue(stores == 21, &quot;Expected 21 storage locations (ourself plus k more)&quot;);
+}</pre>
+<h3>Getting Values</h3>
+<p>We actually haven't implemented this yet.</p>
+<p><font color="#FF00FF">FIND_VALUE behaves like FIND_NODE—returning (IP 
+address, UDP port, Node ID) triples—with one exception. If the RPC recipient has 
+received a STORE RPC for the key, it just returns the stored value.</font></p>
+<p>We need to refactor the <code>FindValue</code> stub in the <code>Node</code> class to this:</p>
+<pre>/// &lt;summary&gt;
+/// Returns either a list of close contacts or a the value, if the node's storage contains the value for the key.
+/// &lt;/summary&gt;
+public (List&lt;Contact&gt; nodes, string val) FindValue(Contact sender, ID keyID)
+{
+  List&lt;Contact&gt; contacts = null;
+  string val = null;
+
+  bucketList.HaveContact(OurContact.NodeID, sender, (_) =&gt; false);
+
+  if (!Storage.TryGetValue(keyID.ToString(), out val))
+  {
+    contacts = bucketList.GetCloseContacts(keyID, sender.NodeID);
+  }
+
+  return (contacts, val);
+}</pre>
+<p>In the <code>Dht</code> class, we implement a <code>FindValue</code> method:</p>
+<pre>public (bool found, string val) FindValue(string key)
+{
+  string ourval;
+
+  // If we have it, return with our value.
+  if (node.Storage.TryGetValue(key, out ourval))
+  {
+    return (true, ourval);
+  }
+
+  ID keyID = ID.FromString(key);
+  Router router = new Router();
+
+  (List&lt;Contact&gt; contacts, string val) = router.ValueLookup(keyID, node);
+
+  return (contacts == null, val);
+}</pre>
+<p>In the router, the <code>LookupCloserContacts</code> method hardcodes the FindValue call:</p>
+<pre>List&lt;Contact&gt; targetContacts = ourNode.OurContact.Address.FindNode(ourNode.OurContact, c.Address, ID.RandomID(), id);</pre>
+<p>We want to refactor this into an inversion of control pattern, where we pass 
+in the function that should be called:</p>
+<pre>(List&lt;Contact&gt; contacts, string val) cval = finder(ourNode.OurContact.Address, ourNode.OurContact, c.Address, ID.RandomID(), id);</pre>
+<p>This requires refactoring a bunch of other methods, interfaces, and unit 
+tests because we now pass in one of the two finder methods defined in the 
+<code>Dht</code> class:</p>
+<pre>public static (List&lt;Contact&gt; contacts, string val) NodeLookup(IAddress ourAddr, Contact us, IAddress theirAddr, ID rID, ID keyID)
+{
+  return ourAddr.FindNode(us, theirAddr, rID, keyID);
+}
+
+public static (List&lt;Contact&gt; contacts, string val) ValueLookup(IAddress ourAddr, Contact us, IAddress theirAddr, ID rID, ID keyID)
+{
+  return ourAddr.FindValue(us, theirAddr, rID, keyID);
+}
+</pre>
+<h4>FindValue Unit Test</h4>
+<p>So now let's write a unit test that stores the value as we did above, but 
+then asks a node in the chain that we know doesn't have the value to find the 
+value:</p>
+<pre>[TestMethod]
+public void FindValueTest()
+{
+  List&lt;Node&gt; nodes = RouterTests.CreateNodes(Constants.K * 2);
+  RouterTests.CreateLinearChain(nodes);
+  RouterTests.CreateStorage(nodes);
+  Dht dht = new Dht(nodes[0]);
+  dht.Store(&quot;A&quot;, &quot;1&quot;); // steak sauce
+
+  Node emptyNode = nodes.First(n =&gt; n.Storage.Entries() == 0);
+  // Create a DHT associated with this node.
+  Dht dht2 = new Dht(emptyNode);
+  var result = dht2.FindValue(&quot;A&quot;);
+
+  Assert.IsTrue(result.found, &quot;Expected value to be found&quot;);
+  Assert.IsTrue(result.val == &quot;1&quot;, &quot;Expected A1 steak sauce.&quot;);
+}</pre>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <h2>Asynchronous Behavior</h2>
@@ -1535,6 +1661,7 @@ achieved by processes responses as soon as they come in.&nbsp; The
 <a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia">C# 
 zencoders</a> implementation is very nicely asynchronous, particularly with 
 regards to the node lookup algorithm.&nbsp; </p>
+<p>Parallelization</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>

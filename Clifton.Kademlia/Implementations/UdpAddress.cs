@@ -13,16 +13,16 @@ namespace Clifton.Kademlia.Implementations
 			return null;
 		}
 
-		public void Store(Contact sender, IAddress recipient, ID randomID, string key, string val)
+		public void Store(Contact sender, IAddress recipient, ID randomID, ID keyID, string val)
 		{
 		}
 
-		public List<Contact> FindNode(Contact sender, IAddress recipient, ID randomID, ID toFind)
+		public (List<Contact> nodes, string val) FindNode(Contact sender, IAddress recipient, ID randomID, ID toFind)
 		{
-			return null;
+			return (null, null);
 		}
 
-		public (List<Contact> nodes, string val) FindValue(Contact sender, IAddress recipient, ID randomID, string key)
+		public (List<Contact> nodes, string val) FindValue(Contact sender, IAddress recipient, ID randomID, ID keyID)
 		{
 			return (null, null);
 		}

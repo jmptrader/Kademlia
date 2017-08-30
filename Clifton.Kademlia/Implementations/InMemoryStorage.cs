@@ -14,6 +14,21 @@ namespace Clifton.Kademlia.Implementations
 			storage = new Dictionary<string, string>();
 		}
 
+		public int Entries()
+		{
+			return storage.Count;
+		}
+
+		public bool HasValue(string key)
+		{
+			return storage.ContainsKey(key);
+		}
+
+		public bool TryGetValue(string key, out string val)
+		{
+			return storage.TryGetValue(key, out val);
+		}
+
 		public string Get(string key)
 		{
 			return storage[key];

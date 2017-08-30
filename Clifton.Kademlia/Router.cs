@@ -1,11 +1,12 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace Clifton.Kademlia
 {
     public class Router
     {
-		public List<Contact> NodeLookup(ID id, Node ourNode)
+		public (List<Contact> contacts, string val) Lookup(ID id, Node ourNode, Func<IAddress, Contact, IAddress, ID, ID, (List<Contact>, string)> finder)
 		{
 			BucketList bucketList = ourNode.BucketList;
 
@@ -25,7 +26,14 @@ namespace Clifton.Kademlia
 
                 do
                 {
-                    List<Contact> newContacts = LookupCloserContacts(id, ourNode, workingShortList, successfulContacts);
+                    var cvals = LookupCloserContacts(id, ourNode, workingShortList, successfulContacts, finder);
+
+					if (cvals.contacts == null)
+					{
+						return (null, cvals.val);
+					}
+
+					List<Contact> newContacts = cvals.contacts;
                     allContacts.AddRangeDistinct(newContacts, (a, b) => a.NodeID == b.NodeID);
 
                     // The node then fills the shortlist with contacts from the replies received. 
@@ -64,13 +72,19 @@ namespace Clifton.Kademlia
                 } while ((!hasNewCloseContact || shortList.Count < Constants.K) && workingShortList.Count > 0);
 			}
 
-            // Return at most k contacts.
-            return shortList.Take(Constants.K).ToList();
+			// Return at most k contacts.
+			return (shortList.Take(Constants.K).ToList(), null);
 		}
 
-		protected List<Contact> LookupCloserContacts(ID id, Node ourNode, List<Contact> workingShortList, List<Contact> successfulContacts)
+		protected (List<Contact> contacts, string val) LookupCloserContacts(
+			ID id, 
+			Node ourNode, 
+			List<Contact> workingShortList, 
+			List<Contact> successfulContacts, 
+			Func<IAddress, Contact, IAddress, ID, ID, (List<Contact>, string)> finder)
 		{
 			List<Contact> unsucessfulContacts = new List<Contact>();
+			string val = null;
 
 			// The known closest node is the first entry.
 			List<Contact> newContacts = new List<Contact>();
@@ -78,9 +92,16 @@ namespace Clifton.Kademlia
 			// The node then sends parallel, asynchronous FIND_* RPCs to the alpha contacts in the shortlist. 
 			// Each contact, if it is live, should normally return k triples. 
 			// If any of the alpha contacts fails to reply, it is removed from the shortlist, at least temporarily.
-			workingShortList.ForEach(c =>
+			foreach(var c in workingShortList)
 			{
-				List<Contact> targetContacts = ourNode.OurContact.Address.FindNode(ourNode.OurContact, c.Address, ID.RandomID(), id);
+				(List<Contact> contacts, string val) cval = finder(ourNode.OurContact.Address, ourNode.OurContact, c.Address, ID.RandomID(), id);
+
+				if (cval.contacts == null)
+				{
+					return (null, cval.val);
+				}
+
+				List<Contact> targetContacts = cval.contacts;
 
 				// Let's assume that failure to contact a node results in a null.
 				if (targetContacts != null)
@@ -94,12 +115,12 @@ namespace Clifton.Kademlia
 				{
 					unsucessfulContacts.Add(c);
 				}
-			});
+			};
 
             // If any of the alpha contacts fails to reply, it is removed from the shortlist, at least temporarily.
             workingShortList.RemoveRange(unsucessfulContacts); // These are our references
 
-            return newContacts;
+            return (newContacts, val);
 		}
     }
 }

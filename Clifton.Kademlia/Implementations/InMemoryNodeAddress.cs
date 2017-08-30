@@ -11,19 +11,19 @@ namespace Clifton.Kademlia.Implementations
 			return ((InMemoryNodeAddress)recipient).RecipientNode.Ping(sender);
 		}
 
-		public void Store(Contact sender, IAddress recipient, ID randomID, string key, string val)
+		public void Store(Contact sender, IAddress recipient, ID randomID, ID keyID, string val)
 		{
-			((InMemoryNodeAddress)recipient).RecipientNode.Store(sender, key, val);
+			((InMemoryNodeAddress)recipient).RecipientNode.Store(sender, keyID, val);
 		}
 
-		public List<Contact> FindNode(Contact sender, IAddress recipient, ID randomID, ID toFind)
+		public (List<Contact> nodes, string val) FindNode(Contact sender, IAddress recipient, ID randomID, ID toFind)
 		{
 			return ((InMemoryNodeAddress)recipient).RecipientNode.FindNode(sender, toFind);
 		}
 
-		public (List<Contact> nodes, string val) FindValue(Contact sender, IAddress recipient, ID randomID, string key)
+		public (List<Contact> nodes, string val) FindValue(Contact sender, IAddress recipient, ID randomID, ID keyID)
 		{
-			return ((InMemoryNodeAddress)recipient).RecipientNode.FindValue(sender, key);
+			return ((InMemoryNodeAddress)recipient).RecipientNode.FindValue(sender, keyID);
 		}
 	}
 }
