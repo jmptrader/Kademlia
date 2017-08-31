@@ -46,11 +46,13 @@ from:</p>
 	implementation.</li>
 </ol>
 <p>I know, it's easy to be an armchair critic!</p>
-<p>The best C# implementation that I've found is
-<a href="https://github.com/zencoders/sambatyon/blob/master/Kademlia/Kademlia/BucketList.cs">
+<p>The best C# (but incomplete) implementation that I've found is
+<a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia">
 zencoders sambatyon repo</a> and the best Python implementation I've found (I 
 haven't looked at them all) is <a href="https://github.com/bmuller/kademlia">
-Brian Muller's</a>.&nbsp; As far as I can tell, the only significant issue with 
+Brian Muller's</a>.&nbsp; Brian Muller's implementation is really quite 
+excellent, and I highly recommend perusing the code -- I'll be showing some of 
+it later on.&nbsp; As far as I can tell, the only significant issue with 
 these implementations are the lack of abstraction of the transport layer (C# 
 uses UDP and the Python code uses Twisted) and the C# code implementation 
 doesn't appear to abstract out the data store, which is &quot;hard coded&quot; as as a 
@@ -156,9 +158,31 @@ more importantly, is the name of a mountain peak in Bulgaria.&quot;&nbsp; OK the
 how you look at it) is that Kademlia was baked as a protocol and algorithm 
 before it ever was implemented.&quot;&nbsp; Fascinating.&nbsp; I just would not have 
 the confidence to do that!</p>
+<h2>Resources Used In This Research</h2>
+<p>The original Kademlia specification:
+<a href="http://www.cs.rice.edu/Conferences/IPTPS02/109.pdf">
+http://www.cs.rice.edu/Conferences/IPTPS02/109.pdf</a></p>
+<p>The longer Kademlia specification:
+<a href="https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf">
+https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf</a></p>
+<p>Mike De Boer's description of k-buckets:
+<a href="https://github.com/mikedeboer/node-k-bucket">
+https://github.com/mikedeboer/node-k-bucket</a></p>
+<p>Brian Muller's Python implementation:
+<a href="https://github.com/bmuller/kademlia">
+https://github.com/bmuller/kademlia</a></p>
+<p>zencoders' implementation:
+<a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia">
+https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia</a></p>
+<p>Jim Dixon's post on the two different versions of the specification:
+<a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00039.html">
+https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00039.html</a></p>
+<p>Jim Dixon's description of the shorter specification:
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE">
+http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE</a></p>
 <h2>High Level Architecture</h2>
 <p>In this document, <font color="#FF00FF">fuchsia text</font> is used when 
-quoting from the Kademlia specification.</p>
+quoting from the Kademlia specification and other documents.</p>
 <p>There are four components to the high level architecture necessary to 
 implement the Kademlia protocol:</p>
 <ol>
@@ -666,7 +690,7 @@ Yes, this is in the Kademlia spec as well, but you have to catch it:</p>
 <p>
 Adding a contact to a bucket means that we have to provide <i>our node's ID</i> 
 in order to find the correct bucket index.&nbsp; In <code>BucketList</code> we therefore 
-implement:</p>
+implement (<b>incorrectly, which will be discussed much later as to why</b>):</p>
 <pre>
 public void HaveContact(ID ourId, Contact contact)
 {
@@ -1739,7 +1763,23 @@ But that's not what I'm seeing here, so either my bucket indexing:</p>
 <p>is wrong, or bucket splitting is needed, or something else is very wrong 
 (hint, it's the last case.)&nbsp; I note that the Python 
 code implements bucket splitting, but I can't find this in zencoders C# code.&nbsp; 
-Let's look at zencoders' implementation:</p>
+In fact, as coded so far, I used zencoders initialization of the bucket list:</p>
+<pre>public BucketList(ID ourID)
+{
+  this.ourID = ourID;
+  buckets = new List&lt;List&lt;Contact&gt;&gt;(NUM_BUCKETS);
+  accessTimes = new List&lt;DateTime&gt;();
+
+  // Set up each bucket
+  for(int i = 0; i &lt; NUM_BUCKETS; i++) 
+  {
+    buckets.Add(new List&lt;Contact&gt;(BUCKET_SIZE));
+    accessTimes.Add(default(DateTime));
+  }
+}</pre>
+<p>So I think I can conclusively state that zencoders' implementation does not 
+employ bucket splitting, which ends up creating significant problems. </p>
+<p>Let's look at zencoders' implementation:</p>
 <pre>public int DifferingBit(ID other)
 {
   ID differingBits = this ^ other;
@@ -1858,7 +1898,7 @@ node ID for the host node.&nbsp; Again, zencoders implementation for the host ID
 is wrong:</p>
 <pre>return ID.Hash(app + user + machine + macs);</pre>
 <p>This in no way will generate a uniformly distributed ID for host.</p>
-<h3>A Flaw in the Kademlia XOR Distance Metric or the Specification?</h3>
+<h3>A Flaw in the Kademlia XOR Distance Metric or in the Specification?</h3>
 <p>Does this point to a flaw in using XOR logic for a distance metric?&nbsp; 
 Let's look at the bucket distribution for a node with an ID where bit 2<sup>159</sup> is set:</p>
 <p>The results are what you'd expect, I don't even have to create a graph:</p>
@@ -2008,11 +2048,11 @@ exactly what Brian Muller's Python implementation does:</p>
   for index, bucket in enumerate(self.buckets):
     if node.long_id &lt; bucket.range[1]:
       return index</pre>
-<p>Ultimately, I think the specification is wrong: <font color="#FF00FF">For 
+<p>Ultimately, <b>I think the specification is wrong</b>: <font color="#FF00FF">For 
 each 0 &lt; i &lt; 160, every node keeps a list of (IP address, UDP port, Node ID) 
 triples for nodes of distance between 2<sup>i</sup> and 2<sup>i+1</sup> from 
-itself</font>.&nbsp; Nodes should not keep a list of other nodes based on the 
-distance from itself!</p>
+itself</font>.&nbsp; Wrong!&nbsp; Nodes should not keep a list of other nodes based on the 
+XOR distance from itself!</p>
 <p>Even Jim Dixon's explanation is wrong:</p>
 <p><font color="#FF00FF">The buckets are organized by the distance between the 
 node and the contacts in the bucket. Specifically, for bucket j, where 0 &lt;= j &lt; 
@@ -2022,18 +2062,115 @@ possible, with an XOR operation, for a distance to be less than the most
 significant non-zero bit after the XOR.&nbsp; If a node's ID has a &quot;high&quot; msb 
 set, most contacts will have a smaller ID and as the data above shows, the 
 &quot;high&quot; msb will rule in terms of determining distance.</p>
+<p>As an aside, I'm impressed that Python easily handles 2<sup>160</sup>:</p>
+<pre>&gt;&gt;&gt; 2 ** 160
+1461501637330902918203684832716283019655932542976L</pre>
+<p>In C#, we'd have to use the BigInteger class:</p>
+<pre>BigInteger bi = BigInteger.Parse(&quot;1461501637330902918203684832716283019655932542976&quot;);</pre>
+<p>Now we just have to fix a couple broken unit tests:</p>
+<p><img border="0" src="broken.png" width="193" height="61"></p>
+<p>Maybe.</p>
+<h3>Pass 2 - Is the Specification Really Wrong?</h3>
+<p>The <a href="http://www.cs.rice.edu/Conferences/IPTPS02/109.pdf">shorter version of the specification</a> (I would assume this was the 
+original specification?&nbsp; I wish people would date their documents) doesn't 
+mention bucket splitting.&nbsp; Heck, it doesn't even mention a binary tree of 
+buckets.&nbsp; In fact, the first part of Section 2 appears to be completely 
+rewritten in the longer specification. &nbsp; Bucket splitting 
+solves two problems:</p>
+<ol>
+	<li>My implementation currently handles only 3200 other contacts.&nbsp; In a 
+	massive network, this seems, well, wrong, but then again, just how large 
+	(and time consuming to search) should the tree become, especially if we use 
+	a brute force algorithm to search closest nodes by an XOR distance?</li>
+	<li>The problem of a node with high msb's set in its ID's sort of goes away 
+	with splitting, but as larger specification points out, this can lead to 
+	very unbalanced trees.</li>
+</ol>
+<p>And a question: If buckets are constantly split, when does the code for 
+ejecting a non-responding node ever get executed?</p>
+<p>Brian Muller's Python code implements a simple midpoint split:</p>
+<pre>def split(self):
+  midpoint = (self.range[0] + self.range[1]) / 2
+  one = KBucket(self.range[0], midpoint, self.ksize)
+  two = KBucket(midpoint + 1, self.range[1], self.ksize)
+  for node in self.nodes.values():
+    bucket = one if node.long_id &lt;= midpoint else two
+    bucket.nodes[node.id] = node
+  return (one, two)</pre>
+<p>and (as part of the <code>addContact</code> function:</p>
+<pre># this will succeed unless the bucket is full
+if bucket.addNode(node):
+  return
+
+# Per section 4.2 of paper, split if the bucket has the node in its range
+# or if the depth is not congruent to 0 mod 5
+if bucket.hasInRange(self.node) or bucket.depth() % 5 != 0:
+  self.splitBucket(index)
+  self.addContact(node)
+else:
+  self.protocol.callPing(bucket.head())</pre>
+<p>Note that the bucket is split only when the bucket contains the host node ID!&nbsp; 
+Let's read what <a href="https://github.com/mikedeboer/node-k-bucket">Mike de 
+Boer</a> says about this:</p>
+<p><font color="#FF00FF">KBucket starts off as a single k-bucket with capacity 
+of k. As contacts are added, once the k+1 contact is added, the k-bucket is 
+split into two k-buckets. The split happens according to the first bit of the 
+contact node id. The k-bucket that would contain the local node id is the &quot;near&quot; 
+k-bucket, and the other one is the &quot;far&quot; k-bucket. The &quot;far&quot; k-bucket is marked 
+as don't split in order to prevent further splitting. The contact nodes that 
+existed are then redistributed along the two new k-buckets and the old k-bucket 
+becomes an inner node within a tree data structure.<br>
+<br>
+As even more contacts are added to the &quot;near&quot; k-bucket, the &quot;near&quot; k-bucket will 
+split again as it becomes full. However, this time it is split along the second 
+bit of the contact node id. Again, the two newly created k-buckets are marked 
+&quot;near&quot; and &quot;far&quot; and the &quot;far&quot; k-bucket is marked as don't split. Again, the 
+contact nodes that existed in the old bucket are redistributed. This continues 
+as long as nodes are being added to the &quot;near&quot; k-bucket, until the number of 
+splits reaches the length of the local node id.<br>
+<br>
+As more contacts are added to the &quot;far&quot; k-bucket and it reaches its capacity, it 
+does not split. Instead, the k-bucket emits a &quot;ping&quot; event...</font></p>
+<p>OK, that answers my question above.&nbsp; As for the &quot;far k-bucket is marked 
+as don't split&quot; - in the Python code, this behavior occurs naturally because the 
+host node's ID is not in the range of the far bucket.&nbsp; Also, the Python code 
+effectively implements the above algorithm of &quot;split along the first bit, the 
+split along the second bit, etc.&quot; always splitting the bucket along its 
+midpoint.</p>
+<p>What is <code>bucket.depth() % 5 != 0</code> about?&nbsp; Let's look at the 
+longer specification, section 4.2:</p>
+<p><font color="#FF00FF">Section 2.4 describes how a Kademlia node splits a 
+k-bucket when the bucket is full and its range includes the node’s own ID. The 
+implementation, however, also splits ranges not containing the node’s ID, up to 
+b - 1 levels. If b = 2, for instance, the half of the ID space not containing 
+the node’s ID gets split once (into two ranges); if b = 3, it gets split at two 
+levels into a maximum of four ranges, etc. The general splitting rule is that a 
+node splits a full k-bucket if the bucket’s range contains the node’s own ID or 
+the depth d of the k-bucket in the routing tree satisfies [d mod b != 0]. (The 
+depth is just the length of the prefix shared by all nodes in the k-bucket’s 
+range.) The current implementation uses b = 5.</font></p>
+<p>The effect of the depth computation means that the original bucket 
+(containing the entire range of ID's) is split immediately (since depth == 1) 
+and so forth, to a depth of 5, upon which it will only be split if it is full (<i>k</i>) 
+and contains the host's node ID.&nbsp; Unfortunately, Jim Dixon's discussion 
+doesn't mention bucket splitting (it's based on the shorter specification, I 
+believe) and again,&nbsp; zencoders' implementation doesn't appear to implement this 
+behavior.</p>
+<h3>Time For Reworking The Bucket List</h3>
+<p>All of this means that I need to rework how bucket the bucket list and the 
+k-buckets are managed, so that the algorithm implements a tree.&nbsp; I note 
+that in the 
+Python code, the tree is actually a contiguous list:</p>
+<pre>def splitBucket(self, index):
+  one, two = self.buckets[index].split()
+  self.buckets[index] = one
+  self.buckets.insert(index + 1, two)</pre>
+<p>That certainly makes it easier to locate a bucket (no tree traversal) but I 
+really don't want to use C#'s <code>BigInteger</code>, so we'll deal with this slightly 
+differently.</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
-<p>An interesting discussion here:
-<a href="https://github.com/mikedeboer/node-k-bucket">
-https://github.com/mikedeboer/node-k-bucket</a></p>
-<p>The guy that wrote the lattice paper:
-<a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00039.html">
-https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00039.html</a></p>
-<p>The original 6 page version: http://www.cs.rice.edu/Conferences/IPTPS02/109.pdf</p>
 <p>Other info:
 <a href="https://stackoverflow.com/questions/32129978/highly-unbalanced-kademlia-routing-table">
 https://stackoverflow.com/questions/32129978/highly-unbalanced-kademlia-routing-table</a></p>
@@ -2056,47 +2193,12 @@ regards to the node lookup algorithm.&nbsp; </p>
 <font color="#FF00FF">To locate nodes near a particular ID, Kademlia uses a single routing algorithm 
 from start to finish. </font></p>
 <p>&nbsp;</p>
-<p>&nbsp;</p>
+<p>What is this:</p>
 
 <p><font color="#FF00FF">If there are empty branches in the tree, there might be more 
 than one leaf with the longest common prefix. In that case, the closest leaf to 
 x will be the closest leaf to ID x produced by flipping the bits in x 
 corresponding to the empty branches of the tree.</font></p>
-<p><font color="#FF0000">TODO: Why the randomization?</font></p>
-<pre>public ID RandomizeBeyond(int bit)
-{
-  byte[] randomized = new byte[ID_LENGTH];
-  data.CopyTo(randomized, 0);
-
-  FlipBit(randomized, bit); // Invert pivot bit
-
-  // And randomly flip the rest
-  for(int i = bit + 1; i &lt; 8 * ID_LENGTH; i++) 
-  {
-    if(rnd.NextDouble() &lt; 0.5) 
-    {
-      FlipBit(randomized, i);
-    }
-  }
-
-  return new ID(randomized);
-}
-
-/// &lt;summary&gt;
-/// Flips the given bit in the byte array.
-/// Byte array must be ID_LENGTH long.
-/// &lt;/summary&gt;
-/// &lt;param name=&quot;data&quot;&gt;Data to work on&lt;/param&gt;
-/// &lt;param name=&quot;bit&quot;&gt;Bit used to generate the mask&lt;/param&gt;
-private static void FlipBit(byte[] data, int bit)
-{
-  int byteIndex = bit / 8;
-  int byteBit = bit % 8;
-  byte mask = (byte) (1 &lt;&lt; byteBit);
-
-  data[byteIndex] = (byte) (data[byteIndex] ^ mask); // Use a mask to flip the bit
-}
-</pre>
 
 </body>
 
