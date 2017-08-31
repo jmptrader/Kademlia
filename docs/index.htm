@@ -17,7 +17,10 @@ Kademlia peer-to-peer distributed hash table specification and implement it
 using a couple other open source implementations (one in C#, one in Python) as 
 well as some ancillary documentation to do figure stuff out.&nbsp; Yes, it's a 
 tome.&nbsp; But the benefit for me is that I now have a fully documented code 
-base that maps implementation to specification, something rarely seen.</p>
+base that maps implementation to specification, something rarely seen.&nbsp; 
+Once the basic algorithm is implemented, I discover some flaws in my 
+implementation that I demonstrate with unit testing and exploring distribution 
+graphs of buckets.</p>
 <h2>Introduction</h2>
 <p>There's quite a few implementations of the Kademlia peer-to-peer (P2P) 
 distributed hash table (DHT) algorithm out there on GitHub.&nbsp; My perusal of 
@@ -1683,6 +1686,7 @@ components of the system pass:</p>
 	<li>Key republishing (section 2.5)</li>
 	<li>Bucket splitting (section 2.4)</li>
 </ol>
+<h2>Bucket Splitting</h2>
 <p>A word about these statements in the specification:</p>
 <p><font color="#FF00FF">Initially, a node u’s routing tree has a single node— 
 one k-bucket covering the entire ID space. When u learns of a new contact, it 
@@ -1694,9 +1698,335 @@ the old contents divided between the two, and the insertion attempt repeated.</f
 <font color="#FF00FF">For each 0 &lt; i &lt; 160, every node keeps a list of 
 (IP address, UDP port, Node ID) triples for nodes of distance between 2<sup>i</sup> and 
 2<sup>i+1</sup> from itself. We call these lists k-buckets. </font></p>
-<p>So which is it?&nbsp; A tree, or contiguous list of 160 k-buckets?&nbsp; I 
-haven't come across anyone that actually implements this - instead, each node 
-has a routing tree that has 160 k-buckets.</p>
+<p>So which is it?&nbsp; A tree, or contiguous list of 160 k-buckets?&nbsp; 
+Let's look at a distribution of adding 160 * k (3200) nodes to a single node.&nbsp; 
+Here's the unit test (which doesn't assert anything):</p>
+<pre>public const string CRLF = &quot;\r\n&quot;;
+
+[TestMethod]
+public void DistributionMidpointTest()
+{
+  Node node = RouterTests.CreateNode(ID.OneID() &lt;&lt; 80);
+  (Constants.ID_LENGTH_BITS * Constants.K).ForEach(() =&gt; node.SimpleRegistration(new Contact() { NodeID = ID.RandomID() }));
+  var bucketCounts = node.BucketList.GetBucketContactCounts();
+  Write(&quot;countsMidpoint.txt&quot;, bucketCounts);
+}
+
+public static void Write(string fn, List&lt;(int idx, int count)&gt; bucketCounts)
+{
+  File.Delete(fn);
+  StringBuilder sb = new StringBuilder();
+  bucketCounts.ForEach(bc =&gt; sb.Append(bc.idx + &quot;,&quot; + bc.count + CRLF));
+  File.WriteAllText(fn, sb.ToString());
+}</pre>
+<p>And the results, created in Excel:</p>
+<p><img border="0" src="bucketCounts.png" width="481" height="289"></p>
+<p>That's big FAIL.&nbsp; </p>
+<h3>Two Different Specifications</h3>
+<p>After some digging, I discovered that
+<a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00039.html">
+Jim Dixon</a> is the author of the specs on SourceForge.&nbsp; He points out 
+&quot;There are at least two versions of this paper on the Web with the same authors 
+and title.&quot;&nbsp; The shorter paper can be found
+<a href="http://www.cs.rice.edu/Conferences/IPTPS02/109.pdf">here</a> and makes 
+no mention of bucket splitting.&nbsp; This paper states &quot;Because node IDs are 
+randomly chosen, it follows that highly non-uniform distributions are unlikely.&quot;&nbsp; 
+But that's not what I'm seeing here, so either my bucket indexing:</p>
+<pre>public int GetBucketIndex()
+{
+  return (Constants.ID_LENGTH_BITS - id.Bits().TakeWhile(b =&gt; !b).Count() - 1).Max(0);
+}</pre>
+<p>is wrong, or bucket splitting is needed, or something else is very wrong 
+(hint, it's the last case.)&nbsp; I note that the Python 
+code implements bucket splitting, but I can't find this in zencoders C# code.&nbsp; 
+Let's look at zencoders' implementation:</p>
+<pre>public int DifferingBit(ID other)
+{
+  ID differingBits = this ^ other;
+  int differAt = 8 * ID_LENGTH - 1;
+
+  // Subtract 8 for every zero byte from the right
+  int i = ID_LENGTH - 1;
+  while(i &gt;= 0 &amp;&amp; differingBits.data[i] == 0) 
+  {
+    differAt -= 8;
+    i--;
+  }
+
+  // Subtract 1 for every zero bit from the right
+  int j = 0;
+  // 1 &lt;&lt; j = pow(2, j)
+  while(j &lt; 8 &amp;&amp; (differingBits.data[i] &amp; (1 &lt;&lt; j)) == 0) 
+  {
+    j++;
+    differAt--;
+  }
+
+  return differAt;
+}</pre>
+<p>This is used once:</p>
+<pre>/// &lt;summary&gt;
+/// Returns what bucket an ID maps to.
+/// PRECONDITION: ourID not passed.
+/// &lt;/summary&gt;
+/// &lt;param name=&quot;id&quot;&gt;The id to check&lt;/param&gt;
+/// &lt;returns&gt;The bucket number&lt;/returns&gt;
+private int BucketFor(ID id) 
+{
+  return(ourID.DifferingBit(id));
+}</pre>
+<p>Let's try that in the <code>HaveContact</code> method:</p>
+<pre>int bucketIdx = ourId.DifferingBit(contact.NodeID); // distance.GetBucketIndex();</pre>
+<p><img border="0" src="bucketCounts2.png" width="481" height="289"></p>
+<p>Nope, we get very similar results.</p>
+<p>Next, we need to ask, are the node ID's distributed uniformly?&nbsp; You may 
+have already realized the problem -- while the random ID's as <i>numbers</i> 
+may be distributed uniformly, what we need instead is a uniform distribution of 
+an ID falling into a particular bucket.&nbsp; Because each bucket 
+from 0 &lt; i &lt; 160 holds a different range of values 2<sup>i</sup> through 2<sup>i+1</sup>-1, 
+we can clearly see that a simple random number generation of the bytes for the 
+ID does not result in uniform distribution of ID's within the bucket <i>ranges.</i>&nbsp; 
+This explains zencoders' <code>RandomizeBeyond</code> method:</p>
+<pre>public ID RandomizeBeyond(int bit)
+{
+  byte[] randomized = new byte[ID_LENGTH];
+  this.data.CopyTo(randomized, 0);
+
+  FlipBit(randomized, bit); // Invert pivot bit
+
+  // And randomly flip the rest
+  for(int i = bit + 1; i &lt; 8 * ID_LENGTH; i++) 
+  {
+    if(rnd.NextDouble() &lt; 0.5) 
+    {
+      FlipBit(randomized, i);
+    }
+  }
+
+  return new ID(randomized);
+}</pre>
+<p>Our random ID generator was borrowed from zencoders:</p>
+<pre>public static ID RandomID()
+{
+  byte[] data = new byte[ID_LENGTH];
+  rnd.NextBytes(data);
+  return new ID(data);
+}</pre>
+<p>This, pointed out above, generates a uniform distribution of <i>numbers, not 
+of buckets that ID fits in.</i>&nbsp; It needs to do this instead:</p>
+<pre>public static ID RandomID()
+{
+  byte[] data = new byte[Constants.ID_LENGTH_BYTES];
+  ID id = new ID(data);
+  // Uniform random bucket index.
+  int idx = rnd.Next(Constants.ID_LENGTH_BITS);
+  // 0 &lt;= idx &lt;= 159
+  // Remaining bits are randomized to get unique ID.
+  id.SetBit(idx);
+  id = id.RandomizeBeyond(idx);
+  Validate.IsTrue(id.GetBucketIndex() == idx, &quot;Error with RandomID.&quot;);
+
+  return id;
+}</pre>
+<p>Note the validation, and also how we're randomizing the <i>number of MSB bits </i>that should be 0.&nbsp; This results in a better, but still wrong, distribution:</p>
+<p><img border="0" src="bucketCounts3.png" width="481" height="289"></p>
+<p>It's interesting that almost all of the nodes are half-way to the right of 
+the mid point.&nbsp; Gee, I wonder why.&nbsp; Maybe it has something to do with 
+this in our unit test:</p>
+<pre>Node node = RouterTests.CreateNode(ID.OneID() &lt;&lt; 80);</pre>
+<p>and this:</p>
+<pre>var distance = ourId ^ contact.NodeID;</pre>
+<p>Because we selected a midpoint ID for the node, we know that 1/2 the 
+distances (ID's 1 through 2^<sup>80</sup> - 1) will be greater than 2<sup>80</sup> 
+because the bit at 2<sup>80</sup> is set by our test node ID.&nbsp;&nbsp; The only distances 
+that will be less than 80 are 2^80 itself (we seem to have encountered 12 random 
+values between 0 and 159 came out as 80 , and from 2<sup>81</sup> through 2<sup>159</sup> 
+the distances again will be greater than 2<sup>80</sup> because (well duh) 
+numbers 2<sup>81</sup> 
+through 2<sup>159</sup> are greater than 2<sup>80</sup>!&nbsp; So this means 
+that the unit test is wrong.&nbsp; The unit test should always use <code>ID.ZeroID()</code> 
+for the starting node ID to ensure a proper distribution:</p>
+<pre>Node node = RouterTests.CreateNode(ID.ZeroID());</pre>
+<p>and viola!</p>
+<p><img border="0" src="buckets4.png" width="632" height="297"></p>
+<p>So we have discovered a critical flaw in zencoders' random ID generation as 
+well as a bug in our unit test.&nbsp; Incidentally, of the 3200 node add 
+attempts, 2872 succeeded, the remainder (328) did not get added because the 
+k-bucket was full.&nbsp; This also points out critical it is, for any 
+participant in the Kademlia network, to create a uniformly distributed random 
+node ID for the host node.&nbsp; Again, zencoders implementation for the host ID 
+is wrong:</p>
+<pre>return ID.Hash(app + user + machine + macs);</pre>
+<p>This in no way will generate a uniformly distributed ID for host.</p>
+<h3>A Flaw in the Kademlia XOR Distance Metric or the Specification?</h3>
+<p>Does this point to a flaw in using XOR logic for a distance metric?&nbsp; 
+Let's look at the bucket distribution for a node with an ID where bit 2<sup>159</sup> is set:</p>
+<p>The results are what you'd expect, I don't even have to create a graph:</p>
+<table border="0" cellpadding="0" cellspacing="0" width="128" style="border-collapse:
+ collapse;width:96pt">
+	<colgroup>
+		<col width="64" span="2" style="width:48pt">
+	</colgroup>
+	<tr height="20" style="height:15.0pt">
+		<td height="20" align="center" width="64" style="height: 15.0pt; width: 48pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		Bucket #</td>
+		<td align="center" width="64" style="width: 48pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		Count</td>
+	</tr>
+	<tr height="20" style="height:15.0pt">
+		<td height="20" align="right" width="64" style="height: 15.0pt; width: 48pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		156</td>
+		<td align="right" width="64" style="width: 48pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		2</td>
+	</tr>
+	<tr height="20" style="height:15.0pt">
+		<td height="20" align="right" style="height: 15.0pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		157</td>
+		<td align="right" style="color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		4</td>
+	</tr>
+	<tr height="20" style="height:15.0pt">
+		<td height="20" align="right" style="height: 15.0pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		158</td>
+		<td align="right" style="color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		12</td>
+	</tr>
+	<tr height="20" style="height:15.0pt">
+		<td height="20" align="right" style="height: 15.0pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		159</td>
+		<td align="right" style="color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		20</td>
+	</tr>
+</table>
+<p>So, let's revisit zencoders use of <code>DifferingBit</code> to get the 
+bucket index, now that we've fixed other problems.&nbsp; At this point it's 
+pretty clear that using the distance computation to insert the new node in the 
+appropriate bucket is wrong!</p>
+<table border="0" cellpadding="0" cellspacing="0" width="128" style="border-collapse:
+ collapse;width:96pt">
+	<colgroup>
+		<col width="64" span="2" style="width:48pt">
+	</colgroup>
+	<tr height="20" style="height:15.0pt">
+		<td height="20" align="center" width="64" style="height: 15.0pt; width: 48pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		Bucket #</td>
+		<td align="center" width="64" style="width: 48pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		Count</td>
+	</tr>
+	<tr height="20" style="height:15.0pt">
+		<td height="20" align="right" width="64" style="height: 15.0pt; width: 48pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		148</td>
+		<td align="right" width="64" style="width: 48pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		1</td>
+	</tr>
+	<tr height="20" style="height:15.0pt">
+		<td height="20" align="right" style="height: 15.0pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		149</td>
+		<td align="right" style="color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		3</td>
+	</tr>
+	<tr height="20" style="height:15.0pt">
+		<td height="20" align="right" style="height: 15.0pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		150</td>
+		<td align="right" style="color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		3</td>
+	</tr>
+	<tr height="20" style="height:15.0pt">
+		<td height="20" align="right" style="height: 15.0pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		151</td>
+		<td align="right" style="color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		5</td>
+	</tr>
+	<tr height="20" style="height:15.0pt">
+		<td height="20" align="right" style="height: 15.0pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		152</td>
+		<td align="right" style="color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		8</td>
+	</tr>
+	<tr height="20" style="height:15.0pt">
+		<td height="20" align="right" style="height: 15.0pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		153</td>
+		<td align="right" style="color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		20</td>
+	</tr>
+	<tr height="20" style="height:15.0pt">
+		<td height="20" align="right" style="height: 15.0pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		154</td>
+		<td align="right" style="color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		20</td>
+	</tr>
+	<tr height="20" style="height:15.0pt">
+		<td height="20" align="right" style="height: 15.0pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		155</td>
+		<td align="right" style="color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		20</td>
+	</tr>
+	<tr height="20" style="height:15.0pt">
+		<td height="20" align="right" style="height: 15.0pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		156</td>
+		<td align="right" style="color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		20</td>
+	</tr>
+	<tr height="20" style="height:15.0pt">
+		<td height="20" align="right" style="height: 15.0pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		157</td>
+		<td align="right" style="color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		20</td>
+	</tr>
+	<tr height="20" style="height:15.0pt">
+		<td height="20" align="right" style="height: 15.0pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		158</td>
+		<td align="right" style="color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		20</td>
+	</tr>
+	<tr height="20" style="height:15.0pt">
+		<td height="20" align="right" style="height: 15.0pt; color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		159</td>
+		<td align="right" style="color: black; font-size: 11.0pt; font-weight: 400; font-style: normal; text-decoration: none; font-family: Calibri, sans-serif; text-align: general; vertical-align: bottom; white-space: nowrap; border: medium none; padding-left: 1px; padding-right: 1px; padding-top: 1px">
+		20</td>
+	</tr>
+</table>
+<p>Nope.&nbsp; So that doesn't solve the problem, which looks like another 
+significant flaw with zencoders implementation.&nbsp; The problem is actually 
+easily solved - the bucket index that the contact goes into is determined solely 
+by the contact's node ID, not its distance from our node:</p>
+<pre>public void HaveContact(ID ourId, Contact contact, Func&lt;Contact, bool&gt; discardHead)
+{
+  // A node must never put its own node ID into a bucket as a contact.
+  if (ourId != contact.NodeID)
+  {
+    <font color="#FF0000">int bucketIdx = contact.NodeID.GetBucketIndex();</font>
+    buckets[bucketIdx].HaveContact(contact, discardHead);
+  }
+} </pre>
+<p>Now it doesn't matter what our node ID is.&nbsp; Incidentally, this is 
+exactly what Brian Muller's Python implementation does:</p>
+<pre>def getBucketFor(self, node):
+  &quot;&quot;&quot;
+  Get the index of the bucket that the given node would fall into.
+  &quot;&quot;&quot;
+  for index, bucket in enumerate(self.buckets):
+    if node.long_id &lt; bucket.range[1]:
+      return index</pre>
+<p>Ultimately, I think the specification is wrong: <font color="#FF00FF">For 
+each 0 &lt; i &lt; 160, every node keeps a list of (IP address, UDP port, Node ID) 
+triples for nodes of distance between 2<sup>i</sup> and 2<sup>i+1</sup> from 
+itself</font>.&nbsp; Nodes should not keep a list of other nodes based on the 
+distance from itself!</p>
+<p>Even Jim Dixon's explanation is wrong:</p>
+<p><font color="#FF00FF">The buckets are organized by the distance between the 
+node and the contacts in the bucket. Specifically, for bucket j, where 0 &lt;= j &lt; 
+k, we are guaranteed that 2<sup>j</sup> &lt;= distance(node, contact) &lt; 2<sup>(j+1)
+</sup></font>where distance is the XOR operation.&nbsp; It is simply not 
+possible, with an XOR operation, for a distance to be less than the most 
+significant non-zero bit after the XOR.&nbsp; If a node's ID has a &quot;high&quot; msb 
+set, most contacts will have a smaller ID and as the data above shows, the 
+&quot;high&quot; msb will rule in terms of determining distance.</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
 <p>An interesting discussion here:
 <a href="https://github.com/mikedeboer/node-k-bucket">
 https://github.com/mikedeboer/node-k-bucket</a></p>

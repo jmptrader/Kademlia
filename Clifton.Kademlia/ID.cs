@@ -11,7 +11,10 @@ namespace Clifton.Kademlia
 {
 	public class ID : IComparable
 	{
-		private byte[] id;
+        // Used for unit testing:
+        public byte[] ByteID { get { return id; } }
+
+        private byte[] id;
 		private static Random rnd = new Random();
 
 		/// <summary>
@@ -23,24 +26,59 @@ namespace Clifton.Kademlia
 			IDInit(data);
 		}
 
-		public int GetBucketIndex()
-		{
-			return (Constants.ID_LENGTH_BITS - id.Bits().TakeWhile(b => !b).Count() - 1).Max(0);
-		}
-
-		private void IDInit(byte[] data)
+        private void IDInit(byte[] data)
 		{
 			Validate.IsTrue(data.Length == Constants.ID_LENGTH_BYTES, "ID must be " + Constants.ID_LENGTH_BYTES + " bytes in length.");
 			id = new byte[Constants.ID_LENGTH_BYTES];
 			data.CopyTo(id, 0);
 		}
 
-		/// <summary>
-		/// Method used to get the hash code according to the algorithm: 
-		/// http://stackoverflow.com/questions/16340/how-do-i-generate-a-hashcode-from-a-byte-array-in-c/425184#425184
-		/// </summary>
-		/// <returns>integer representing the hashcode</returns>
-		public override int GetHashCode()
+        public int GetBucketIndex()
+        {
+            return (Constants.ID_LENGTH_BITS - id.Bits().TakeWhile(b => !b).Count() - 1).Max(0);
+        }
+
+        public int DifferingBit(ID other)
+        {
+            ID differingBits = this ^ other;
+            int differAt = 8 * Constants.ID_LENGTH_BYTES - 1;
+
+            // Subtract 8 for every zero byte from the right
+            int i = Constants.ID_LENGTH_BYTES - 1;
+            while (i >= 0 && differingBits.id[i] == 0)
+            {
+                differAt -= 8;
+                i--;
+            }
+
+            // Subtract 1 for every zero bit from the right
+            int j = 0;
+            // 1 << j = pow(2, j)
+            while (j < 8 && (differingBits.id[i] & (1 << j)) == 0)
+            {
+                j++;
+                differAt--;
+            }
+
+            return differAt;
+        }
+
+
+        /// <summary>
+        /// Sets the bit n, from the LSB.
+        /// </summary>
+        public void SetBit(int n)
+        {
+            int m = (Constants.ID_LENGTH_BITS - 1) - n;
+            id[m / 8] |= (byte)(1 << (n % 8));
+        }
+
+        /// <summary>
+        /// Method used to get the hash code according to the algorithm: 
+        /// http://stackoverflow.com/questions/16340/how-do-i-generate-a-hashcode-from-a-byte-array-in-c/425184#425184
+        /// </summary>
+        /// <returns>integer representing the hashcode</returns>
+        public override int GetHashCode()
 		{
 			int hash = 0;
 
@@ -63,29 +101,24 @@ namespace Clifton.Kademlia
 			return this == (ID)obj;
 		}
 
+        /// <summary>
+        /// This method assumes that all bits from [0, bit) are 0.
+        /// </summary>
 		public ID RandomizeBeyond(int bit)
 		{
 			byte[] randomized = new byte[Constants.ID_LENGTH_BYTES];
 			id.CopyTo(randomized, 0);
+            ID newid = new ID(randomized);
 
-			for (int i = bit + 1; i < 8 * Constants.ID_LENGTH_BYTES; i++)
+			for (int i = 0;  i < bit; i++)
 			{
 				if (rnd.NextDouble() < 0.5)
 				{
-					FlipBit(randomized, i);
+                    newid.SetBit(i);
 				}
 			}
 
-			return new ID(randomized);
-		}
-
-		protected void FlipBit(byte[] data, int bit)
-		{
-			int byteIndex = bit / 8;
-			int byteBit = bit % 8;
-			byte mask = (byte)(0x80 >> byteBit);
-
-			data[byteIndex] = (byte)(data[byteIndex] ^ mask); // Use a mask to flip the bit
+			return newid;
 		}
 
 		/// <summary>
@@ -125,12 +158,19 @@ namespace Clifton.Kademlia
 		public static ID RandomID()
 		{
 			byte[] data = new byte[Constants.ID_LENGTH_BYTES];
-			rnd.NextBytes(data);
+            ID id = new ID(data);
+            // Uniform random bucket index.
+            int idx = rnd.Next(Constants.ID_LENGTH_BITS);
+            // 0 <= idx <= 159
+            // Remaining bits are randomized to get unique ID.
+            id.SetBit(idx);
+            id = id.RandomizeBeyond(idx);
+            Validate.IsTrue(id.GetBucketIndex() == idx, "Error with RandomID.");
 
-			return new ID(data);
+			return id;
 		}
 
-		public static ID ZeroID()
+        public static ID ZeroID()
 		{
 			byte[] data = new byte[Constants.ID_LENGTH_BYTES];
 
@@ -224,14 +264,39 @@ namespace Clifton.Kademlia
 			id.id.CopyTo(result, 0);
 			byte carry = 0;
 
-			for (int i = Constants.ID_LENGTH_BYTES - 1; i >= 0; i--)
-			{
-				byte nextCarry = (byte)((result[i] & 0x80) >> 7);
-				result[i] = (byte)((result[i] << 1) | carry);
-				carry = nextCarry;
-			}
+            while (count-- > 0)
+            {
+                for (int i = Constants.ID_LENGTH_BYTES - 1; i >= 0; i--)
+                {
+                    byte nextCarry = (byte)((result[i] & 0x80) >> 7);
+                    result[i] = (byte)((result[i] << 1) | carry);
+                    carry = nextCarry;
+                }
+            }
 
 			return new ID(result);
 		}
-	}
+
+        /// <summary>
+        /// Shift all bits right.
+        /// </summary>
+        public static ID operator >>(ID id, int count)
+        {
+            byte[] result = new byte[Constants.ID_LENGTH_BYTES];
+            id.id.CopyTo(result, 0);
+            byte carry = 0;
+
+            while (count-- > 0)
+            {
+                for (int i = 0; i< Constants.ID_LENGTH_BYTES; i++)
+                {
+                    byte nextCarry = (byte)((result[i] & 0x01) << 7);
+                    result[i] = (byte)((result[i] >> 1) | carry);
+                    carry = nextCarry;
+                }
+            }
+
+            return new ID(result);
+        }
+    }
 }

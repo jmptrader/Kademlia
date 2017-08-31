@@ -20,11 +20,10 @@ namespace Clifton.Kademlia
 			// A node must never put its own node ID into a bucket as a contact.
 			if (ourId != contact.NodeID)
 			{
-				var distance = ourId ^ contact.NodeID;
-				int bucketIdx = distance.GetBucketIndex();
-				buckets[bucketIdx].HaveContact(contact, discardHead);
+                int bucketIdx = contact.NodeID.GetBucketIndex();
+                buckets[bucketIdx].HaveContact(contact, discardHead);
 			}
-		}
+		} 
 
 		/// <summary>
 		/// Algorithm idea from https://github.com/zencoders/sambatyon/blob/master/Kademlia/Kademlia/BucketList.cs, starting on line 208.
