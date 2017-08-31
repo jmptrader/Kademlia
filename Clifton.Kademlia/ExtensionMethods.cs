@@ -147,14 +147,19 @@ namespace Clifton.Kademlia
             return items[1];
         }
 
+        /// <summary>
+        /// Little endian conversion of bytes to bits.
+        /// </summary>
 		public static IEnumerable<bool> Bits(this byte[] bytes)
 		{
 			IEnumerable<bool> GetBits(byte b)
 			{
+                byte shifter = 0x01;
+
 				for (int i = 0; i < 8; i++)
 				{
-					yield return (b & 0x80) != 0;
-					b <<= 1;
+					yield return (b & shifter) != 0;
+					shifter <<= 1;
 				}
 			}
 
@@ -195,5 +200,36 @@ namespace Clifton.Kademlia
 				return predicate(enumerator.Current);
 			}
 		}
+
+        public static byte[] Concat0(this byte[] b)
+        {
+            return b.Concat(new byte[] { 0 }).ToArray();
+        }
+
+        public static bool ApproximatelyEquals(this double d, double val, double range)
+        {
+            return d >= val - range && d <= val + range;
+        }
+
+        // Welford's method: https://mathoverflow.net/questions/70345/numerically-most-robust-way-to-compute-sum-of-products-standard-deviation-in-f
+        // From: https://stackoverflow.com/questions/2253874/standard-deviation-in-linq
+        public static double StdDev(this IEnumerable<double> values)
+        {
+            double mean = 0.0;
+            double sum = 0.0;
+            double stdDev = 0.0;
+            int n = 0;
+            foreach (double val in values)
+            {
+                n++;
+                double delta = val - mean;
+                mean += delta / n;
+                sum += delta * (val - mean);
+            }
+            if (1 < n)
+                stdDev = Math.Sqrt(sum / (n - 1));
+
+            return stdDev;
+        }
 	}
 }

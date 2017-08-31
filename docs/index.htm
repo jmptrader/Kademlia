@@ -180,6 +180,13 @@ https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00039.html</a></p>
 <p>Jim Dixon's description of the shorter specification:
 <a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE">
 http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE</a></p>
+<h2>Other Resources To Further This Work</h2>
+<p>IPFS - Content Addressed, Versions, P2P File System (Draft 3):
+<a href="https://ipfs.io/ipfs/QmR7GSQM93Cx5eAg6a6yRzNde1FQv7uL6X1o4k7zrJa3LX/ipfs.draft3.pdf">
+https://ipfs.io/ipfs/QmR7GSQM93Cx5eAg6a6yRzNde1FQv7uL6X1o4k7zrJa3LX/ipfs.draft3.pdf</a></p>
+<p>S/Kademlia: A Practicable Approach Towards Secure Key-Based Routing:
+<a href="http://www.tm.uka.de/doc/SKademlia_2007.pdf">
+http://www.tm.uka.de/doc/SKademlia_2007.pdf</a></p>
 <h2>High Level Architecture</h2>
 <p>In this document, <font color="#FF00FF">fuchsia text</font> is used when 
 quoting from the Kademlia specification and other documents.</p>
@@ -1898,6 +1905,19 @@ node ID for the host node.&nbsp; Again, zencoders implementation for the host ID
 is wrong:</p>
 <pre>return ID.Hash(app + user + machine + macs);</pre>
 <p>This in no way will generate a uniformly distributed ID for host.</p>
+<p>Lastly, let's have the distribution test actually verify a good distribution 
+(I'm no statistics wizard, so this might be somewhat bogus):</p>
+<pre>[TestMethod]
+public void DistributionMidpointTest()
+{
+  Node node = RouterTests.CreateNode(ID.ZeroID());
+  (Constants.ID_LENGTH_BITS * Constants.K).ForEach(() =&gt; node.SimpleRegistration(new Contact() { NodeID = ID.RandomID() }));
+  var bucketCounts = node.BucketList.GetBucketContactCounts();
+  Assert.IsTrue(bucketCounts.Select(b =&gt; b.idx).Average().ApproximatelyEquals(80, 2), &quot;Bad distribution&quot;);
+  Assert.IsTrue(bucketCounts.Select(b=&gt;b.count).Sum() &gt; 2800, &quot;Expected at least 2800 nodes to register into buckets.&quot;);
+  Assert.IsTrue(bucketCounts.Select(b =&gt; (double)b.count).StdDev().ApproximatelyEquals(3, 1), &quot;Bad distribution&quot;);
+  Write(&quot;countsMidpoint.txt&quot;, bucketCounts);
+}</pre>
 <h3>A Flaw in the Kademlia XOR Distance Metric or in the Specification?</h3>
 <p>Does this point to a flaw in using XOR logic for a distance metric?&nbsp; 
 Let's look at the bucket distribution for a node with an ID where bit 2<sup>159</sup> is set:</p>
@@ -2165,9 +2185,92 @@ Python code, the tree is actually a contiguous list:</p>
   one, two = self.buckets[index].split()
   self.buckets[index] = one
   self.buckets.insert(index + 1, two)</pre>
-<p>That certainly makes it easier to locate a bucket (no tree traversal) but I 
-really don't want to use C#'s <code>BigInteger</code>, so we'll deal with this slightly 
-differently.</p>
+<p>That certainly makes it easier to locate a bucket (no tree traversal).</p>
+<h4>Refactoring the ID Class</h4>
+<p>So 
+let's byte (haha) the bullet and use the <code>BigInteger</code> class.</p>
+<pre>public class ID : IComparable
+{
+  private BigInteger id;
+  ...</pre>
+<p>There are two annoyances with this class.&nbsp; First, values are stored in 
+little-endian order, so that an index of 1 is represented by the byte sequence 
+(well, more on that in a minute) 1 0 0 0...&nbsp; When we want to get the bucket 
+index, we have to through some hoops:</p>
+<pre>public int GetBucketIndex()
+{
+  // We need to reverse the ordering of bits because we are taking forward, 
+  // and the bit array from BitInteger is in little endian order.
+  return Constants.ID_LENGTH_BITS - Bytes.Bits().Reverse().TakeWhile(b =&gt; !b).Count() - 1;
+}</pre>
+<p>such that an ID with the value of 1 returns a bucket index of 1.&nbsp; This 
+also meant refactoring the <code>Bits</code> extension method:</p>
+<pre>/// &lt;summary&gt;
+/// Little endian conversion of bytes to bits.
+/// &lt;/summary&gt;
+public static IEnumerable&lt;bool&gt; Bits(this byte[] bytes)
+{
+  IEnumerable&lt;bool&gt; GetBits(byte b)
+  {
+    byte shifter = 0x01;
+
+    for (int i = 0; i &lt; 8; i++)
+    {
+      yield return (b &amp; shifter) != 0;
+      shifter &lt;&lt;= 1;
+    }
+  }
+
+  return bytes.SelectMany(GetBits);
+}</pre>
+<p>The next annoyance is that <code>BigInteger</code> is signed.&nbsp; To force it to work with 
+unsigned values (so the ID comparison operators work) we need to concatenate a 0 
+byte.&nbsp; So whenever we instantiate the <code>BigInteger</code> class, we have to do this:</p>
+<pre>new BigInteger(data.Concat0())</pre>
+<p>and because I dislike having to type in the concatenation stuff every time, 
+there's this extension method:</p>
+<pre>public static byte[] Concat0(this byte[] b)
+{
+  return b.Concat(new byte[] { 0 }).ToArray();
+}</pre>
+<p>I don't want to think about how all these bit/byte manipulations, Linq, and 
+extension methods are sucking up CPU time, but the tradeoff is cleaner (you may 
+disagree), more readable (you may disagree) high level code.</p>
+<p>The remaining refactoring strips out all the stuff that was being done to 
+handle the operators, since <code>BigInteger</code> implements them.&nbsp; For example, we 
+now have:</p>
+<pre>public static ID operator ^(ID a, ID b)
+{
+  return new ID(a.id ^ b.id);
+}</pre>
+<p>After making the changes to the <code></code>ID</code> class, running the unit tests, we get:</p>
+<p><img border="0" src="broken2.png" width="220" height="466"></p>
+<p>Not bad.&nbsp; Since we fixed how nodes are added to buckets (based on their 
+ID, not their distance), all nodes after the finding other nodes have 19 
+contacts in their buckets:</p>
+<pre>[TestMethod]
+public void LinearChainDiscoveryTest()
+{
+  Router router = new Router();
+  List&lt;Node&gt; nodes = CreateNodes(Constants.K);
+  CreateLinearChain(nodes);
+
+  nodes.ForEach(n =&gt; router.Lookup(ID.MaxID(), n, Dht.NodeLookup));
+
+  // All nodes should have 19 contacts:
+  int expectedContacts = Constants.ID_LENGTH_BYTES - 1;
+
+  // Final state:
+  nodes.ForEachWithIndex((n, idx) =&gt;
+  {
+    Assert.IsTrue(n.BucketList.GetBucketContactCounts().Count == expectedContacts, &quot;Expected &quot; + expectedContacts + &quot; contact(s).&quot;);
+  });
+}</pre>
+<p>The other test had the wrong bucket index (since node 1 is ID of zero, it 
+goes into bucket 0).&nbsp; The fix:</p>
+<pre>Assert.IsTrue(node2.BucketList.GetBucketContactCounts().First().idx == 0, &quot;Expected contact in bucket 0&quot;);</pre>
+<p>All green again!</p>
+<h4>Refactoring the BucketList Class for Splits</h4>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>

@@ -124,7 +124,7 @@ namespace UnitTests
 			// Final state:
 			Assert.IsTrue(node1.BucketList.GetBucketContactCounts().Count == 1, "Expected only one contact.");
 			Assert.IsTrue(node2.BucketList.GetBucketContactCounts().Count == 1, "Expected one contact.");
-			Assert.IsTrue(node2.BucketList.GetBucketContactCounts().First().idx == 1, "Expected contact in bucket 1");
+			Assert.IsTrue(node2.BucketList.GetBucketContactCounts().First().idx == 0, "Expected contact in bucket 0");
 		}
 
 		[TestMethod]
@@ -136,13 +136,13 @@ namespace UnitTests
 
 			nodes.ForEach(n => router.Lookup(ID.MaxID(), n, Dht.NodeLookup));
 
-			// Final state:
-			nodes.ForEachWithIndex((n, idx) =>
-			{
-				// First two nodes know K-1 contacts.
-				int expectedContacts = Constants.K - 1 - (idx > 1 ? idx - 1 : 0);
-				Assert.IsTrue(n.BucketList.GetBucketContactCounts().Count == expectedContacts, "Expected " + expectedContacts + " contact(s).");
+            // All nodes should have 19 contacts:
+            int expectedContacts = Constants.ID_LENGTH_BYTES - 1;
 
+            // Final state:
+            nodes.ForEachWithIndex((n, idx) =>
+			{
+				Assert.IsTrue(n.BucketList.GetBucketContactCounts().Count == expectedContacts, "Expected " + expectedContacts + " contact(s).");
 			});
 		}
 

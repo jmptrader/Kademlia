@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -11,10 +12,21 @@ namespace Clifton.Kademlia
 {
 	public class ID : IComparable
 	{
-        // Used for unit testing:
-        public byte[] ByteID { get { return id; } }
+        // Zero-pad msb's if ToByteArray length != Constants.LENGTH_BYTES
+        // The array returned is in little-endian order (lsb at index 0)
+        public byte[] Bytes
+        {
+            get
+            {
+                byte[] bytes = new byte[Constants.ID_LENGTH_BYTES];
+                byte[] partial = id.ToByteArray().Take(Constants.ID_LENGTH_BYTES).ToArray();    // remove msb 0 at index 20.
+                partial.CopyTo(bytes, 0);
 
-        private byte[] id;
+                return bytes;
+            }
+        }
+
+        private BigInteger id;
 		private static Random rnd = new Random();
 
 		/// <summary>
@@ -26,51 +38,42 @@ namespace Clifton.Kademlia
 			IDInit(data);
 		}
 
+        public ID(BigInteger bi)
+        {
+            id = bi;
+        }
+
         private void IDInit(byte[] data)
-		{
-			Validate.IsTrue(data.Length == Constants.ID_LENGTH_BYTES, "ID must be " + Constants.ID_LENGTH_BYTES + " bytes in length.");
-			id = new byte[Constants.ID_LENGTH_BYTES];
-			data.CopyTo(id, 0);
+        {
+            Validate.IsTrue(data.Length == Constants.ID_LENGTH_BYTES, "ID must be " + Constants.ID_LENGTH_BYTES + " bytes in length.");
+            id = new BigInteger(data.Concat0());       // concat a 0 to force unsigned values.
 		}
 
         public int GetBucketIndex()
         {
-            return (Constants.ID_LENGTH_BITS - id.Bits().TakeWhile(b => !b).Count() - 1).Max(0);
+            // We need to reverse the ordering of bits because we are taking forward, 
+            // and the bit array from BitInteger is in little endian order.
+            return (Constants.ID_LENGTH_BITS - Bytes.Bits().Reverse().TakeWhile(b => !b).Count() - 1).Max(0);
         }
 
-        public int DifferingBit(ID other)
+        /// <summary>
+        /// Clears the bit n, from the LSB.
+        /// </summary>
+        public void ClearBit(int n)
         {
-            ID differingBits = this ^ other;
-            int differAt = 8 * Constants.ID_LENGTH_BYTES - 1;
-
-            // Subtract 8 for every zero byte from the right
-            int i = Constants.ID_LENGTH_BYTES - 1;
-            while (i >= 0 && differingBits.id[i] == 0)
-            {
-                differAt -= 8;
-                i--;
-            }
-
-            // Subtract 1 for every zero bit from the right
-            int j = 0;
-            // 1 << j = pow(2, j)
-            while (j < 8 && (differingBits.id[i] & (1 << j)) == 0)
-            {
-                j++;
-                differAt--;
-            }
-
-            return differAt;
+            byte[] bytes = Bytes;
+            bytes[n / 8] &= (byte)((1 << (n % 8)) ^ 0xFF);
+            id = new BigInteger(bytes.Concat0());
         }
-
 
         /// <summary>
         /// Sets the bit n, from the LSB.
         /// </summary>
         public void SetBit(int n)
         {
-            int m = (Constants.ID_LENGTH_BITS - 1) - n;
-            id[m / 8] |= (byte)(1 << (n % 8));
+            byte[] bytes = Bytes;
+            bytes[n / 8] |= (byte)(1 << (n % 8));
+            id = new BigInteger(bytes.Concat0());
         }
 
         /// <summary>
@@ -80,18 +83,7 @@ namespace Clifton.Kademlia
         /// <returns>integer representing the hashcode</returns>
         public override int GetHashCode()
 		{
-			int hash = 0;
-
-			for (int i = 0; i < Constants.ID_LENGTH_BYTES; i++)
-			{
-				unchecked
-				{
-					hash *= 31;
-				}
-
-				hash ^= id[i];
-			}
-			return hash;
+            return id.GetHashCode();
 		}
 
 		public override bool Equals(object obj)
@@ -101,16 +93,20 @@ namespace Clifton.Kademlia
 			return this == (ID)obj;
 		}
 
-        /// <summary>
-        /// This method assumes that all bits from [0, bit) are 0.
-        /// </summary>
 		public ID RandomizeBeyond(int bit)
 		{
-			byte[] randomized = new byte[Constants.ID_LENGTH_BYTES];
-			id.CopyTo(randomized, 0);
+			byte[] randomized = Bytes;
+
             ID newid = new ID(randomized);
 
-			for (int i = 0;  i < bit; i++)
+            // TODO: Optimize
+            for (int i = bit + 1; i < Constants.ID_LENGTH_BITS; i++)
+            {
+                newid.ClearBit(i);
+            }
+
+            // TODO: Optimize
+            for (int i = 0;  i < bit; i++)
 			{
 				if (rnd.NextDouble() < 0.5)
 				{
@@ -136,19 +132,19 @@ namespace Clifton.Kademlia
 
 		public override string ToString()
 		{
-			return BitConverter.ToString(id);
+			return id.ToString();
 		}
 
 		/// <summary>
 		/// Returns a SHA1 of the string.
 		/// </summary>
-		/// <param name="s"></param>
-		/// <returns></returns>
 		public static ID FromString(string s)
 		{
-			HashAlgorithm hasher = new SHA1CryptoServiceProvider(); // Keeping this around results in exceptions
-
-			return new ID(hasher.ComputeHash(Encoding.UTF8.GetBytes(s)));
+            // Keeping this around results in exceptions
+            using (HashAlgorithm hasher = new SHA1CryptoServiceProvider())
+            {
+                return new ID(hasher.ComputeHash(Encoding.UTF8.GetBytes(s)));
+            }
 		}
 
 		/// <summary>
@@ -180,123 +176,52 @@ namespace Clifton.Kademlia
 		public static ID OneID()
 		{
 			byte[] data = new byte[Constants.ID_LENGTH_BYTES];
-			data[Constants.ID_LENGTH_BYTES - 1] = 1;
+			data[0] = 1;
 
 			return new ID(data);
 		}
 
 		public static ID MaxID()
 		{
-			byte[] data = new byte[Constants.ID_LENGTH_BYTES];
-			Constants.ID_LENGTH_BYTES.ForEach(n => data[n] = 0xFF);
+            return new ID(Enumerable.Repeat((byte)0xFF, Constants.ID_LENGTH_BYTES).ToArray());
+        }
 
-			return new ID(data);
-		}
-
-		/// <summary>
-		/// XOR operator.
-		/// This is our distance metric in the DHT.
-		/// </summary>
-		/// <param name="a">The first ID to make xor</param>
-		/// <param name="b">The second ID to make xor</param>
-		/// <returns></returns>
 		public static ID operator ^(ID a, ID b)
 		{
-			byte[] xoredData = new byte[Constants.ID_LENGTH_BYTES];
-			Constants.ID_LENGTH_BYTES.ForEach(n => xoredData[n] = (byte)(a.id[n] ^ b.id[n]));
-
-			return new ID(xoredData);
+            return new ID(a.id ^ b.id);
 		}
 
-		/// <summary>
-		/// We need to compare these when measuring distance
-		/// </summary>
-		/// <param name="a">First ID to compare</param>
-		/// <param name="b">Second ID to compare</param>
-		/// <returns>true if a is less than b; false otherwise</returns>
 		public static bool operator <(ID a, ID b)
 		{
-			return Constants.ID_LENGTH_BYTES.Range().SkipWhile(n => a.id[n] == b.id[n]).IsNext(n => a.id[n] < b.id[n]);
+            return a.id < b.id;
 		}
 
-		/// <summary>
-		/// We need to compare these when measuring distance
-		/// </summary>
-		/// <param name="a">First ID to compare</param>
-		/// <param name="b">Second ID to compare</param>
-		/// <returns>true if a is greater than b; false otherwise</returns>
 		public static bool operator >(ID a, ID b)
 		{
-			return Constants.ID_LENGTH_BYTES.Range().SkipWhile(n => a.id[n] == b.id[n]).IsNext(n => a.id[n] > b.id[n]);
+            return a.id > b.id;
 		}
 
-		/// <summary>
-		/// We need to compare these when measuring distance
-		/// </summary>
-		/// <param name="a">First ID to compare</param>
-		/// <param name="b">Second ID to compare</param>
-		/// <returns>true if a is equals to b; false otherwise</returns>
 		public static bool operator ==(ID a, ID b)
 		{
 			Validate.IsFalse(ReferenceEquals(a, null), "ID a cannot be null.");
 			Validate.IsFalse(ReferenceEquals(b, null), "ID b cannot be null.");
 
-			return Constants.ID_LENGTH_BYTES.Range().All(n => a.id[n] == b.id[n]);
+            return a.id == b.id;
 		}
 
-		/// <summary>
-		/// We need to compare these when measuring distance
-		/// </summary>
-		/// <param name="a">First ID to compare</param>
-		/// <param name="b">Second ID to compare</param>
-		/// <returns>true if a is different from b; false otherwise</returns>
 		public static bool operator !=(ID a, ID b)
 		{
 			return !(a == b); // Already have that
 		}
 
-		/// <summary>
-		/// Shift all bits left.
-		/// </summary>
-		public static ID operator <<(ID id, int count)
+		public static ID operator <<(ID idobj, int count)
 		{
-			byte[] result = new byte[Constants.ID_LENGTH_BYTES];
-			id.id.CopyTo(result, 0);
-			byte carry = 0;
-
-            while (count-- > 0)
-            {
-                for (int i = Constants.ID_LENGTH_BYTES - 1; i >= 0; i--)
-                {
-                    byte nextCarry = (byte)((result[i] & 0x80) >> 7);
-                    result[i] = (byte)((result[i] << 1) | carry);
-                    carry = nextCarry;
-                }
-            }
-
-			return new ID(result);
+            return new ID(idobj.id << count);
 		}
 
-        /// <summary>
-        /// Shift all bits right.
-        /// </summary>
-        public static ID operator >>(ID id, int count)
+        public static ID operator >>(ID idobj, int count)
         {
-            byte[] result = new byte[Constants.ID_LENGTH_BYTES];
-            id.id.CopyTo(result, 0);
-            byte carry = 0;
-
-            while (count-- > 0)
-            {
-                for (int i = 0; i< Constants.ID_LENGTH_BYTES; i++)
-                {
-                    byte nextCarry = (byte)((result[i] & 0x01) << 7);
-                    result[i] = (byte)((result[i] >> 1) | carry);
-                    carry = nextCarry;
-                }
-            }
-
-            return new ID(result);
+            return new ID(idobj.id >> count);
         }
     }
 }

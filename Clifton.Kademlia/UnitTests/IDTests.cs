@@ -82,8 +82,8 @@ namespace UnitTests
             ID id = ID.ZeroID();
             id.SetBit(7);
             id = id << 1;
-            Assert.IsTrue(id.ByteID[Constants.ID_LENGTH_BYTES - 2] == 0x01, "Carry failed.");
-            Assert.IsTrue(id.ByteID[Constants.ID_LENGTH_BYTES - 1] == 0, "Shift left failed.");
+            Assert.IsTrue(id.Bytes[1] == 0x01, "Carry failed.");
+            Assert.IsTrue(id.Bytes[0] == 0, "Shift left failed.");
         }
 
         [TestMethod]
@@ -92,8 +92,8 @@ namespace UnitTests
             ID id = ID.ZeroID();
             id.SetBit(8);
             id = id >> 1;
-            Assert.IsTrue(id.ByteID[Constants.ID_LENGTH_BYTES - 2] == 0, "Shift right failed.");
-            Assert.IsTrue(id.ByteID[Constants.ID_LENGTH_BYTES - 1] == 0x80, "Carry failed.");
+            Assert.IsTrue(id.Bytes[1] == 0, "Shift right failed.");
+            Assert.IsTrue(id.Bytes[0] == 0x80, "Carry failed.");
         }
     }
 }
