@@ -40,42 +40,6 @@ namespace UnitTests
             Assert.IsTrue((ID.MaxID() ^ ID.MaxID()) == ID.ZeroID(), "XOR failure.");
         }
 
-        /// <summary>
-        /// Test bucket indexing by testing all patterns:
-        /// 1xxxxx   (idx 159)
-        /// 01xxxx   (idx 158)
-        /// 001xxx   (idx 157)
-        /// etc. that we get the correct index back.
-        /// </summary>
-        [TestMethod]
-        public void BucketIndexTest()
-        {
-            for (int i = 0; i < Constants.ID_LENGTH_BITS; i++)
-            {
-                ID id = ID.ZeroID();
-                id.SetBit(i);
-                id = id.RandomizeBeyond(i);
-                int bucketIdx = id.GetBucketIndex();
-                Assert.IsTrue(bucketIdx == i, "Bucket index does not match expected index.");
-            }
-        }
-
-        [TestMethod]
-        public void EdgeCase0Test()
-        {
-            ID id = ID.ZeroID();
-            int bucketIdx = id.GetBucketIndex();
-            Assert.IsTrue(bucketIdx == 0, "Index should be 0.");
-        }
-
-        [TestMethod]
-        public void EdgeCaseMaxTest()
-        {
-            ID id = ID.MaxID();
-            int bucketIdx = id.GetBucketIndex();
-            Assert.IsTrue(bucketIdx == Constants.ID_LENGTH_BITS - 1, "Index should be 159.");
-        }
-
         [TestMethod]
         public void ShiftLeftTest()
         {

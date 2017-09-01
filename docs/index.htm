@@ -11,6 +11,8 @@
 <p>Implementing the Kademlia Peer-to-Peer Distributed Hash Table</p>
 <p>A journey from specification to implementation (with some help along the 
 way.)</p>
+<h2>Requirements</h2>
+<p>C# 7 with .NET framework 4.7 is required to build this code.</p>
 <h2>TL;DR</h2>
 <p>This is a huge article.&nbsp; The whole point of it is to show how I took the 
 Kademlia peer-to-peer distributed hash table specification and implement it 
@@ -496,7 +498,7 @@ handled in the <code>K_Bucket class</code>:</p>
 
   public KBucket()
   {
-    contacts = new List&lt;Contact&gt;(Constants.K);
+    contacts = new List&lt;Contact&gt;();
   }
 }
 
@@ -2129,7 +2131,8 @@ if bucket.hasInRange(self.node) or bucket.depth() % 5 != 0:
   self.addContact(node)
 else:
   self.protocol.callPing(bucket.head())</pre>
-<p>Note that the bucket is split only when the bucket contains the host node ID!&nbsp; 
+<p>Note that the bucket is split only when the bucket contains the host node ID 
+or the depth, mod 5, is not 0.&nbsp; 
 Let's read what <a href="https://github.com/mikedeboer/node-k-bucket">Mike de 
 Boer</a> says about this:</p>
 <p><font color="#FF00FF">KBucket starts off as a single k-bucket with capacity 
@@ -2169,10 +2172,7 @@ node splits a full k-bucket if the bucket’s range contains the node’s own ID or
 the depth d of the k-bucket in the routing tree satisfies [d mod b != 0]. (The 
 depth is just the length of the prefix shared by all nodes in the k-bucket’s 
 range.) The current implementation uses b = 5.</font></p>
-<p>The effect of the depth computation means that the original bucket 
-(containing the entire range of ID's) is split immediately (since depth == 1) 
-and so forth, to a depth of 5, upon which it will only be split if it is full (<i>k</i>) 
-and contains the host's node ID.&nbsp; Unfortunately, Jim Dixon's discussion 
+<p>Unfortunately, Jim Dixon's discussion 
 doesn't mention bucket splitting (it's based on the shorter specification, I 
 believe) and again,&nbsp; zencoders' implementation doesn't appear to implement this 
 behavior.</p>
@@ -2196,7 +2196,8 @@ let's byte (haha) the bullet and use the <code>BigInteger</code> class.</p>
 <p>There are two annoyances with this class.&nbsp; First, values are stored in 
 little-endian order, so that an index of 1 is represented by the byte sequence 
 (well, more on that in a minute) 1 0 0 0...&nbsp; When we want to get the bucket 
-index, we have to through some hoops:</p>
+index, we have to through some hoops (note that later, <b>this method will be 
+removed</b>, for now we're just trying to get the unit tests to pass):</p>
 <pre>public int GetBucketIndex()
 {
   // We need to reverse the ordering of bits because we are taking forward, 
@@ -2271,6 +2272,138 @@ goes into bucket 0).&nbsp; The fix:</p>
 <pre>Assert.IsTrue(node2.BucketList.GetBucketContactCounts().First().idx == 0, &quot;Expected contact in bucket 0&quot;);</pre>
 <p>All green again!</p>
 <h4>Refactoring the BucketList Class for Splits</h4>
+<p>This will borrow significantly from Brian Muller's implementation.&nbsp; 
+First, the method GetBucketIndex and the associated unit tests are removed -- 
+using the leading msb 0's of the ID to determine the bucket index is now wrong.&nbsp; 
+Instead, we have a method that returns the kbucket where the node ID is in 
+range:</p>
+<pre>public KBucket GetKBucket(ID otherID)
+{
+  return buckets[buckets.FindIndex(b =&gt; b.HasInRange(otherID))];
+}</pre>
+<p>Next, we refactor <code>HaveContact</code>, changing the method name to <code>AddContact</code>, which 
+I like a lot better. The implementation:</p>
+<pre>public void AddContact(Contact contact, Func&lt;Contact, bool&gt; discardHead)
+{
+  // A node must never put its own node ID into a bucket as a contact.
+  if (ourID != contact.NodeID)
+  {
+    KBucket kbucket = GetKBucket(contact.NodeID);
+
+    if (kbucket.IsBucketFull)
+    {
+      if (CanSplit(kbucket))
+      {
+        (KBucket k1, KBucket k2) = kbucket.Split();
+        int idx = GetKBucketIndex(contact.NodeID);
+        buckets[idx] = k1;
+        buckets.Insert(idx + 1, k2);
+
+        // Recurse until we can't.
+        AddContact(contact, discardHead);
+      }
+      else
+      {
+        kbucket.AddContact(contact, discardHead);
+      }
+    }
+    else
+    {
+      kbucket.AddContact(contact);
+    }
+  }
+}
+
+public int GetKBucketIndex(ID otherID)
+{
+  return buckets.FindIndex(b =&gt; b.HasInRange(otherID));
+}
+
+public KBucket GetKBucket(ID otherID)
+{
+  return buckets[buckets.FindIndex(b =&gt; b.HasInRange(otherID))];
+}
+
+protected bool CanSplit(KBucket kbucket)
+{
+  return kbucket.HasInRange(ourID) || ((kbucket.Depth() % 5) != 0);
+}</pre>
+<p>Various unit tests (after refactoring the <code>KBucket</code> class as well) verify that 
+everything is working:</p>
+<p><img border="0" src="bucketListTests1.png" width="196" height="105"></p>
+<h4>Refactoring KBucket</h4>
+<p>A few methods are added to the <code>KBucket</code> class.&nbsp; Depth is computed by the 
+number of shared bits:</p>
+<pre>/// &lt;summary&gt;
+/// Returns number of bits that are in common across all contacts.
+/// If there are no contacts, or no shared bits, the return is 0.
+/// &lt;/summary&gt;
+public int Depth()
+{
+  bool[] bits = new bool[0];
+
+  if (contacts.Count &gt; 0)
+  {
+    // Start with the first contact.
+    bits = contacts[0].NodeID.Bytes.Bits().Reverse().ToArray();
+
+    contacts.Skip(1).ForEach(c =&gt; bits = SharedBits(bits, c.NodeID));
+  }
+
+  return bits.Length;
+}
+
+/// &lt;summary&gt;
+/// Returns a new bit array of just the shared bits.
+/// &lt;/summary&gt;
+protected bool[] SharedBits(bool[] bits, ID id)
+{
+  bool[] idbits = id.Bytes.Bits().Reverse().ToArray();
+  int n = 0;
+  List&lt;bool&gt; sharedBits = new List&lt;bool&gt;();
+
+  while (n &lt; bits.Length &amp;&amp; bits[n] == idbits[n])
+  {
+    sharedBits.Add(bits[n]);
+    ++n;
+  }
+
+  return sharedBits.ToArray();
+}</pre>
+<p>This is a lot less elegant than the Python code:</p>
+<pre>def depth(self):
+  sp = sharedPrefix([n.id for n in self.nodes.values()])
+  return len(sp)
+
+def sharedPrefix(args):
+  i = 0
+  while i &lt; min(map(len, args)):
+   if len(set(map(operator.itemgetter(i), args))) != 1:
+     break
+    i += 1
+  return args[0][:i]</pre>
+<p>Refactoring my code to be this elegant would be fun!</p>
+<p>And the <code>Split</code> method:</p>
+<pre>/// &lt;summary&gt;
+/// Splits the kbucket into returning two new kbuckets filled with contacts separated by the new midpoint
+/// &lt;/summary&gt;
+public (KBucket, KBucket) Split()
+{
+  BigInteger midpoint = (Low + High) / 2;
+  KBucket k1 = new KBucket(Low, midpoint);
+  KBucket k2 = new KBucket(midpoint + 1, High);
+
+  Contacts.ForEach(c =&gt;
+  {
+    // &lt;, because the High value is exclusive in the HasInRange test.
+    // If value == midpoint, HasInRange would fail
+    KBucket k = c.NodeID.Value &lt; midpoint ? k1 : k2;
+    k.AddContact(c);
+  });
+
+  return (k1, k2);
+}</pre>
+<p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>

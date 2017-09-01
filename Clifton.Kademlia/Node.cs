@@ -14,22 +14,23 @@ namespace Clifton.Kademlia
 
 		protected Node()
 		{
-			bucketList = new BucketList();
 		}
 
-		public Node(Contact us) : this()
+		public Node(Contact us)
 		{
 			OurContact = us;
-		}
+            bucketList = new BucketList(us.NodeID);
+        }
 
-		public Node(IAddress address, ID nodeID) : this()
+        public Node(IAddress address, ID nodeID) : this()
 		{
 			OurContact = new Contact() { Address = address, NodeID = nodeID };
-		}
+            bucketList = new BucketList(nodeID);
+        }
 
-		public void SimpleRegistration(Contact sender)
+        public void SimpleRegistration(Contact sender)
 		{
-			bucketList.HaveContact(OurContact.NodeID, sender, (_) => false);
+			bucketList.AddContact(sender, (_) => false);
 		}
 
 		public Contact Ping(Contact sender)
@@ -41,7 +42,7 @@ namespace Clifton.Kademlia
 
 		public void Store(Contact sender, ID keyID, string val)
 		{
-			bucketList.HaveContact(OurContact.NodeID, sender, (_) => false);
+			bucketList.AddContact(sender, (_) => false);
 			Storage.Set(keyID.ToString(), val);
 		}
 
@@ -54,7 +55,7 @@ namespace Clifton.Kademlia
 		/// <returns></returns>
 		public (List<Contact> nodes, string val) FindNode(Contact sender, ID toFind)
 		{
-			bucketList.HaveContact(OurContact.NodeID, sender, (_) => false);
+			bucketList.AddContact(sender, (_) => false);
 			List<Contact> contacts = bucketList.GetCloseContacts(toFind, sender.NodeID);
 
 			return (contacts, null);
@@ -68,7 +69,7 @@ namespace Clifton.Kademlia
 			List<Contact> contacts = null;
 			string val = null;
 
-			bucketList.HaveContact(OurContact.NodeID, sender, (_) => false);
+			bucketList.AddContact(sender, (_) => false);
 
 			if (!Storage.TryGetValue(keyID.ToString(), out val))
 			{

@@ -12,6 +12,8 @@ namespace Clifton.Kademlia
 {
 	public class ID : IComparable
 	{
+        public BigInteger Value { get { return id; } }
+
         // Zero-pad msb's if ToByteArray length != Constants.LENGTH_BYTES
         // The array returned is in little-endian order (lsb at index 0)
         public byte[] Bytes
@@ -29,10 +31,9 @@ namespace Clifton.Kademlia
         private BigInteger id;
 		private static Random rnd = new Random();
 
-		/// <summary>
-		/// Make a new ID from a byte array.
-		/// </summary>
-		/// <param name="data">An array of exactly 20 bytes.</param>
+        /// <summary>
+        /// Creates a new ID from the *** little endian *** byte[].
+        /// </summary>
 		public ID(byte[] data)
 		{
 			IDInit(data);
@@ -48,13 +49,6 @@ namespace Clifton.Kademlia
             Validate.IsTrue(data.Length == Constants.ID_LENGTH_BYTES, "ID must be " + Constants.ID_LENGTH_BYTES + " bytes in length.");
             id = new BigInteger(data.Concat0());       // concat a 0 to force unsigned values.
 		}
-
-        public int GetBucketIndex()
-        {
-            // We need to reverse the ordering of bits because we are taking forward, 
-            // and the bit array from BitInteger is in little endian order.
-            return (Constants.ID_LENGTH_BITS - Bytes.Bits().Reverse().TakeWhile(b => !b).Count() - 1).Max(0);
-        }
 
         /// <summary>
         /// Clears the bit n, from the LSB.
@@ -161,7 +155,6 @@ namespace Clifton.Kademlia
             // Remaining bits are randomized to get unique ID.
             id.SetBit(idx);
             id = id.RandomizeBeyond(idx);
-            Validate.IsTrue(id.GetBucketIndex() == idx, "Error with RandomID.");
 
 			return id;
 		}
@@ -181,7 +174,15 @@ namespace Clifton.Kademlia
 			return new ID(data);
 		}
 
-		public static ID MaxID()
+        public static ID MiddleID()
+        {
+            byte[] data = new byte[Constants.ID_LENGTH_BYTES];
+            data[Constants.ID_LENGTH_BYTES - 1] = 0x80;
+
+            return new ID(data);
+        }
+
+        public static ID MaxID()
 		{
             return new ID(Enumerable.Repeat((byte)0xFF, Constants.ID_LENGTH_BYTES).ToArray());
         }
