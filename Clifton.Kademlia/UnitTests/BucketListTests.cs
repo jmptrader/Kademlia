@@ -96,8 +96,10 @@ namespace UnitTests
             // shared bits must all be diferent:
             Constants.K.ForEach(n => bl.AddContact(new Contact() { NodeID = ID.OneID() << n }, c => false));
             Assert.IsTrue(bl.Buckets.Count == 1, "Buckets should not have split.");
+            Assert.IsTrue(bl.Buckets[0].Contacts.Count == 20, "Expected 20 contacts.");
 
-            bl.AddContact(new Contact() { NodeID = new ID(ID.OneID().Value + 1) }, c => false);
+            // Add a unique ID (1 and 2 are taken, so use ID = 3)
+            bl.AddContact(new Contact() { NodeID = new ID(ID.OneID().Value + 2) }, c => false);
             // At the 142 iteration, the last contact (id = 1 << 19) we added in the starting set can be split into the right bucket.
             Assert.IsTrue(bl.Buckets.Count == 142, "There must be some math to compute this value.");
             Assert.IsTrue(bl.Buckets[0].Contacts.Count == 20, "Expected 20 contacts");

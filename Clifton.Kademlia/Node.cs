@@ -55,6 +55,7 @@ namespace Clifton.Kademlia
 		/// <returns></returns>
 		public (List<Contact> nodes, string val) FindNode(Contact sender, ID toFind)
 		{
+            Validate.IsFalse(sender.NodeID == OurContact.NodeID, "sender should not be ourself!");
 			bucketList.AddContact(sender, (_) => false);
 			List<Contact> contacts = bucketList.GetCloseContacts(toFind, sender.NodeID);
 

@@ -77,7 +77,7 @@ namespace UnitTests
             contacts = router.Lookup(ID.MaxID(), nodes[0], Dht.NodeLookup).contacts;
             // Note that after the node lookup, the kbuckets have been updated with the requestors.
 
-            Assert.IsTrue(contacts.Count == Constants.K - 1, "Expected alpha items");
+            Assert.IsTrue(contacts.Count == Constants.K - 1, "Expected 19 items");
             Assert.IsTrue(contacts[0] == nodes[Constants.K - 1].OurContact, "Expected node 19 to be returned.");
         }
 
@@ -125,24 +125,42 @@ namespace UnitTests
 			Assert.IsTrue(node1.BucketList.GetBucketContactCounts().Count == 1, "Expected only one contact.");
 			Assert.IsTrue(node2.BucketList.GetBucketContactCounts().Count == 1, "Expected one contact.");
 			Assert.IsTrue(node2.BucketList.GetBucketContactCounts().First().idx == 0, "Expected contact in bucket 0");
-		}
+        }
 
-		[TestMethod]
-		public void LinearChainDiscoveryTest()
-		{
-			Router router = new Router();
-			List<Node> nodes = CreateNodes(Constants.K);
-			CreateLinearChain(nodes);
+        [TestMethod]
+        public void UniqueContactsTest()
+        {
+            Router router = new Router();
+            List<Node> nodes = CreateNodes(Constants.K);
+            CreateLinearChain(nodes);
 
-			nodes.ForEach(n => router.Lookup(ID.MaxID(), n, Dht.NodeLookup));
+            nodes.ForEach(n =>
+            {
+                var contacts = router.Lookup(ID.MaxID(), n, Dht.NodeLookup).contacts;
+                Assert.IsTrue(contacts.Count == contacts.Distinct().Count(), "Contacts are not unique!");
+            });
+        }
 
-            // All nodes should have 19 contacts:
+        [TestMethod]
+        public void LinearChainDiscoveryTest()
+        {
+            Router router = new Router();
+            List<Node> nodes = CreateNodes(Constants.K);
+            CreateLinearChain(nodes);
+
+            nodes.ForEachWithIndex((n, idx) =>
+            {
+                router.Lookup(ID.MaxID(), n, Dht.NodeLookup);
+            });
+
             int expectedContacts = Constants.ID_LENGTH_BYTES - 1;
 
             // Final state:
             nodes.ForEachWithIndex((n, idx) =>
 			{
-				Assert.IsTrue(n.BucketList.GetBucketContactCounts().Count == expectedContacts, "Expected " + expectedContacts + " contact(s).");
+                var counts = n.BucketList.GetBucketContactCounts();
+                // System.Diagnostics.Debugger.Break();
+                Assert.IsTrue(counts.Sum(c=>c.count) == expectedContacts, "Expected " + expectedContacts + " contact(s).");
 			});
 		}
 

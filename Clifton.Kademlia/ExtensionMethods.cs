@@ -166,10 +166,23 @@ namespace Clifton.Kademlia
 			return bytes.SelectMany(GetBits);
 		}
 
-		/// <summary>
-		/// Value cannot exceed max.
-		/// </summary>
-		public static int Min(this int a, int max)
+        public static IEnumerable<T> ExcludeBy<T>(this IEnumerable<T> source, Func<T, bool> excludeBy)
+        {
+            using (var enumerator = source.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    T current = enumerator.Current;
+
+                    if (!excludeBy(current)) yield return current;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Value cannot exceed max.
+        /// </summary>
+        public static int Min(this int a, int max)
 		{
 			return (a > max) ? max : a;
 		}

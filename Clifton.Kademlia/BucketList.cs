@@ -29,7 +29,11 @@ namespace Clifton.Kademlia
             {
                 KBucket kbucket = GetKBucket(contact.NodeID);
 
-                if (kbucket.IsBucketFull)
+                if (kbucket.Exists(contact.NodeID))
+                {
+                    kbucket.MoveToTail(contact);
+                }
+                else if (kbucket.IsBucketFull)
                 {
                     if (CanSplit(kbucket))
                     {
@@ -76,15 +80,45 @@ namespace Clifton.Kademlia
 		/// <param name="exclude">The ID to exclude (the requestor's ID)</param>
 		public List<Contact> GetCloseContacts(ID toFind, ID exclude)
 		{
-			var contacts = buckets.
-				SelectMany(b => b.Contacts).
-				Where(c => c.NodeID != exclude).
-				Select(c => new { contact = c, distance = c.NodeID ^ toFind }).
-				OrderBy(d => d.distance).
-				Take(Constants.K);
+            /*
+            int idx = GetKBucketIndex(toFind);
+            int idxDecreasing = idx;        // we include our own bucket's contacts except the excluded ID.
+            int idxIncreasing = idx + 1;
+            bool pingpong = false;
 
-			return contacts.Select(c=>c.contact).ToList();
-		}
+            List<Contact> contacts = new List<Contact>();
+            bool didWork = true;
+
+            while (contacts.Count < Constants.K && didWork)
+            {
+                didWork = false;
+
+                if (pingpong && idxIncreasing < buckets.Count)
+                {
+                    contacts.AddRange(buckets[idxIncreasing++].Contacts);
+                    didWork = true;
+                }
+
+                if (!pingpong && idxDecreasing >= 0)
+                {
+                    contacts.AddRange(buckets[idxDecreasing--].Contacts);
+                    didWork = true;
+                }
+
+                pingpong = !pingpong;
+            }
+
+            return contacts.ExcludeBy(c => c.NodeID.Value == exclude.Value).OrderByDescending(c => c.NodeID.Value).ToList();
+            */
+            var contacts = buckets.
+                SelectMany(b => b.Contacts).
+                Where(c => c.NodeID != exclude).
+                Select(c => new { contact = c, distance = c.NodeID ^ toFind }).
+                OrderBy(d => d.distance).
+                Take(Constants.K);
+
+            return contacts.Select(c => c.contact).ToList();
+        }
 
         /// <summary>
         /// For unit testing...
@@ -92,12 +126,11 @@ namespace Clifton.Kademlia
         /// <returns>A list of tuples representing the bucket index and the count of contacts in each bucket.</returns>
         public List<(int idx, int count)> GetBucketContactCounts()
         {
-            return new List<(int idx, int count)>();
-            // TODO: Fix this.
-            //return buckets.
-            //    Select(b => new { bucket = b, idx = b.Index }).
-            //    Where(b => b.bucket.Contacts.Count > 0).
-            //    Select(b => (b.idx, b.bucket.Contacts.Count)).ToList();
+            List<(int idx, int count)> contactCounts = new List<(int idx, int count)>();
+
+            buckets.Where(b=>b.Contacts.Count > 0).ForEachWithIndex((b, n) => contactCounts.Add((n, b.Contacts.Count)));
+
+            return contactCounts;
         }
     }
 }

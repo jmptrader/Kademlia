@@ -1009,7 +1009,8 @@ deal with that second point first.&nbsp; </p>
 }</pre>
 <p>Done!&nbsp; </p>
 <p>The implementation is unfortunately a brute force iteration of all the known 
-contacts in the bucket list.&nbsp; The first <i>k</i> nodes that are the 
+contacts in the bucket list.&nbsp; Again, <b>this algorithm is ultimately wrong</b>, 
+which we discuss much alter.&nbsp; The first <i>k</i> nodes that are the 
 shortest distance to the ID are returned, in ascending (shortest to greatest) 
 distance.&nbsp; This algorithm is modified from the <code>ClosestContacts</code> algorithm
 <a href="https://github.com/zencoders/sambatyon/blob/master/Kademlia/Kademlia/BucketList.cs">
@@ -1062,7 +1063,7 @@ public void CloseContactTest()
 }</pre>
 <p>One might think that once the initial bucket index is found, one 
 should be able to find &quot;nearby buckets&quot; by expanding the search to neighboring 
-buckets +/- <i>n</i>, incrementing n until<i> k</i> contacts are found or we've 
+buckets in a ping-pong +/- <i>n</i>, incrementing n until<i> k</i> contacts are found or we've 
 searched the entire bucket list.&nbsp; It looks like this is what
 <a href="https://github.com/bmuller">Brian Muller</a> implemented in the 
 TableTraverser class in his Python version:</p>
@@ -1084,13 +1085,15 @@ TableTraverser class in his Python version:</p>
     return self.next()
 
   raise StopIteration</pre>
-<p>However, as Brian himself points out in
-<a href="https://github.com/bmuller/kademlia/issues/28">an issue</a>, and as
+<p>Brian has
+<a href="https://github.com/bmuller/kademlia/issues/28">an issue</a> on this 
+subject and as
 <a href="https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table">
 this Stack Overflow response</a> states: &quot;Since the XOR distance metric folds at 
 each bit-carry (XOR == carry-less addition) it does not map nicely to any 
-routing table layout. In other words, visiting the nearest buckets won't do.&quot;&nbsp; 
-So we'll stick with the brute force algorithm.</p>
+routing table layout. In other words, visiting the nearest buckets won't do&quot; but 
+as we'll see later, I believe that the actual implementation should be in 
+integer distance, not an XOR distance, when searching other buckets.</p>
 <h3>Node Lookup Implementation</h3>
 <p>Now we get to the business of &quot;<font color="#FF00FF">Most operations are 
 implemented in terms of [a] lookup procedure.</font>&quot;&nbsp; The lookup procedure 
@@ -1414,7 +1417,7 @@ public void LinearChainForwardCrawlTest()
   Assert.IsTrue(contacts.Count == Constants.K - 1, &quot;Expected alpha items&quot;);
   Assert.IsTrue(contacts[0] == nodes[Constants.K - 1].OurContact, &quot;Expected contact 0 to be returned.&quot;);
 }</pre>
-<h4>Linear Reverse Crawl Unit Test</h4>
+<h4>Linear Chain Reverse Crawl Unit Test</h4>
 <pre>[TestMethod]
 public void LinearChainBackwardCrawlTest()
 {
@@ -1540,7 +1543,7 @@ checked, regardless of whether it is farther in distance, until we've acquired
 each node knowing about the other nodes in decreasing count:</p>
 <p><img border="0" src="finalKnown.png" width="477" height="296"></p>
 <ul>
-	<li>Node 0 knows 19 other contactss</li>
+	<li>Node 0 knows 19 other contacts</li>
 	<li>Node 1 knows 19 other contacts (all the forward contacts plus node 0 
 	which it originally knew)</li>
 	<li>Node 2 knows 18 other contacts (all the forward contacts plus node 1 
@@ -1604,7 +1607,7 @@ public void StoreTest()
   RouterTests.CreateLinearChain(nodes);
   RouterTests.CreateStorage(nodes);
   Dht dht = new Dht(nodes[0]);
-  dht.Store(&quot;A&quot;, &quot;1&quot;);   // steak sauce.
+  dht.Store(ID.FromString(&quot;A&quot;), &quot;1&quot;);   // steak sauce.
   int stores = nodes.Sum(n =&gt; n.Storage.Entries());
   Assert.IsTrue(stores == 21, &quot;Expected 21 storage locations (ourself plus k more)&quot;);
 }</pre>
@@ -1651,17 +1654,16 @@ public static (List&lt;Contact&gt; contacts, string val) ValueLookup(IAddress ou
 </pre>
 <p>In the end, the <code>Dht</code> class' <code>FindValue</code> method looks 
 like this:</p>
-<pre>public (bool found, string val) FindValue(string key)
+<pre>public (bool found, string val) FindValue(ID keyID)
 {
   string ourval;
 
   // If we have it, return with our value.
-  if (node.Storage.TryGetValue(key, out ourval))
+  if (node.Storage.TryGetValue(key.ToString(), out ourval))
   {
     return (true, ourval);
   }
 
-  ID keyID = ID.FromString(key);
   Router router = new Router();
 
   (List&lt;Contact&gt; contacts, string val) = router.Lookup(keyID, node, ValueLookup);
@@ -1670,10 +1672,9 @@ like this:</p>
 }</pre>
 <p>The <code>Dht</code>'s <code>Store</code> method has been refactored 
 similarly, but uses <code>NodeLookup</code> instead of <code>ValueLookup</code>:</p>
-<pre>public void Store(string key, string val)
+<pre>public void Store(ID keyID, string val)
 {
   Router router = new Router();
-  ID keyID = ID.FromString(key);
   node.Store(node.OurContact, keyID, val); // we're storing to ourselves as well as k contacts.
   List&lt;Contact&gt; contacts = router.Lookup(keyID, node, NodeLookup).contacts;
   contacts.ForEach(c =&gt; c.Address.Store(node.OurContact, c.Address, ID.RandomID(), keyID, val));
@@ -1689,12 +1690,12 @@ public void FindValueTest()
   RouterTests.CreateLinearChain(nodes);
   RouterTests.CreateStorage(nodes);
   Dht dht = new Dht(nodes[0]);
-  dht.Store(&quot;A&quot;, &quot;1&quot;); // steak sauce
+  dht.Store(ID.FromString(&quot;A&quot;), &quot;1&quot;); // steak sauce
 
   Node emptyNode = nodes.First(n =&gt; n.Storage.Entries() == 0);
   // Create a DHT associated with this node.
   Dht dht2 = new Dht(emptyNode);
-  var result = dht2.FindValue(&quot;A&quot;);
+  var result = dht2.FindValue(ID.FromString(&quot;A&quot;));
 
   Assert.IsTrue(result.found, &quot;Expected value to be found&quot;);
   Assert.IsTrue(result.val == &quot;1&quot;, &quot;Expected A1 steak sauce.&quot;);
@@ -2328,6 +2329,20 @@ protected bool CanSplit(KBucket kbucket)
 {
   return kbucket.HasInRange(ourID) || ((kbucket.Depth() % 5) != 0);
 }</pre>
+<p>We also need to refactor the GetBucketContactCounts method, which is used in 
+a few unit tests.&nbsp; The main issue here is that the k-bucket's index no 
+longer exists, so the new code is:</p>
+<pre>public List&lt;(int idx, int count)&gt; GetBucketContactCounts()
+{
+  List&lt;(int idx, int count)&gt; contactCounts = new List&lt;(int idx, int count)&gt;();
+
+  buckets.Where(b=&gt;b.Contacts.Count &gt; 0).ForEachWithIndex((b, n) =&gt; contactCounts.Add((n, b.Contacts.Count)));
+
+  return contactCounts;
+}</pre>
+<p>And lastly, GetCloseContacts is wrong, because it's not based on distance 
+anymore but the <i>difference</i> in node ID value.</p>
+<p>&nbsp;</p>
 <p>Various unit tests (after refactoring the <code>KBucket</code> class as well) verify that 
 everything is working:</p>
 <p><img border="0" src="bucketListTests1.png" width="196" height="105"></p>
@@ -2391,7 +2406,7 @@ public (KBucket, KBucket) Split()
 {
   BigInteger midpoint = (Low + High) / 2;
   KBucket k1 = new KBucket(Low, midpoint);
-  KBucket k2 = new KBucket(midpoint + 1, High);
+  KBucket k2 = new KBucket(midpoint, High);
 
   Contacts.ForEach(c =&gt;
   {
@@ -2403,6 +2418,10 @@ public (KBucket, KBucket) Split()
 
   return (k1, k2);
 }</pre>
+<p>Various unit tests validate the implementation:</p>
+<p><img border="0" src="bucketTests1.png" width="180" height="121"></p>
+<h4>&nbsp;</h4>
+<p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>

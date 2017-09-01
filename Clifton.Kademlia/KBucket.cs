@@ -43,6 +43,11 @@ namespace Clifton.Kademlia
             return Low <= id.Value && id.Value < High;
         }
 
+        public void MoveToTail(Contact contact)
+        {
+            contacts.MoveToTail(contact, c => c.NodeID == contact.NodeID);
+        }
+
         /// <summary>
         /// Returns number of bits that are in common across all contacts.
         /// If there are no contacts, or no shared bits, the return is 0.
@@ -79,25 +84,17 @@ namespace Clifton.Kademlia
 		{
             contact.Touch();
 
-			// If contact exists, promote it it to the tail.
-			if (Exists(contact.NodeID))
+            if (contacts.Count < Constants.K)
+            {
+                contacts.Add(contact);
+            }
+            else if (discardHead(contacts[0]))
 			{
-				contacts.MoveToTail(contact, c => c.NodeID == contact.NodeID);
+				// Otherwise, if the least recently seen node doesn't respond to a ping, discard it and
+				// replace it with our new contact.
+				contacts.AddMaximum(contact, Constants.K);
 			}
-			else
-			{
-                if (contacts.Count < Constants.K)
-                {
-                    contacts.Add(contact);
-                }
-                else if (discardHead(contacts[0]))
-				{
-					// Otherwise, if the least recently seen node doesn't respond to a ping, discard it and
-					// replace it with our new contact.
-					contacts.AddMaximum(contact, Constants.K);
-				}
-				// Otherwise we discard the new contact, as we don't know anything about how reliable it is.
-			}
+			// Otherwise we discard the new contact, as we don't know anything about how reliable it is.
 		}
 
         /// <summary>
@@ -107,7 +104,7 @@ namespace Clifton.Kademlia
         {
             BigInteger midpoint = (Low + High) / 2;
             KBucket k1 = new KBucket(Low, midpoint);
-            KBucket k2 = new KBucket(midpoint + 1, High);
+            KBucket k2 = new KBucket(midpoint, High);
 
             Contacts.ForEach(c =>
             {
