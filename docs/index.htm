@@ -25,42 +25,21 @@ implementation that I demonstrate with unit testing and exploring distribution
 graphs of buckets.</p>
 <h2>Introduction</h2>
 <p>There's quite a few implementations of the Kademlia peer-to-peer (P2P) 
-distributed hash table (DHT) algorithm out there on GitHub.&nbsp; My perusal of 
-the implementations (mainly focusing on C#, but some Python and Go projects as 
-well) on <a href="https://github.com/search?utf8=&#10003;&q=kademlia&type=">GitHub</a> 
-vary from incomplete to WTF?&nbsp; All the implementation pretty much suffer 
-from:</p>
-<ol>
-	<li>Lack of documentation: by this I mean matching code to the 
-	specifications in the original document.&nbsp; Strange code behaviors are 
-	not discussed.</li>
-	<li>Not fully implemented: some repos appear to be incomplete attempts or 
-	are
-	<a href="https://www.codeproject.com/Lounge.aspx?msg=5429459#xx5429459xx">
-	obviously buggy</a>.</li>
-	<li>Entanglement: several implementations are entangled with &quot;applications&quot;, 
-	such as P2P music streaming and vote tallying</li>
-	<li>Lack of abstraction: pretty much every implementation I've seen does not 
-	abstract out the communication protocol, whether UPD, TCP, or in-memory, 
-	which is particularly useful for testing.</li>
-	<li>Overly complex: some implementations incorporate asynchronous handling 
-	of messages and other behaviors that are best abstracted out of the core 
-	implementation.</li>
-</ol>
-<p>I know, it's easy to be an armchair critic!</p>
-<p>The best C# (but incomplete) implementation that I've found is
+distributed hash table (DHT) algorithm out there on GitHub.&nbsp; While I 
+haven't looked at them all, so far I've found the best C# implementation 
+(somewhat entangled though and based on the shorter version of the spec -- more 
+on that later) that I've found is
 <a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia">
-zencoders sambatyon repo</a> and the best Python implementation I've found (I 
-haven't looked at them all) is <a href="https://github.com/bmuller/kademlia">
+zencoders sambatyon repo</a> and the best Python implementation I've found is <a href="https://github.com/bmuller/kademlia">
 Brian Muller's</a>.&nbsp; Brian Muller's implementation is really quite 
 excellent, and I highly recommend perusing the code -- I'll be showing some of 
-it later on.&nbsp; As far as I can tell, the only significant issue with 
-these implementations are the lack of abstraction of the transport layer (C# 
-uses UDP and the Python code uses Twisted) and the C# code implementation 
-doesn't appear to abstract out the data store, which is &quot;hard coded&quot; as as a 
+it later on.&nbsp; The only issue I have with the Python code is technically a 
+minor one -- the transport layer isn't abstracted.&nbsp; The zencoders C# 
+implementation has more &quot;problems&quot; -- it's based what seems to be an earlier (or 
+at least truncated) version of the spec and doesn't abstract out the data store which is &quot;hard coded&quot; as as a 
 file-based audio player.&nbsp; That said, I reference these 
 implementation frequently.</p>
-<p>As an aside, I'm learning some things about open source projects:</p>
+<p>As an aside, after perusing many repos, I've learned something about open source projects:</p>
 <ol>
 	<li>One person open source projects are great when they implement something 
 	simple and compartmentalized.</li>
@@ -1902,13 +1881,9 @@ for the starting node ID to ensure a proper distribution:</p>
 <p>So we have discovered a critical flaw in zencoders' random ID generation as 
 well as a bug in our unit test.&nbsp; Incidentally, of the 3200 node add 
 attempts, 2872 succeeded, the remainder (328) did not get added because the 
-k-bucket was full.&nbsp; This also points out critical it is, for any 
-participant in the Kademlia network, to create a uniformly distributed random 
-node ID for the host node.&nbsp; Again, zencoders implementation for the host ID 
-is wrong:</p>
-<pre>return ID.Hash(app + user + machine + macs);</pre>
-<p>This in no way will generate a uniformly distributed ID for host.</p>
-<p>Lastly, let's have the distribution test actually verify a good distribution 
+k-bucket was full.&nbsp; While faulty (see later) this might lead one to 
+conclude that it's important to create a uniformly distributed random 
+node ID for the host node.&nbsp; Lastly, let's have the distribution test actually verify a good distribution 
 (I'm no statistics wizard, so this might be somewhat bogus):</p>
 <pre>[TestMethod]
 public void DistributionMidpointTest()
@@ -1921,8 +1896,16 @@ public void DistributionMidpointTest()
   Assert.IsTrue(bucketCounts.Select(b =&gt; (double)b.count).StdDev().ApproximatelyEquals(3, 1), &quot;Bad distribution&quot;);
   Write(&quot;countsMidpoint.txt&quot;, bucketCounts);
 }</pre>
-<h3>A Flaw in the Kademlia XOR Distance Metric or in the Specification?</h3>
-<p>Does this point to a flaw in using XOR logic for a distance metric?&nbsp; 
+<h3>A Flaw in the Kademlia XOR Distance Metric or in the Specification or in my 
+Interpretation?</h3>
+<p>I will readily admit that I never did well with word problems.&nbsp; The 
+specification says:
+<font color="#FF00FF">every node keeps a list of (IP address, UDP port, Node ID) 
+triples for nodes of distance between 2<sup>i</sup> and 
+2<sup>i+1</sup> from itself.</font>&nbsp; But it turns out that this vague -- is 
+this the XOR distance or the integer distance (the integer difference between 
+our node ID and the contact's node ID.)&nbsp; I have been assuming it's the XOR 
+distance, because the paper talks about XOR distance.&nbsp; So does this point to a flaw in using XOR logic for a distance metric?&nbsp; 
 Let's look at the bucket distribution for a node with an ID where bit 2<sup>159</sup> is set:</p>
 <p>The results are what you'd expect, I don't even have to create a graph:</p>
 <table border="0" cellpadding="0" cellspacing="0" width="128" style="border-collapse:
@@ -2050,7 +2033,8 @@ appropriate bucket is wrong!</p>
 	</tr>
 </table>
 <p>Nope.&nbsp; So that doesn't solve the problem, which looks like another 
-significant flaw with zencoders implementation.&nbsp; The problem is actually 
+flaw with zencoders implementation, but I may not be understanding the code 
+correctly.&nbsp; The problem is actually 
 easily solved - the bucket index that the contact goes into is determined solely 
 by the contact's node ID, not its distance from our node:</p>
 <pre>public void HaveContact(ID ourId, Contact contact, Func&lt;Contact, bool&gt; discardHead)
@@ -2071,11 +2055,12 @@ exactly what Brian Muller's Python implementation does:</p>
   for index, bucket in enumerate(self.buckets):
     if node.long_id &lt; bucket.range[1]:
       return index</pre>
-<p>Ultimately, <b>I think the specification is wrong</b>: <font color="#FF00FF">For 
+<p>Ultimately, I think the specification is not necessarily wrong, just very 
+unclear: <font color="#FF00FF">For 
 each 0 &lt; i &lt; 160, every node keeps a list of (IP address, UDP port, Node ID) 
 triples for nodes of distance between 2<sup>i</sup> and 2<sup>i+1</sup> from 
-itself</font>.&nbsp; Wrong!&nbsp; Nodes should not keep a list of other nodes based on the 
-XOR distance from itself!</p>
+itself</font>.&nbsp; Nodes should not keep a list of other nodes based on the XOR 
+distance from itself but rather the integer distance.</p>
 <p>Even Jim Dixon's explanation is wrong:</p>
 <p><font color="#FF00FF">The buckets are organized by the distance between the 
 node and the contacts in the bucket. Specifically, for bucket j, where 0 &lt;= j &lt; 
@@ -2085,7 +2070,8 @@ possible, with an XOR operation, for a distance to be less than the most
 significant non-zero bit after the XOR.&nbsp; If a node's ID has a &quot;high&quot; msb 
 set, most contacts will have a smaller ID and as the data above shows, the 
 &quot;high&quot; msb will rule in terms of determining distance.</p>
-<p>As an aside, I'm impressed that Python easily handles 2<sup>160</sup>:</p>
+<p>Brian Muller's implementation doesn't even use the integer distance, it 
+instead simply puts the contact into a bucket that handles to node ID range.&nbsp; As an aside, I'm impressed that Python easily handles 2<sup>160</sup>:</p>
 <pre>&gt;&gt;&gt; 2 ** 160
 1461501637330902918203684832716283019655932542976L</pre>
 <p>In C#, we'd have to use the BigInteger class:</p>
@@ -2093,7 +2079,7 @@ set, most contacts will have a smaller ID and as the data above shows, the
 <p>Now we just have to fix a couple broken unit tests:</p>
 <p><img border="0" src="broken.png" width="193" height="61"></p>
 <p>Maybe.</p>
-<h3>Pass 2 - Is the Specification Really Wrong?</h3>
+<h3>Looking Deeper at the Python Implementation</h3>
 <p>The <a href="http://www.cs.rice.edu/Conferences/IPTPS02/109.pdf">shorter version of the specification</a> (I would assume this was the 
 original specification?&nbsp; I wish people would date their documents) doesn't 
 mention bucket splitting.&nbsp; Heck, it doesn't even mention a binary tree of 
@@ -2101,7 +2087,8 @@ buckets.&nbsp; In fact, the first part of Section 2 appears to be completely
 rewritten in the longer specification. &nbsp; Bucket splitting 
 solves two problems:</p>
 <ol>
-	<li>My implementation currently handles only 3200 other contacts.&nbsp; In a 
+	<li>My implementation so far currently handles only 3200 other contacts (160 
+	possible buckets * 20 contacts per bucket.)&nbsp; In a 
 	massive network, this seems, well, wrong, but then again, just how large 
 	(and time consuming to search) should the tree become, especially if we use 
 	a brute force algorithm to search closest nodes by an XOR distance?</li>
@@ -2120,7 +2107,7 @@ ejecting a non-responding node ever get executed?</p>
     bucket = one if node.long_id &lt;= midpoint else two
     bucket.nodes[node.id] = node
   return (one, two)</pre>
-<p>and (as part of the <code>addContact</code> function:</p>
+<p>and (as part of the <code>addContact</code> function):</p>
 <pre># this will succeed unless the bucket is full
 if bucket.addNode(node):
   return
@@ -2158,8 +2145,8 @@ does not split. Instead, the k-bucket emits a &quot;ping&quot; event...</font></
 <p>OK, that answers my question above.&nbsp; As for the &quot;far k-bucket is marked 
 as don't split&quot; - in the Python code, this behavior occurs naturally because the 
 host node's ID is not in the range of the far bucket.&nbsp; Also, the Python code 
-effectively implements the above algorithm of &quot;split along the first bit, the 
-split along the second bit, etc.&quot; always splitting the bucket along its 
+effectively implements the above algorithm of &quot;split along the first (msb) bit, the 
+split along the second (msb) bit, etc.&quot; always splitting the bucket along its 
 midpoint.</p>
 <p>What is <code>bucket.depth() % 5 != 0</code> about?&nbsp; Let's look at the 
 longer specification, section 4.2:</p>
@@ -2177,7 +2164,7 @@ range.) The current implementation uses b = 5.</font></p>
 doesn't mention bucket splitting (it's based on the shorter specification, I 
 believe) and again,&nbsp; zencoders' implementation doesn't appear to implement this 
 behavior.</p>
-<h3>Time For Reworking The Bucket List</h3>
+<h3>Reworking The Bucket List</h3>
 <p>All of this means that I need to rework how bucket the bucket list and the 
 k-buckets are managed, so that the algorithm implements a tree.&nbsp; I note 
 that in the 
@@ -2340,9 +2327,49 @@ longer exists, so the new code is:</p>
 
   return contactCounts;
 }</pre>
-<p>And lastly, GetCloseContacts is wrong, because it's not based on distance 
-anymore but the <i>difference</i> in node ID value.</p>
-<p>&nbsp;</p>
+<h4>Revisiting GetCloseContacts</h4>
+<p>At this point, my implementation has still been using the XOR distance to 
+find close contacts, searching the entire collection of k-buckets.&nbsp; 
+Technically, close contacts should be defined as those with the least integer 
+difference.&nbsp; Brian Muller's implementation is a ping-pong lookup of 
+adjacent buckets sorted by the XOR distance.&nbsp; Starting with this:</p>
+<pre>def findNeighbors(self, node, k=None, exclude=None):
+  k = k or self.ksize
+  nodes = []
+  for neighbor in TableTraverser(self, node):
+    if neighbor.id != node.id and (exclude is None or not neighbor.sameHomeAs(exclude)):
+      heapq.heappush(nodes, (node.distanceTo(neighbor), neighbor))
+    if len(nodes) == k:
+      break</pre>
+<p>The iteration is ping-ponging:</p>
+<pre>def next(self):
+  &quot;&quot;&quot;
+  Pop an item from the left subtree, then right, then left, etc.
+  &quot;&quot;&quot;
+  if len(self.currentNodes) &gt; 0:
+    return self.currentNodes.pop()
+
+  if self.left and len(self.leftBuckets) &gt; 0:
+    self.currentNodes = self.leftBuckets.pop().getNodes()
+    self.left = False
+    return self.next()
+
+  if len(self.rightBuckets) &gt; 0:
+    self.currentNodes = self.rightBuckets.pop().getNodes()
+    self.left = True
+    return self.next()
+
+  raise StopIteration</pre>
+<p>but the <code>distanceTo</code> in the first function is the XOR distance:</p>
+<pre>def distanceTo(self, node):
+  &quot;&quot;&quot;
+  Get the distance between this node and another.
+  &quot;&quot;&quot;
+  return self.long_id ^ node.long_id</pre>
+<p>As mentioned in the section &quot;FindNode Basic Implementation&quot; above, this 
+doesn't really get you the real nodes closest, by XOR distance, to the current 
+node.&nbsp; So while searching the entire collection of k-buckets doesn't quite 
+float my boat, I'm going to leave the implementation as is.</p>
 <p>Various unit tests (after refactoring the <code>KBucket</code> class as well) verify that 
 everything is working:</p>
 <p><img border="0" src="bucketListTests1.png" width="196" height="105"></p>
@@ -2420,8 +2447,87 @@ public (KBucket, KBucket) Split()
 }</pre>
 <p>Various unit tests validate the implementation:</p>
 <p><img border="0" src="bucketTests1.png" width="180" height="121"></p>
-<h4>&nbsp;</h4>
+<h3>Revisiting the Distribution Unit Test</h3>
+<p>After all this, all the unit tests are green again and the distribution test 
+has actually improved (more than 100 buckets and more than 3000 contacts now 
+fill buckets):</p>
+<pre>Assert.IsTrue(bucketCounts.Select(b =&gt; b.idx).Average().ApproximatelyEquals(106, 5), &quot;Bad distribution&quot;);
+Assert.IsTrue(bucketCounts.Select(b=&gt;b.count).Sum() &gt; 3000, &quot;Expected at least 2800 contacts to register into buckets.&quot;);</pre>
+<p>But let's expand this test to three different ones:</p>
+<pre>[TestMethod]
+public void DistributionZeroIDTest()
+{
+  Node node = RouterTests.CreateNode(ID.ZeroID());
+  TestDistribution(node, &quot;distMin.txt&quot;);
+}
+
+[TestMethod]
+public void DistributionMidIDTest()
+{
+  Node node = RouterTests.CreateNode(ID.MidID());
+  TestDistribution(node, &quot;distMid.txt&quot;);
+}
+
+[TestMethod]
+public void DistributionMaxIDTest()
+{
+  Node node = RouterTests.CreateNode(ID.MaxID());
+  TestDistribution(node, &quot;distMax.txt&quot;);
+}</pre>
+<p><img border="0" src="dist1.png" width="202" height="98"></p>
+<p>If our node ID value is the midpoint (2<sup>158</sup>) we get register ~1200 
+contacts, and if our node ID value is the maximum (2<sup>159</sup>-1) we 
+register ~100 contacts.&nbsp; Oddly, a host node ID at the midpoint results in 
+the worst performance.&nbsp; There is something still wrong, as the host node ID 
+should not be relevant.&nbsp; The problem lies in the bucket splitting.&nbsp; 
+Recall that the &quot;right-hand&quot; bucket can no longer be split because it doesn't 
+contain the node ID except when depth mod 5 != 0.&nbsp; <font color="#FF00FF">
+Section 3 says that: Because node IDs are randomly chosen, it follows that 
+highly non-uniform distributions are unlikely</font>.&nbsp; This simply isn't my 
+experience with choosing ID's randomly distributed across the 160 bit space 
+(meaning, ID's where each ID is a random i in 2<sup>i</sup> + random following 
+bits.</p>
+<p>We can see why this is the case.&nbsp; Given a node ID of 2<sup>159</sup>-1, 
+after the first bucket split, for any ID whose value is &lt; 2<sup>159</sup>, 
+the &quot;is our node ID in the bucket range will fail.&nbsp; This leaves the 
+splitting algorithm to the modulus test in <code>kbucket.HasInRange(ourID) || ((kbucket.Depth() % 
+5) != 0)</code> and therefore will CanSplit will return false once the depth is 
+5. </p>
+<p>We note from Section 2.4: <font color="#FF00FF">...Kademlia nodes keep all 
+valid contacts in a subtree of size at least k nodes, even if this requires 
+splitting buckets in which the node’s own ID does not reside.</font></p>
+<h4>What is the Definition for Depth?</h4>
+<p>&nbsp;From Section 3.0: <font color="#FF00FF">We start with some definitions. 
+For a k-bucket covering the distance range [2<sup>i</sup>, 2<sup>i+1</sup>), 
+define the index of the bucket to be i. Define the depth, h, of a node to be 160 
+— i, where i is the smallest index of a non-empty bucket.</font></p>
+<p>vs. in Section 4.2:</p>
+<p><font color="#FF00FF">The depth is just the length of the prefix shared by 
+all nodes in the k-bucket’s range.</font></p>
+<p>These two definitions are actually the same.&nbsp; Given, for example, two 
+nodes in bucket 2<sup>159</sup> with MSB's of 1 1 ... and 1 0 ..., the first 
+definition gives us an index of 1 (160-159) and the second definition also gives 
+us an index of 1.&nbsp; (Note that the k-bucket in the array for any given 
+&quot;index&quot; is actually at offset 160-index.)</p>
+<p>The problem here is that the computation for depth is determining the shared 
+bits, not the <i>prefix</i> shared by all nodes in the k-bucket's range.&nbsp; I 
+took my implementation from the Python code:</p>
+<pre>def sharedPrefix(args):
+  &quot;&quot;&quot;
+  Find the shared prefix between the strings.
+  For instance:
+  sharedPrefix(['blahblah', 'blahwhat'])
+  returns 'blah'.
+  &quot;&quot;&quot;
+  i = 0
+  while i &lt; min(map(len, args)):
+    if len(set(map(operator.itemgetter(i), args))) != 1:
+      break
+    i += 1
+  return args[0][:i]</pre>
+<p>Note the comment.&nbsp; </p>
 <p>&nbsp;</p>
+<h2>Section 2.5 Optimization</h2>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>

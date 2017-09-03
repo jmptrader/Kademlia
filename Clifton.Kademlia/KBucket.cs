@@ -48,6 +48,11 @@ namespace Clifton.Kademlia
             contacts.MoveToTail(contact, c => c.NodeID == contact.NodeID);
         }
 
+        //public int Depth()
+        //{
+        //    return (int)Math.Log((double)High, 2);
+        //}
+
         /// <summary>
         /// Returns number of bits that are in common across all contacts.
         /// If there are no contacts, or no shared bits, the return is 0.

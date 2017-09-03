@@ -14,19 +14,37 @@ namespace UnitTests
         public const string CRLF = "\r\n";
 
         [TestMethod]
-        public void DistributionMidpointTest()
+        public void DistributionZeroIDTest()
         {
             Node node = RouterTests.CreateNode(ID.ZeroID());
-            // node.OurContact.NodeID.SetBit(80);
-            (Constants.ID_LENGTH_BITS * Constants.K).ForEach(() => node.SimpleRegistration(new Contact() { NodeID = ID.RandomID() }));
-            var bucketCounts = node.BucketList.GetBucketContactCounts();
-            Assert.IsTrue(bucketCounts.Select(b => b.idx).Average().ApproximatelyEquals(80, 2), "Bad distribution");
-            Assert.IsTrue(bucketCounts.Select(b=>b.count).Sum() > 2800, "Expected at least 2800 nodes to register into buckets.");
-            Assert.IsTrue(bucketCounts.Select(b => (double)b.count).StdDev().ApproximatelyEquals(3, 1), "Bad distribution");
-            Write("countsMidpoint.txt", bucketCounts);
+            TestDistribution(node, "distMin.txt");
         }
 
-        public static void Write(string fn, List<(int idx, int count)> bucketCounts)
+        [TestMethod]
+        public void DistributionMidIDTest()
+        {
+            Node node = RouterTests.CreateNode(ID.MidID());
+            TestDistribution(node, "distMid.txt");
+        }
+
+        [TestMethod]
+        public void DistributionMaxIDTest()
+        {
+            Node node = RouterTests.CreateNode(ID.MaxID());
+            TestDistribution(node, "distMax.txt");
+        }
+
+        private static void TestDistribution(Node node, string fn)
+        {
+            (Constants.ID_LENGTH_BITS * Constants.K).ForEach(() => node.SimpleRegistration(new Contact() { NodeID = ID.RandomID() }));
+            var bucketCounts = node.BucketList.GetBucketContactCounts();
+            Assert.IsTrue(bucketCounts.Select(b => b.idx).Average().ApproximatelyEquals(110, 5), "Bad distribution");
+            Assert.IsTrue(bucketCounts.Select(b => b.count).Sum() > 3000, "Expected at least 3000 nodes to contacts into buckets.");
+            Assert.IsTrue(bucketCounts.Select(b => (double)b.count).StdDev().ApproximatelyEquals(3, 1), "Bad distribution");
+            Write(fn, bucketCounts);
+        }
+
+        private static void Write(string fn, List<(int idx, int count)> bucketCounts)
         {
             File.Delete(fn);
             StringBuilder sb = new StringBuilder();

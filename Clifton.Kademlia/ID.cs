@@ -174,7 +174,7 @@ namespace Clifton.Kademlia
 			return new ID(data);
 		}
 
-        public static ID MiddleID()
+        public static ID MidID()
         {
             byte[] data = new byte[Constants.ID_LENGTH_BYTES];
             data[Constants.ID_LENGTH_BYTES - 1] = 0x80;

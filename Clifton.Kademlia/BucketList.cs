@@ -69,7 +69,8 @@ namespace Clifton.Kademlia
 
         protected bool CanSplit(KBucket kbucket)
         {
-            return kbucket.HasInRange(ourID) || ((kbucket.Depth() % 5) != 0);
+            return kbucket.High - kbucket.Low >= 2;
+            // return kbucket.HasInRange(ourID) || ((kbucket.Depth() % 5) != 0);
         }
 
 		/// <summary>
@@ -108,8 +109,9 @@ namespace Clifton.Kademlia
                 pingpong = !pingpong;
             }
 
-            return contacts.ExcludeBy(c => c.NodeID.Value == exclude.Value).OrderByDescending(c => c.NodeID.Value).ToList();
+            return contacts.ExcludeBy(c => c.NodeID.Value == exclude.Value).OrderBy(c => BigInteger.Abs(c.NodeID.Value - ourID.Value)).ToList();
             */
+            
             var contacts = buckets.
                 SelectMany(b => b.Contacts).
                 Where(c => c.NodeID != exclude).
@@ -117,7 +119,7 @@ namespace Clifton.Kademlia
                 OrderBy(d => d.distance).
                 Take(Constants.K);
 
-            return contacts.Select(c => c.contact).ToList();
+             return contacts.Select(c => c.contact).ToList();
         }
 
         /// <summary>

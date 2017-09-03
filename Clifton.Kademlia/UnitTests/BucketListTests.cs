@@ -36,7 +36,7 @@ namespace UnitTests
         [TestMethod]
         public void NotFullBucketDoesNotSplitTest()
         {
-            BucketList bl = new BucketList(ID.MiddleID());
+            BucketList bl = new BucketList(ID.MidID());
             // any ID for the contact.
             bl.AddContact(new Contact() { NodeID = ID.OneID() }, c => false);
             Assert.IsTrue(bl.Buckets.Count == 1, "Buckets should not have split.");
@@ -48,7 +48,7 @@ namespace UnitTests
         [TestMethod]
         public void FullBucketSplitsTest()
         {
-            BucketList bl = new BucketList(ID.MiddleID());
+            BucketList bl = new BucketList(ID.MidID());
             ID id = ID.OneID();
             // add 20 contacts.  
             Constants.K.ForEach(n => bl.AddContact(new Contact() { NodeID = new ID(id.Value + n) }, c => false));
@@ -56,11 +56,23 @@ namespace UnitTests
 
             // The 21st should result in a split.
             bl.AddContact(new Contact() { NodeID = new ID(id.Value + 20) }, c => false);
-            Assert.IsTrue(bl.Buckets.Count == 2, "Expected split.");
 
-            // But because all the contacts where < 2^80, they all went into the first bucket.
-            Assert.IsTrue(bl.Buckets[0].Contacts.Count == 20, "Expected 20 contacts in the first bucket.");
-            Assert.IsTrue(bl.Buckets[1].Contacts.Count == 0, "Expected 0 contacts in the first bucket.");
+            // If CanSplit is implemented as:
+            // kbucket.High - kbucket.Low >= 2
+            // then we get 157 buckets.
+            Assert.IsTrue(bl.Buckets.Count > 1, "Expected split.");
+
+            // If CanSplit is implemented as:
+            // kbucket.High - kbucket.Low >= 2
+            // Then we've split across ID's 0 - 15 and 16-32
+            Assert.IsTrue(bl.Buckets[0].Contacts.Count == 15, "Expected 15 contacts in the first bucket.");
+            Assert.IsTrue(bl.Buckets[1].Contacts.Count == 6, "Expected 6 contacts in the first bucket.");
+
+            // If CanSplit is implemented as:
+            // return kbucket.HasInRange(ourID) || ((kbucket.Depth() % 5) != 0)
+            // then we get 2 buckets and:
+            //Assert.IsTrue(bl.Buckets[0].Contacts.Count == 20, "Expected 20 contacts in the first bucket.");
+            //Assert.IsTrue(bl.Buckets[1].Contacts.Count == 0, "Expected 0 contacts in the first bucket.");
         }
 
         /// <summary>
@@ -69,7 +81,7 @@ namespace UnitTests
         [TestMethod]
         public void DividedBucketSplitsTest()
         {
-            BucketList bl = new BucketList(ID.MiddleID());  // any ID will do.
+            BucketList bl = new BucketList(ID.MidID());  // any ID will do.
 
             DistributeContacts(bl);
             Assert.IsTrue(bl.Buckets.Count == 1, "Buckets should not have split.");
