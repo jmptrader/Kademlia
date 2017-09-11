@@ -1,0 +1,239 @@
+<html>
+
+<head>
+<meta http-equiv="Content-Language" content="en-us">
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<title>Implementing the Kademlia Peer-t</title>
+</head>
+
+<body>
+
+<p>Implementing the Kademlia Peer-to-Peer Distributed Hash Table</p>
+<h2>Introduction</h2>
+<p>Kademlia, according to a paper<sup>1</sup> published in 2015 by Xing Shi Cai 
+and Luc Devoyre, &quot;is the defacto standard searching algorithm for P2P 
+(peer-to-peer) networks on the Internet.&quot;&nbsp; Unfortunately, there are two 
+different versions of the specification, and both have certain contradictions, 
+particularly the second one.&nbsp; This results in a variety of implementations.&nbsp; 
+On GitHub, I've found only two that appear both reasonably complete and well 
+implemented:</p>
+<ol>
+	<li>zencoders<sup>2</sup> C# implementation appears to be based on the 
+	shorter specification and seems to match Jim Dixon's<sup>3</sup> description 
+	of the algorithm.</li>
+	<li>Brian Muller<sup>4 </sup>has an excellent implementation in Python based 
+	on the longer specification.&nbsp; Note that the Python 3.5 branch should be 
+	used, the master branch contains some bugs and is written for Python 2.</li>
+</ol>
+<h3>What is Kademlia?</h3>
+<p>From Wikipedia:</p>
+<p><i>Kademlia is a distributed hash table for decentralized peer-to-peer 
+computer networks designed by Petar Maymounkov and David Mazières in 2002. It 
+specifies the structure of the network and the exchange of information through 
+node lookups. Kademlia nodes communicate among themselves using UDP. A virtual 
+or overlay network is formed by the participant nodes. Each node is identified 
+by a number or node ID. The node ID serves not only as identification, but the 
+Kademlia algorithm uses the node ID to locate values (usually file hashes or 
+keywords). In fact, the node ID provides a direct map to file hashes and that 
+node stores information on where to obtain the file or resource.</i></p>
+<h3>Who Uses Kademlia?</h3>
+<p>Kademlia is used in file sharing networks.&nbsp; For example,
+BitTorrent<sup>8</sup> uses a DHT 
+based on an implementation of the Kademlia algorithm.&nbsp;
+Kad network<sup>9</sup> uses the Kademlia protocol, with <a href="https://en.wikipedia.org/wiki/EMule">eMule</a> 
+being an open source Windows client.</p>
+<h3>Why is Kademlia Important?</h3>
+<ol>
+	<li>The underlying technology of not just cryptocurrency but any blockchain, 
+	including those 
+	that implements smart 
+	contracts<sup>,5</sup> must include a peer-to-peer distributed hash 
+	table, at least with regards to how blockchain technology is being discussed 
+	and applied (using a blockchain in a centralized scenario is sort of 
+	pointless except perhaps for logging purposes.)&nbsp; Understanding how this 
+	works is important.</li>
+	<li>Centralized data, except for performance reasons, is
+	on its way out<sup>6</sup></a>.&nbsp; As that last link states: &quot;The more the data 
+	management industry consolidates, the more opposing forces decentralize the 
+	market.&quot;&nbsp; And peer-to-peer decentralizing has built in redundancy 
+	protecting from single-point data loss and access failures.&nbsp; Not that 
+	decentralizing has its own problems -- security will probably be the main 
+	one, if it isn't already.&nbsp; As an aside, read this short paper on
+	Enigma</a><sup>7</sup>.</li>
+</ol>
+<p>While this is a personal venture, it is also a recognition that there are 
+some interesting and complicated technologies coming down the road that need to 
+be properly understood, and protocols like Kademlia are a good starting point 
+for looking at a P2P DHT implementation.&nbsp; As to why Kademlia specifically, 
+the summary to the spec says it best:</p>
+<p><i>&quot;With its novel XOR-based metric topology, Kademlia is the first 
+peer-to-peer system to combine provable consistency and performance, 
+latency-minimizing routing, and a symmetric, unidirectional topology. Kademlia 
+furthermore introduces a concurrency parameter, a, that lets people trade a 
+constant factor in bandwidth for asynchronous lowest-latency hop selection and 
+delay-free fault recovery. Finally, Kademlia is the first peer-to-peer system to 
+exploit the fact that node failures are inversely related to uptime.&quot;</i></p>
+<h3>Where did the Name Come From?</h3>
+<p>As <a href="http://www.maymounkov.org/kademlia">Petar Maymounkov</a>, one of 
+the co-creators of Kademlia says: &quot;it is a Turkish word for a “lucky man” and, 
+more importantly, is the name of a mountain peak in Bulgaria.&quot;&nbsp; OK then.</p>
+<h3>Concerns with Existing Implementation</h3>
+<p>My major issue with zencoders C# implementation is that it is entangled with 
+the intended application -- a P2P audio file application.&nbsp; Brian Muller's 
+implementation is a straight forward library.&nbsp; In perusing numerous GitHub 
+repo's, I found many implementations that were incomplete or clearly buggy, 
+simply by inspecting the code.&nbsp; Beware of what's out there!</p>
+<h3>Other Languages</h3>
+<p>I have not looked carefully at implementations in other languages, being 
+primarily Java and Javascript (personal lack of interest in those languages) and 
+Go (lack of familiarity with the language makes it difficult to read.)&nbsp; 
+Looking briefly at implementations in these other languages, it's fairly easy to 
+tell which version of the specification they implement, so again, beware that 
+depending on which specification the author worked with, you can have very 
+different implementations.</p>
+<h3>Requirements</h3>
+<p>C# 7 with .NET framework 4.7 is required to build this code.</p>
+<h3>Resources Used In This Research</h3>
+<p>The original Kademlia specification:
+<a href="http://www.cs.rice.edu/Conferences/IPTPS02/109.pdf">
+http://www.cs.rice.edu/Conferences/IPTPS02/109.pdf</a></p>
+<p>The longer Kademlia specification:
+<a href="https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf">
+https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf</a></p>
+<p>Mike De Boer's description of k-buckets:
+<a href="https://github.com/mikedeboer/node-k-bucket">
+https://github.com/mikedeboer/node-k-bucket</a></p>
+<p>Brian Muller's Python implementation:
+<a href="https://github.com/bmuller/kademlia">
+https://github.com/bmuller/kademlia</a></p>
+<p>zencoders' implementation:
+<a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia">
+https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia</a></p>
+<p>Jim Dixon's post on the two different versions of the specification:
+<a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00039.html">
+https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00039.html</a></p>
+<p>Jim Dixon's description of the shorter specification:
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE">
+http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE</a></p>
+<h3>Other Resources To Further This Work</h3>
+<p>IPFS - Content Addressed, Versions, P2P File System (Draft 3):
+<a href="https://ipfs.io/ipfs/QmR7GSQM93Cx5eAg6a6yRzNde1FQv7uL6X1o4k7zrJa3LX/ipfs.draft3.pdf">
+https://ipfs.io/ipfs/QmR7GSQM93Cx5eAg6a6yRzNde1FQv7uL6X1o4k7zrJa3LX/ipfs.draft3.pdf</a></p>
+<p>S/Kademlia: A Practicable Approach Towards Secure Key-Based Routing:
+<a href="http://www.tm.uka.de/doc/SKademlia_2007.pdf">
+http://www.tm.uka.de/doc/SKademlia_2007.pdf</a></p>
+<h3>What is Accomplished Here</h3>
+<p>The goal in this article is to:</p>
+<ol>
+	<li>Map specification with implementation.</li>
+<li>Discover any areas of concern with the specification.</li>
+	<li>Abstract key areas of the design so that:<ol>
+		<li>Different implementations can be selected.</li>
+	<li>Different communication protocols can be used.</li>
+		<li>The algorithm can be easily unit tested.</li>
+	</ol>
+</li>
+</ol>
+<h2>Basic Concepts</h2>
+<p>The Kademlia specification essentially consists of several sub-algorithms:</p>
+<ol>
+	<li>Registering new peers.</li>
+	<li>Updating peer lists.</li>
+	<li>Obtaining the closest peer to a key.</li>
+<li>Storing and retrieving key-values.</li>
+	<li>Managing stale key-value pairs and peers</li>
+</ol>
+<p>The most complex part of the code is in the registration of new peers, as 
+this involves some magic numbers based on the authors' research into the 
+performance of other networks as Chord<sup>10</sup> and Pasty<sup>11</sup> and 
+the behavior of peers in those networks.</p>
+<h3>Terminology</h3>
+<p>The Kademlia specification uses the following terms:</p>
+<h4>Node</h4>
+<p>A node (also known as a contact) is a peer in the network.</p>
+<h4>Node ID</h4>
+<p>This is a 160 bit node identifier, obtained from a SHA1 hash.</p>
+<h4>k-Bucket</h4>
+<p>A collection of at most <i>k</i> nodes.&nbsp; Also simply 
+	called a bucket.</p>
+<h4>Key-Value</h4>
+<p>Peers store values based on 160 bit SHA1 hashed keys.&nbsp; Note that the 
+specification does not address:</p>
+<ul>
+	<li>key collision</li>
+	<li>encrypting of values</li>
+	<li>privacy of keys</li>
+</ul>
+<h4>Router</h4>
+<p>The router manages the collection of k-buckets and also determines into which 
+nodes a key-value should be stored.</p>
+<h4>Distance</h4>
+<p>The distance between a host and the key is an XOR computation of the host's 
+ID with the key.&nbsp; </p>
+<p>&nbsp;</p>
+<h2>High Level Architecture</h2>
+<p>In this document, <font color="#FF00FF">fuchsia text</font> is used when 
+quoting from the Kademlia specification and other documents.</p>
+<p>There are four components to the high level architecture necessary to 
+implement the Kademlia protocol:</p>
+<ol>
+	<li>Node: The concept of a node.&nbsp; Each node has a private 160-bit ID (a 
+	SHA-1 hash).&nbsp; <font color="#FF00FF">Keys are opaque, 160-bit quantities 
+	(e.g., the SHA-1 hash of some larger data). Participating computers each 
+	have a node ID in the 160-bit key space. </font>(From the Introduction)</li>
+	<li>Storage: Each node stores key-value pairs, where the key is also a 
+	160-bit SHA-1 hash.&nbsp;&nbsp; <font color="#FF00FF">(key,value) pairs are 
+	stored on nodes with IDs “close” to the key for some notion of closeness.</font>&nbsp; 
+	The storage mechanism, whether in-memory, key-value database, file system, 
+	or other, is not specified and is a good point for abstraction. (From the 
+	Introduction)</li>
+	<li>Routing: Nearby servers for a given key are located with an efficient 
+	routing algorithm.&nbsp; <font color="#FF00FF">A node- ID-based routing 
+	algorithm lets anyone efficiently locate servers near any given target key. </font>
+	(From the Introduction)</li>
+	<li>Communication protocol: a means of communicating between nodes (usually 
+	separate computers) must exist.&nbsp; The original Kademlia specification 
+	states that <font color="#FF00FF">every node keeps a list of (IP address, 
+	UDP port, Node ID)</font> of nearby nodes.&nbsp; As with storage, this is a 
+	good place for abstraction so that different protocols can be easily 
+	employed. (Section 2.2 of the spec)</li>
+</ol>
+<p>This is expressed in the following diagram:</p>
+<p><img border="0" src="highlevel.png" width="625" height="271"></p>
+<h3>&nbsp;</h3>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<h2>&nbsp;</h2>
+<h2>References</h2>
+<p><sup>1</sup> -
+<a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
+http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>
+</p>
+<p><sup>2</sup> -
+<a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia">
+https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia</a></p>
+<p><sup>3</sup> -
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE">
+http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html</a></p>
+<p><sup>4</sup> -
+<a href="https://github.com/bmuller/kademlia">
+https://github.com/bmuller/kademlia</a></p>
+
+<p><sup>5</sup> - <a href="https://en.wikipedia.org/wiki/Smart_contract">
+https://en.wikipedia.org/wiki/Smart_contract</a></p>
+<p><sup>6</sup> -
+<a href="http://sandhill.com/article/is-data-decentralization-the-new-trend/">
+http://sandhill.com/article/is-data-decentralization-the-new-trend/</a></p>
+<p><sup>7</sup> - <a href="https://arxiv.org/pdf/1506.03471.pdf">
+https://arxiv.org/pdf/1506.03471.pdf</a></p>
+<p><sup>8</sup> - <a href="https://en.wikipedia.org/wiki/BitTorrent">
+https://en.wikipedia.org/wiki/BitTorrent</a></p>
+<p><sup>9</sup> - <a href="https://en.wikipedia.org/wiki/Kad_network">
+https://en.wikipedia.org/wiki/Kad_network</a></p>
+<p><sup>10</sup> - <a href="https://en.wikipedia.org/wiki/Chord_(peer-to-peer)">https://en.wikipedia.org/wiki/Chord_(peer-to-peer)</a> </p>
+<p><sup>11</sup> - <a href="https://en.wikipedia.org/wiki/Pastry_(DHT)">https://en.wikipedia.org/wiki/Pastry_(DHT)</a> </p>
+<p>&nbsp;</p>
+
+</body>
+
+</html>
