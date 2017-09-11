@@ -12,9 +12,14 @@
 <h2>Introduction</h2>
 <p>Kademlia, according to a paper<sup>1</sup> published in 2015 by Xing Shi Cai 
 and Luc Devoyre, &quot;is the defacto standard searching algorithm for P2P 
-(peer-to-peer) networks on the Internet.&quot;&nbsp; Unfortunately, there are two 
-different versions of the specification, and both have certain contradictions, 
-particularly the second one.&nbsp; This results in a variety of implementations.&nbsp; 
+(peer-to-peer) networks on the Internet.&quot;&nbsp; It seemed like a good 
+choice for doing a deep dive in P2P DHT implementations, ideally finding a solid 
+existing implementation rather than rolling my own.&nbsp; Alas, it was not to 
+be.&nbsp; As it turns out, there are two 
+different versions of the specification, both having certain contradictions, 
+particularly the second one.&nbsp; This results in a variety of implementations, 
+and most tend to have a loose interpretation of the contradictory and ambiguous 
+aspects of the specification.&nbsp; 
 On GitHub, I've found only two that appear both reasonably complete and well 
 implemented:</p>
 <ol>
@@ -25,6 +30,14 @@ implemented:</p>
 	on the longer specification.&nbsp; Note that the Python 3.5 branch should be 
 	used, the master branch contains some bugs and is written for Python 2.</li>
 </ol>
+<p>Rarely do I end up with multiple versions of an article.&nbsp; What started 
+off with the intent of &quot;here's the spec, let's find someone that did a decent 
+job coding it&quot; quickly became &quot;here's the spec, let's roll our own using the 
+spec&quot; to &quot;wait, the spec is contradicting itself here, it's confusing there, and 
+ambiguous over there&quot; to &quot;OMG, there's two different versions of the spec!&quot;&nbsp; 
+As a result, this is actually my third pass at writing an article on Kademlia 
+that makes some kind of sense.&nbsp; Special thanks go to Brian Muller who has 
+put up with a lot of my questions about the specification itself.</p>
 <h3>What is Kademlia?</h3>
 <p>From Wikipedia:</p>
 <p><i>Kademlia is a distributed hash table for decentralized peer-to-peer 
@@ -84,13 +97,15 @@ implementation is a straight forward library.&nbsp; In perusing numerous GitHub
 repo's, I found many implementations that were incomplete or clearly buggy, 
 simply by inspecting the code.&nbsp; Beware of what's out there!</p>
 <h3>Other Languages</h3>
-<p>I have not looked carefully at implementations in other languages, being 
-primarily Java and Javascript (personal lack of interest in those languages) and 
-Go (lack of familiarity with the language makes it difficult to read.)&nbsp; 
-Looking briefly at implementations in these other languages, it's fairly easy to 
-tell which version of the specification they implement, so again, beware that 
-depending on which specification the author worked with, you can have very 
-different implementations.</p>
+<p>I have not looked carefully at implementations in other languages, those being 
+primarily written in Java and Javascript (personal lack of interest in those 
+languages) and Go (lack of familiarity with the language makes it difficult to 
+read.)&nbsp; Looking briefly at implementations in these other languages, it's 
+fairly easy to tell which version of the specification they implement, so again, 
+beware that depending on which specification the author worked with, you can 
+have very different implementations.&nbsp; For example, an implementation in 
+Java makes a very specific (yet seemingly arbitrary) rule about bucket splitting 
+(we'll get to that) that isn't found in the spec.</p>
 <h3>Requirements</h3>
 <p>C# 7 with .NET framework 4.7 is required to build this code.</p>
 <h3>Resources Used In This Research</h3>
@@ -134,7 +149,7 @@ http://www.tm.uka.de/doc/SKademlia_2007.pdf</a></p>
 	</ol>
 </li>
 </ol>
-<h2>Basic Concepts</h2>
+<h2>Key Concepts</h2>
 <p>The Kademlia specification essentially consists of several sub-algorithms:</p>
 <ol>
 	<li>Registering new peers.</li>
@@ -154,8 +169,10 @@ the behavior of peers in those networks.</p>
 <h4>Node ID</h4>
 <p>This is a 160 bit node identifier, obtained from a SHA1 hash.</p>
 <h4>k-Bucket</h4>
-<p>A collection of at most <i>k</i> nodes.&nbsp; Also simply 
-	called a bucket.</p>
+<p>A collection of at most <i>k</i> nodes (or contacts.)&nbsp; Also simply 
+	called a bucket.&nbsp; Each node handles up to <i>k</i> contacts within a 
+range of ID's.&nbsp; Initially, the ID range is the entire spectrum from 0 &lt;= id 
+&lt;= 2<sup>160</sup> - 1.</p>
 <h4>Key-Value</h4>
 <p>Peers store values based on 160 bit SHA1 hashed keys.&nbsp; Note that the 
 specification does not address:</p>
@@ -170,6 +187,100 @@ nodes a key-value should be stored.</p>
 <h4>Distance</h4>
 <p>The distance between a host and the key is an XOR computation of the host's 
 ID with the key.&nbsp; </p>
+<h4>Prefix</h4>
+<p>A prefix is the term used to describe the <i>n</i> most significant bits (MSB) of an ID.&nbsp; </p>
+<h4>Depth</h4>
+<p>The depth of a bucket is defined as the shared prefix of a bucket.&nbsp; 
+Since buckets are associated with ranges from 2<sup>i</sup> to 2<sup>i+1</sup> - 
+1 where 0 &lt;= i &lt; 160, one could say that the depth of a bucket is 160 - i.&nbsp; 
+We'll see later that this may not be the case.</p>
+<h4>Bucket Split</h4>
+<p>A bucket split is something potentially happens when a node's k-bucket is 
+full -- meaning it has <i>k</i> contacts -- and a new contact wants to register 
+within the bucket's range.&nbsp; At this point, an algorithm kicks in that:</p>
+<ol>
+	<li>Under one condition, splits the bucket at the range midpoint into two 
+	ranges, placing contacts into the appropriate new buckets.</li>
+	<li>Under a second condition, splits the bucket when a specific depth 
+	qualifier is met.</li>
+</ol>
+<p>If the bucket can't be split, there is a third fallback that replaces an old 
+contact that is no longer responding with the new contact.</p>
+<h3>Communication Protocol</h3>
+<p><font color="#FF0000">TODO</font></p>
+<h2>Implementation</h2>
+<p>Let's cover some basic implementation requirements first.&nbsp; In this document, <font color="#FF00FF">fuchsia text</font> is used when 
+quoting from the Kademlia specification and other documents.</p>
+<h3>The BigInteger Class</h3>
+<p>We could write our own byte array manipulation and comparison operators, 
+which is what zencoders did, or we could use the <code>BigInteger</code> class to handle the 
+range of ID's from 0 &lt;= id &lt;= 2<sup>160</sup> - 1.&nbsp; In ended up using 
+<code>BigInteger</code> has simply made the code smaller.&nbsp; As a side node, I was 
+impressed with Python's ability to handle these values without any special 
+classes:</p>
+<pre>&gt;&gt;&gt; 2 ** 160
+1461501637330902918203684832716283019655932542976L</pre>
+<h3>Node Requirements</h3>
+<p> <font color="#FF00FF">Participating computers each have a node ID in the 
+160-bit key space </font>(Introduction) which is simple enough.&nbsp; </p>
+<h4>Ambiguity #1</h4>
+<p>But then there's this:&nbsp; <font color="#FF00FF">Kademlia nodes store 
+contact information about each other to route query messages. For each 0 &lt; i &lt; 
+160, every node keeps a list of [contacts] of distance between 2<sup>i</sup> and 
+2<sup>i+1</sup> from itself.&nbsp; We call these lists k-buckets.&nbsp; <i>k</i> 
+is chosen such that any given k nodes are very unlikely to fail within an hour 
+of each other (for example k = 20). </font>
+(Section 2.2)<font color="#FF00FF"> </font>
+How is this distance defined?&nbsp; Is this the XOR distance or the integer 
+distance?&nbsp; And when the spec says &quot;distance from itself&quot;, what two values 
+are being compared?&nbsp; Why even make this comparison?</p>
+<h3>Contradiction #1</h3>
+<p><font color="#FF00FF">Initially, a node u’s routing tree has a single node— 
+one k-bucket covering the entire ID space.</font>&nbsp; (Section 2.4)&nbsp; So 
+from Section 2.2, we have each node contain 159 k-buckets (0 &lt; i &lt; 160) covering 
+2<sup>i</sup> through 2<sup>i+1</sup>, and from Section 2.4, we have a node 
+initialized with one k-bucket.&nbsp; You can see the former concept implemented 
+in zencoders code:</p>
+<pre>private const int BUCKET_SIZE = 20; // &quot;K&quot; in the spec
+private const int NUM_BUCKETS = 8 * ID.ID_LENGTH; // One per bit in an ID
+
+private List&lt;List&lt;Contact&gt;&gt; buckets;
+private List&lt;DateTime&gt; accessTimes; // last bucket write or explicit touch
+private ID ourID;
+
+/// &lt;summary&gt;
+/// Make a new bucket list, for holding node contacts.
+/// &lt;/summary&gt;
+/// &lt;param name=&quot;ourID&quot;&gt;The ID to center the list on.&lt;/param&gt;
+public BucketList(ID ourID)
+{
+  this.ourID = ourID;
+  buckets = new List&lt;List&lt;Contact&gt;&gt;(NUM_BUCKETS);
+  accessTimes = new List&lt;DateTime&gt;();
+
+  // Set up each bucket
+  for(int i = 0; i &lt; NUM_BUCKETS; i++) 
+  {
+    buckets.Add(new List&lt;Contact&gt;(BUCKET_SIZE));
+    accessTimes.Add(default(DateTime));
+  }
+}</pre>
+<p>Here <code>NUM_BUCKETS * BUCKET_SIZE</code> (20 * 8 = 160) buckets are created at the get 
+go.</p>
+<p>You can see the latter implementation in the Brian Muller's Python code:</p>
+<pre>def flush(self):
+  self.buckets = [KBucket(0, 2 ** 160, self.ksize)]</pre>
+<p>Here, a single bucket is created spanning the ID space.&nbsp; The Python code 
+is correct because it also implements bucket splitting, which is in the second 
+version of the specification.</p>
+<h3>Node Implementation</h3>
+<p>After resolving the ambiguity and contradiction, we can implement a Node 
+class like this:</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
 <p>&nbsp;</p>
 <h2>High Level Architecture</h2>
 <p>In this document, <font color="#FF00FF">fuchsia text</font> is used when 
