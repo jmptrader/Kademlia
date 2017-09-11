@@ -234,12 +234,12 @@ of each other (for example k = 20). </font>
 How is this distance defined?&nbsp; Is this the XOR distance or the integer 
 distance?&nbsp; And when the spec says &quot;distance from itself&quot;, what two values 
 are being compared?&nbsp; Why even make this comparison?</p>
-<h3>Contradiction #1</h3>
+<h4>Contradiction #1</h4>
 <p><font color="#FF00FF">Initially, a node u’s routing tree has a single node— 
 one k-bucket covering the entire ID space.</font>&nbsp; (Section 2.4)&nbsp; So 
 from Section 2.2, we have each node contain 159 k-buckets (0 &lt; i &lt; 160) covering 
 2<sup>i</sup> through 2<sup>i+1</sup>, and from Section 2.4, we have a node 
-initialized with one k-bucket.&nbsp; You can see the former concept implemented 
+initialized with one k-bucket.&nbsp; You can see the former specification implemented 
 in zencoders code:</p>
 <pre>private const int BUCKET_SIZE = 20; // &quot;K&quot; in the spec
 private const int NUM_BUCKETS = 8 * ID.ID_LENGTH; // One per bit in an ID
@@ -265,14 +265,19 @@ public BucketList(ID ourID)
     accessTimes.Add(default(DateTime));
   }
 }</pre>
-<p>Here <code>NUM_BUCKETS * BUCKET_SIZE</code> (20 * 8 = 160) buckets are created at the get 
-go.</p>
-<p>You can see the latter implementation in the Brian Muller's Python code:</p>
+<p>Here <code>8 * ID.ID_LENGTH</code> (8 * 20 = 160) buckets are created at the 
+get go, each with 20 contacts (the suggested <i>k</i> value.)&nbsp; This is 
+hard-wired in the zencoders implementation.</p>
+<p>You can see the latter specification in the Brian Muller's Python code:</p>
 <pre>def flush(self):
   self.buckets = [KBucket(0, 2 ** 160, self.ksize)]</pre>
 <p>Here, a single bucket is created spanning the ID space.&nbsp; The Python code 
 is correct because it also implements bucket splitting, which is in the second 
 version of the specification.</p>
+<h4>Artifact #1</h4>
+<p>In the former specification, this limits the total number of contacts that 
+your server can handle to 160 * 20, or 3200 contacts.</p>
+<p>&nbsp;</p>
 <h3>Node Implementation</h3>
 <p>After resolving the ambiguity and contradiction, we can implement a Node 
 class like this:</p>
