@@ -413,7 +413,7 @@ namespace Clifton.Kademlia
   {
     public DateTime LastSeen { get; protected set; }
     public IProtocol Protocol { get; protected set; }
-    public ID ContactID { get; protected set; }
+    public ID ID { get; protected set; }
 
     /// &lt;summary&gt;
     /// Initialize a contact with its protocol and ID.
@@ -421,7 +421,7 @@ namespace Clifton.Kademlia
     public Contact(IProtocol protocol, ID contactID)
     {
       Protocol = protocol;
-      ContactID = contactID;
+      ID = contactID;
       Touch();
     }
 
@@ -616,7 +616,7 @@ namespace Clifton.Kademlia
     protected Router router;
   }
 }</pre>
-<h2>Adding Contacts - The First Interesting Algorithm</h2>
+<h2>Adding Contacts - Discussion</h2>
 <p>Version 2, Section 2.2 of the specification initially states this simple 
 algorithm for dealing adding contacts:</p>
 <p><font color="#FF00FF">When a Kademlia node receives any message (request or 
@@ -731,13 +731,368 @@ I present in full here:</p>
 to ignore this, because, as you will see next, there is yet another version of 
 how contacts are added.</p>
 <h3>Contradiction #4</h3>
+<p>In Section 4.2, on Accelerated Lookups, we have a different specification for 
+how contacts are added:</p>
+<p><font color="#FF00FF">Section 2.4 describes how a Kademlia node splits a 
+k-bucket when the bucket is full and its range includes the node’s own ID. The 
+implementation, however, also splits ranges not containing the node’s ID, up to 
+b - 1 levels. If b = 2, for instance, the half of the ID space not containing 
+the node’s ID gets split once (into two ranges); if b = 3, it gets split at two 
+levels into a maximum of four ranges, etc. The general splitting rule is that a 
+node splits a full k-bucket if the bucket’s range contains the node’s own ID or 
+the depth d of the k-bucket in the routing tree satisfies d&nbsp; (mod b) != 0.</font></p>
+<h4>Terminology</h4>
+<ul>
+	<li>depth - According to the spec: <font color="#FF00FF">The depth is just 
+	the length of the prefix shared by all nodes in the k-bucket’s range. </font>
+	Do not confuse that with this statement: <font color="#FF00FF">Define the 
+	depth, h, of a node to be 160 - <i>i</i>, where <i>i</i> is the smallest 
+	index of a non-empty bucket.</font>&nbsp; The former is referring to the 
+	depth of <i>a k-bucket</i>, the 
+	latter the depth of <i>the node</i>.</li>
+</ul>
+<h3>Ambiguity #2</h3>
+<p>With regards to the definition of depth, does this mean &quot;the length of prefix 
+shared by <i>any</i> node that would <i>reside in the k-bucket's range</i>&quot; or 
+does it mean &quot;the length of a prefix shared by <i>all</i> nodes <i>currently in the k-bucket</i>?&quot;</p>
+<p>If we look at Brian Muller's implementation, we see the latter case:</p>
+<pre>def depth(self):
+  <span style="color: rgb(36, 41, 46); font-family: SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, Menlo, Courier, monospace; font-size: 12px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: pre; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; display: inline !important; float: none;">sp </span><span class="pl-k" style="box-sizing: border-box; color: rgb(215, 58, 73); font-family: SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, Menlo, Courier, monospace; font-size: 12px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: pre; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial;">=</span><span style="color: rgb(36, 41, 46); font-family: SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, Menlo, Courier, monospace; font-size: 12px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: pre; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; display: inline !important; float: none;"> sharedPrefix([bytesToBitString(n.id) </span><span class="pl-k" style="box-sizing: border-box; color: rgb(215, 58, 73); font-family: SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, Menlo, Courier, monospace; font-size: 12px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: pre; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial;">for</span><span style="color: rgb(36, 41, 46); font-family: SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, Menlo, Courier, monospace; font-size: 12px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: pre; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; display: inline !important; float: none;"> n </span><span class="pl-k" style="box-sizing: border-box; color: rgb(215, 58, 73); font-family: SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, Menlo, Courier, monospace; font-size: 12px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: pre; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial;">in</span><span style="color: rgb(36, 41, 46); font-family: SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, Menlo, Courier, monospace; font-size: 12px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: pre; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; display: inline !important; float: none;"> </span><span class="pl-c1" style="box-sizing: border-box; color: rgb(0, 92, 197); font-family: SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, Menlo, Courier, monospace; font-size: 12px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: pre; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial;">self</span><span style="color: rgb(36, 41, 46); font-family: SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, Menlo, Courier, monospace; font-size: 12px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: pre; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; display: inline !important; float: none;">.nodes.values()])</span>
+  return len(sp)
+
+def sharedPrefix(args):
+  i = 0
+  while i &lt; min(map(len, args)):
+   if len(set(map(operator.itemgetter(i), args))) != 1:
+     break
+    i += 1
+  return args[0][:i]</pre>
+<p>Here, the depth is determined by the shared prefixes in the nodes.</p>
+<h2>Adding Contacts - Implementation</h2>
+<p>As I'm using Brian Muller's implementation as the authority with regards to 
+the spec, we'll go with how he coded the algorithm and (eventually) 
+incorporating the fallback where we discard nodes in a full k-bucket that don't 
+respond to a ping -- but that's later.</p>
+<p>The <code>BucketList</code> class implements the algorithm to add a contact:</p>
+<pre>	/// &lt;summary&gt;
+/// Add a contact if possible, based on the algorithm described
+/// in sections 2.2, 2.4 and 4.2
+/// &lt;/summary&gt;
+public void AddContact(Contact contact)
+{
+  Validate.IsFalse&lt;OurNodeCannotBeAContactException&gt;(ourID == contact.ID, &quot;Cannot add ourselves as a contact!&quot;);
+
+  contact.Touch(); // Update the LastSeen to now.
+  KBucket kbucket = GetKBucket(contact.ID);
+
+  if (kbucket.Contains(contact.ID))
+  {
+    // Replace the existing contact, updating the network info and LastSeen timestamp.
+    kbucket.Replace(contact);
+  }
+  else if (kbucket.IsBucketFull)
+  {
+    if (CanSplit(kbucket))
+    {
+      // Split the bucket and try again.
+      (KBucket k1, KBucket k2) = kbucket.Split();
+      int idx = GetKBucketIndex(contact.ID);
+      buckets[idx] = k1;
+      buckets.Insert(idx + 1, k2);
+      AddContact(contact);
+    }
+    else
+    {
+      // TODO: Ping the oldest contact to see if it's still 
+      // around and replace it if not.
+    }
+  }
+  else
+  {
+    // Bucket isn't full, so just add the contact.
+    kbucket.AddContact(contact);
+  }
+}</pre>
+<p>We have a few helper methods in this class as well:</p>
+<pre>protected bool CanSplit(KBucket kbucket)
+{
+  return kbucket.HasInRange(ourID) || ((kbucket.Depth() % Constants.B) != 0);
+}
+
+protected KBucket GetKBucket(ID otherID)
+{
+  return buckets[buckets.FindIndex(b =&gt; b.HasInRange(otherID))];
+}
+
+public int GetKBucketIndex(ID otherID)
+{
+  return buckets.FindIndex(b =&gt; b.HasInRange(otherID));
+}</pre>
+<p>The majority of the remaining work is done in the <code>KBucket</code> class:</p>
+<pre>/// &lt;summary&gt;
+/// Splits the kbucket into returning two new kbuckets filled with contacts separated by the new midpoint
+/// &lt;/summary&gt;
+public (KBucket, KBucket) Split()
+{
+  BigInteger midpoint = (Low + High) / 2;
+  KBucket k1 = new KBucket(Low, midpoint);
+  KBucket k2 = new KBucket(midpoint, High);
+
+  Contacts.ForEach(c =&gt;
+  {
+    // &lt;, because the High value is exclusive in the HasInRange test.
+    KBucket k = c.ID.Value &lt; midpoint ? k1 : k2;
+    k.AddContact(c);
+  });
+
+  return (k1, k2);
+}
+
+/// &lt;summary&gt;
+/// Returns number of bits that are in common across all contacts.
+/// If there are no contacts, or no shared bits, the return is 0.
+/// &lt;/summary&gt;
+public int Depth()
+{
+  bool[] bits = new bool[0];
+
+  if (contacts.Count &gt; 0)
+  {
+    // Start with the first contact.
+    bits = contacts[0].ID.Bytes.Bits().ToArray();
+
+    contacts.Skip(1).ForEach(c =&gt; bits = SharedBits(bits, c.ID));
+  }
+
+  return bits.Length;
+}
+
+/// &lt;summary&gt;
+/// Returns a new bit array of just the shared bits.
+/// &lt;/summary&gt;
+protected bool[] SharedBits(bool[] bits, ID id)
+{
+  bool[] idbits = id.Bytes.Bits().ToArray();
+
+  // Useful for viewing the bit arrays.
+  //string sbits1 = System.String.Join(&quot;&quot;, bits.Select(b =&gt; b ? &quot;1&quot; : &quot;0&quot;));
+  //string sbits2 = System.String.Join(&quot;&quot;, idbits.Select(b =&gt; b ? &quot;1&quot; : &quot;0&quot;));
+
+  int q = Constances.ID_LENGTH_BITS - 1;
+  int n = bits.Length - 1;
+  List&lt;bool&gt; sharedBits = new List&lt;bool&gt;();
+
+  while (n &gt;= 0 &amp;&amp; bits[n] == idbits[q])
+  {
+    sharedBits.Insert(0, (bits[n]));
+    --n;
+    --q;
+  }
+
+  return sharedBits.ToArray();
+}</pre>
+<p>Recall that the ID is stored as a little-endian value, and the prefix is most 
+significant bits, so we have to work the ID backwards n-1 to 0.&nbsp; Also note 
+the implementation of the <code>Bytes</code> property in the <code>ID</code> class:</p>
+<pre>// Zero-pad msb's if ToByteArray length != Constants.LENGTH_BYTES
+// The array returned is in little-endian order (lsb at index 0)
+public byte[] Bytes
+{
+  get
+  {
+    byte[] bytes = new byte[Constants.ID_LENGTH_BYTES];
+    byte[] partial = id.ToByteArray().Take(Constants.ID_LENGTH_BYTES).ToArray(); // remove msb 0 at index 20.
+    partial.CopyTo(bytes, 0);
+
+    return bytes;
+  }
+}</pre>
+<p>and the <code>Bits</code> extension method:</p>
+<pre>/// &lt;summary&gt;
+/// Little endian conversion of bytes to bits.
+/// &lt;/summary&gt;
+public static IEnumerable&lt;bool&gt; Bits(this byte[] bytes)
+{
+  IEnumerable&lt;bool&gt; GetBits(byte b)
+  {
+    byte shifter = 0x01;
+
+    for (int i = 0; i &lt; 8; i++)
+    {
+      yield return (b &amp; shifter) != 0;
+      shifter &lt;&lt;= 1;
+    }
+  }
+
+  return bytes.SelectMany(GetBits);
+}</pre>
+<h3>Basic Unit Tests</h3>
+<p>A few basic unit tests:</p>
+<pre>[TestMethod]
+public void UniqueIDAddTest()
+{
+  BucketList bucketList = new BucketList(ID.RandomID);
+  Constants.K.ForEach(() =&gt; bucketList.AddContact(new Contact(null, ID.RandomID)));
+  Assert.IsTrue(bucketList.Buckets.Count == 1, &quot;No split should have taken place.&quot;);
+  Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == Constants.K, &quot;K contacts should have been added.&quot;); 
+}
+
+[TestMethod]
+public void DuplicateIDTest()
+{
+  BucketList bucketList = new BucketList(ID.RandomID);
+  ID id = ID.RandomID;
+  bucketList.AddContact(new Contact(null, id));
+  bucketList.AddContact(new Contact(null, id));
+  Assert.IsTrue(bucketList.Buckets.Count == 1, &quot;No split should have taken place.&quot;);
+  Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, &quot;Bucket should have one contact.&quot;);
+}
+
+[TestMethod]
+public void BucketSplitTest()
+{
+  BucketList bucketList = new BucketList(ID.RandomID);
+  Constants.K.ForEach(() =&gt; bucketList.AddContact(new Contact(null, ID.RandomID)));
+  bucketList.AddContact(new Contact(null, ID.RandomID));
+  Assert.IsTrue(bucketList.Buckets.Count &gt; 1, &quot;Bucket should have split into two or more buckets.&quot;);
+}</pre>
+<h2>Add Contacts - Distribution Tests Reveal Behavior and Issues</h2>
+<p>Some very interesting things are revealed with the above implementation.&nbsp; 
+Let's write a unit test that runs the process of adding 3200 contacts, and we do 
+this 100 times, to get some results about the number of contacts that are 
+actually added:</p>
+<h3>Distribution Tests</h3>
+<pre>[TestMethod]
+public void RandomIDDistributionTest()
+{
+  Random rnd = new Random();
+  byte[] buffer = new byte[20];
+  List&lt;int&gt; contactsAdded = new List&lt;int&gt;();
+
+  100.ForEach(() =&gt;
+  {
+    rnd.NextBytes(buffer);
+    BucketList bucketList = new BucketList(new ID(buffer));
+
+    3200.ForEach(() =&gt;
+    {
+      rnd.NextBytes(buffer);
+      bucketList.AddContact(new Contact(null, new ID(buffer)));
+    });
+
+    int contacts = bucketList.Buckets.Sum(b =&gt; b.Contacts.Count);
+    contactsAdded.Add(contacts);
+  });
+
+  Assert.IsTrue(contactsAdded.Average().ApproximatelyEquals(720, 20), &quot;Unexpected distribution.&quot;);
+  Assert.IsTrue(contactsAdded.Select(n=&gt;(double)n).StdDev().ApproximatelyEquals(10, 2), &quot;Bad distribution&quot;);
+}</pre>
+<p>Things to note:</p>
+<ol>
+	<li>The ID is determined by a random value of 0-255 for each byte in the 20 
+	byte ID space.&nbsp; This biases the buckets that an ID can go into because 
+	a linear random ID results in very unbalanced bucket trees.&nbsp; More on 
+	this later.</li>
+<li>Note that of the 3200 contacts attempted to be added, on average we only 
+succeed at adding around 720 contacts.</li>
+	<li>If we increase <i>b </i>we can affect this number.&nbsp; For example, 
+	increasing b to 6 (from 5) doubles the number of contacts that are added.</li>
+</ol>
+<h4>The Issue of Randomness</h4>
+<p>As noted above, the ID was determined by a random value of 0-255 for each 
+byte in the 20 bytes ID space.&nbsp; What happens instead if we randomize the ID 
+based instead on its prefix?&nbsp; Meaning that the distribution of ID's, based 
+on their prefix, is randomly distributed?&nbsp; Some helper methods:</p>
+<pre>protected ID RandomizeBeyond(int bit)
+{
+  byte[] randomized = Bytes;
+
+  ID newid = new ID(randomized);
+
+  // TODO: Optimize
+  for (int i = bit + 1; i &lt; Constants.ID_LENGTH_BITS; i++)
+  {
+    newid.ClearBit(i);
+  }
+
+  // TODO: Optimize
+  for (int i = 0; i &lt; bit; i++)
+  {
+    if (rnd.NextDouble() &lt; 0.5)
+    {
+      newid.SetBit(i);
+    }
+  }
+
+  return newid;
+}
+
+/// &lt;summary&gt;
+/// Clears the bit n, from the LSB.
+/// &lt;/summary&gt;
+public void ClearBit(int n)
+{
+  byte[] bytes = Bytes;
+  bytes[n / 8] &amp;= (byte)((1 &lt;&lt; (n % 8)) ^ 0xFF);
+  id = new BigInteger(bytes.Append0());
+}
+
+/// &lt;summary&gt;
+/// Sets the bit n, from the LSB.
+/// &lt;/summary&gt;
+public void SetBit(int n)
+{
+  byte[] bytes = Bytes;
+  bytes[n / 8] |= (byte)(1 &lt;&lt; (n % 8));
+  id = new BigInteger(bytes.Append0());
+}</pre>
+<p>Also, a random ID generator:</p>
+<pre>/// &lt;summary&gt;
+/// Produce a random ID distributed evenly across the 160 bit space.
+/// &lt;/summary&gt;
+public static ID RandomID
+{
+  get
+  {
+    byte[] data = new byte[Constants.ID_LENGTH_BYTES];
+    ID id = new ID(data);
+    // Uniform random bucket index.
+    int idx = rnd.Next(Constants.ID_LENGTH_BITS);
+    // 0 &lt;= idx &lt;= 159
+    // Remaining bits are randomized to get unique ID.
+    id.SetBit(idx);
+    id = id.RandomizeBeyond(idx);
+
+    return id;
+  }
+}</pre>
+<p>This affects the bucket splitting algorithm.&nbsp; Notice with this unit 
+test:</p>
+<pre>[TestMethod]
+public void RandomPrefixDistributionTest()
+{
+  BucketList bucketList = new BucketList(ID.RandomID);
+  List&lt;int&gt; contactsAdded = new List&lt;int&gt;();
+
+  100.ForEach(() =&gt;
+  {
+    3200.ForEach(() =&gt; bucketList.AddContact(new Contact(null, ID.RandomID)));
+    int contacts = bucketList.Buckets.Sum(b =&gt; b.Contacts.Count);
+    contactsAdded.Add(contacts);
+  });
+
+  Assert.IsTrue(contactsAdded.Average().ApproximatelyEquals(3300, 100), &quot;Unexpected distribution.&quot;);
+  Assert.IsTrue(contactsAdded.Select(n =&gt; (double)n).StdDev().ApproximatelyEquals(630, 60), &quot;Bad distribution&quot;);
+}</pre>
+<p>Notice, on average, almost all our nodes are always added, but notice how 
+large the standard deviation is -- there are definitely outliers.</p>
+<h4>How a Host Node ID Affects Adding Contacts</h4>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
+<h2>The Issue of Randomness</h2>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
+<h2>Thread Safety</h2>
 <p>&nbsp;</p>
 <h2>High Level Architecture</h2>
 <p>In this document, <font color="#FF00FF">fuchsia text</font> is used when 

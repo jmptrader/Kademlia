@@ -13,4 +13,10 @@ namespace Clifton.Kademlia
         public TooManyContactsException() { }
         public TooManyContactsException(string msg) : base(msg) { }
     }
+
+	public class OurNodeCannotBeAContactException : Exception
+	{
+		public OurNodeCannotBeAContactException() { }
+		public OurNodeCannotBeAContactException(string msg) : base(msg) { }
+	}
 }

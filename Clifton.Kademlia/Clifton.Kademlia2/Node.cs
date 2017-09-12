@@ -21,7 +21,7 @@ namespace Clifton.Kademlia
         public Node(Contact us, IStorage storage)
         {
             ourContact = us;
-            bucketList = new BucketList(us.ContactID);
+            bucketList = new BucketList(us.ID);
             this.storage = storage;
         }
 

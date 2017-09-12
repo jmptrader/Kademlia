@@ -24,12 +24,62 @@ namespace Clifton.Kademlia
             buckets.Add(new KBucket());
         }
 
-        public void AddContact(Contact contact)
-        {
-            // to be implemented...
-        }
+		/// <summary>
+		/// Add a contact if possible, based on the algorithm described
+		/// in sections 2.2, 2.4 and 4.2
+		/// </summary>
+		public void AddContact(Contact contact)
+		{
+			Validate.IsFalse<OurNodeCannotBeAContactException>(ourID == contact.ID, "Cannot add ourselves as a contact!");
 
-        /*
+			contact.Touch();			// Update the LastSeen to now.
+			KBucket kbucket = GetKBucket(contact.ID);
+
+			if (kbucket.Contains(contact.ID))
+			{
+				// Replace the existing contact, updating the network info and LastSeen timestamp.
+				kbucket.ReplaceContact(contact);
+			}
+			else if (kbucket.IsBucketFull)
+			{
+				if (CanSplit(kbucket))
+				{
+					// Split the bucket and try again.
+					(KBucket k1, KBucket k2) = kbucket.Split();
+					int idx = GetKBucketIndex(contact.ID);
+					buckets[idx] = k1;
+					buckets.Insert(idx + 1, k2);
+					AddContact(contact);
+				}
+				else
+				{
+					// TODO: Ping the oldest contact to see if it's still 
+					// around and replace it if not.
+				}
+			}
+			else
+			{
+				// Bucket isn't full, so just add the contact.
+				kbucket.AddContact(contact);
+			}
+		}
+
+		protected bool CanSplit(KBucket kbucket)
+		{
+			return kbucket.HasInRange(ourID) || ((kbucket.Depth() % Constants.B) != 0);
+		}
+
+		protected KBucket GetKBucket(ID otherID)
+		{
+			return buckets[buckets.FindIndex(b => b.HasInRange(otherID))];
+		}
+
+		public int GetKBucketIndex(ID otherID)
+		{
+			return buckets.FindIndex(b => b.HasInRange(otherID));
+		}
+
+		/*
         public int GetKBucketIndex(ID otherID)
         {
             return buckets.FindIndex(b => b.HasInRange(otherID));
@@ -77,5 +127,5 @@ namespace Clifton.Kademlia
             return contactCounts;
         }
         */
-    }
+	}
 }

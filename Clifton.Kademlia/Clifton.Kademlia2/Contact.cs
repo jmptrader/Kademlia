@@ -6,7 +6,7 @@ namespace Clifton.Kademlia
     {
         public DateTime LastSeen { get; protected set; }
         public IProtocol Protocol { get; protected set; }
-        public ID ContactID { get; protected set; }
+        public ID ID { get; protected set; }
 
         /// <summary>
         /// Initialize a contact with its protocol and ID.
@@ -14,7 +14,7 @@ namespace Clifton.Kademlia
         public Contact(IProtocol protocol, ID contactID)
         {
             Protocol = protocol;
-            ContactID = contactID;
+            ID = contactID;
             Touch();
         }
 
