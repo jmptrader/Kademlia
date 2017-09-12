@@ -1,0 +1,29 @@
+﻿using System;
+
+namespace Clifton.Kademlia
+{
+    public class Contact
+    {
+        public DateTime LastSeen { get; protected set; }
+        public IProtocol Protocol { get; protected set; }
+        public ID ContactID { get; protected set; }
+
+        /// <summary>
+        /// Initialize a contact with its protocol and ID.
+        /// </summary>
+        public Contact(IProtocol protocol, ID contactID)
+        {
+            Protocol = protocol;
+            ContactID = contactID;
+            Touch();
+        }
+
+        /// <summary>
+        /// Update the fact that we've just seen this contact.
+        /// </summary>
+        public void Touch()
+        {
+            LastSeen = DateTime.Now;
+        }
+    }
+}

@@ -109,10 +109,10 @@ Java makes a very specific (yet seemingly arbitrary) rule about bucket splitting
 <h3>Requirements</h3>
 <p>C# 7 with .NET framework 4.7 is required to build this code.</p>
 <h3>Resources Used In This Research</h3>
-<p>The original Kademlia specification:
+<p>What I call Version 1 of the Kademlia specification:
 <a href="http://www.cs.rice.edu/Conferences/IPTPS02/109.pdf">
 http://www.cs.rice.edu/Conferences/IPTPS02/109.pdf</a></p>
-<p>The longer Kademlia specification:
+<p>What I call Version 2 of the Kademlia specification:
 <a href="https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf">
 https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf</a></p>
 <p>Mike De Boer's description of k-buckets:
@@ -130,6 +130,9 @@ https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00039.html</a></p>
 <p>Jim Dixon's description of the shorter specification:
 <a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE">
 http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE</a></p>
+<p>Jim Dixon's description of Section 2.4 of the specification:
+<a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html">
+https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html</a> </p>
 <h3>Other Resources To Further This Work</h3>
 <p>IPFS - Content Addressed, Versions, P2P File System (Draft 3):
 <a href="https://ipfs.io/ipfs/QmR7GSQM93Cx5eAg6a6yRzNde1FQv7uL6X1o4k7zrJa3LX/ipfs.draft3.pdf">
@@ -137,6 +140,19 @@ https://ipfs.io/ipfs/QmR7GSQM93Cx5eAg6a6yRzNde1FQv7uL6X1o4k7zrJa3LX/ipfs.draft3.
 <p>S/Kademlia: A Practicable Approach Towards Secure Key-Based Routing:
 <a href="http://www.tm.uka.de/doc/SKademlia_2007.pdf">
 http://www.tm.uka.de/doc/SKademlia_2007.pdf</a></p>
+<h3>Things Kademlia Doesn't Address</h3>
+<p>Some of the things the specification does not address:</p>
+<ul>
+	<li>key collision.</li>
+	<li>encrypting of values.</li>
+	<li>privacy of keys - while not practical with today's technology, a 
+	malicious peer could query for stored values across the entire 2<sup>160</sup> 
+	key space.</li>
+	<li>serialization format of packets sent over the wire.</li>
+	<li>ability to limit what a peer stores based on value length.</li>
+	<li>private peer groups -- joining a public P2P network but creating a 
+	private peer group within the network.</li>
+</ul>
 <h3>What is Accomplished Here</h3>
 <p>The goal in this article is to:</p>
 <ol>
@@ -174,13 +190,8 @@ the behavior of peers in those networks.</p>
 range of ID's.&nbsp; Initially, the ID range is the entire spectrum from 0 &lt;= id 
 &lt;= 2<sup>160</sup> - 1.</p>
 <h4>Key-Value</h4>
-<p>Peers store values based on 160 bit SHA1 hashed keys.&nbsp; Note that the 
-specification does not address:</p>
-<ul>
-	<li>key collision</li>
-	<li>encrypting of values</li>
-	<li>privacy of keys</li>
-</ul>
+<p>Peers store values based on 160 bit SHA1 hashed keys.&nbsp; Each stored entry 
+consists of a key-value pair.</p>
 <h4>Router</h4>
 <p>The router manages the collection of k-buckets and also determines into which 
 nodes a key-value should be stored.</p>
@@ -208,8 +219,8 @@ within the bucket's range.&nbsp; At this point, an algorithm kicks in that:</p>
 contact that is no longer responding with the new contact.</p>
 <h3>Communication Protocol</h3>
 <p><font color="#FF0000">TODO</font></p>
-<h2>Implementation</h2>
-<p>Let's cover some basic implementation requirements first.&nbsp; In this document, <font color="#FF00FF">fuchsia text</font> is used when 
+<h2>Node Requirements</h2>
+<p>Let's cover some basic implementation requirements for a node first.&nbsp; In this document, <font color="#FF00FF">fuchsia text</font> is used when 
 quoting from the Kademlia specification and other documents.</p>
 <h3>The BigInteger Class</h3>
 <p>We could write our own byte array manipulation and comparison operators, 
@@ -220,7 +231,7 @@ impressed with Python's ability to handle these values without any special
 classes:</p>
 <pre>&gt;&gt;&gt; 2 ** 160
 1461501637330902918203684832716283019655932542976L</pre>
-<h3>Node Requirements</h3>
+<h3>The Node Specification</h3>
 <p> <font color="#FF00FF">Participating computers each have a node ID in the 
 160-bit key space </font>(Introduction) which is simple enough.&nbsp; </p>
 <h4>Ambiguity #1</h4>
@@ -277,10 +288,451 @@ version of the specification.</p>
 <h4>Artifact #1</h4>
 <p>In the former specification, this limits the total number of contacts that 
 your server can handle to 160 * 20, or 3200 contacts.</p>
+<h2>Initial ID, Router, Contact, KBucket, BucketList, Node, and Dht Implementations</h2>
+<p>After resolving the ambiguity and contradiction, we can implement most of the 
+relevant classes.&nbsp; Note that some of the properties in the following 
+implementation will be discussed later.</p>
+<p>When we're all done with the initial implementation, we have this class 
+model:</p>
+<ul>
+	<li>Blue - classes</li>
+	<li>Orangey - interfaces</li>
+	<li>Purple - collections</li>
+	<li>Green - value type fields</li>
+</ul>
+<p align="center"><img border="0" src="classmodel.png" width="793" height="673"></p>
+<h3>The ID Class</h3>
+<pre>using System.Numerics;
+
+namespace Clifton.Kademlia
+{
+  public class ID
+  {
+#if DEBUG // For unit testing.
+    public BigInteger Value { get { return id; } }
+#endif
+
+    protected BigInteger id;
+
+    /// &lt;summary&gt;
+    /// Construct the ID from a byte array.
+    /// &lt;/summary&gt;
+    public ID(byte[] data)
+    {
+      IDInit(data);
+    }
+
+    /// &lt;summary&gt;
+    /// Construct the ID from another BigInteger value.
+    /// &lt;/summary&gt;
+    public ID(BigInteger bi)
+    {
+      id = bi;
+    }
+
+    /// &lt;summary&gt;
+    /// Initialize the ID from a byte array, appending a 0 to force unsigned values.
+    /// &lt;/summary&gt;
+    protected void IDInit(byte[] data)
+    {
+      Validate.IsTrue(data.Length == Constants.ID_LENGTH_BYTES, &quot;ID must be &quot; + Constants.ID_LENGTH_BYTES + &quot; bytes in length.&quot;);
+      id = new BigInteger(data.Append0());    }
+  }
+}</pre>
+<p>Two things of note here.</p>
+<ol>
+	<li>The most interesting thing here is the appending the byte array with a 0 to 
+force unsigned values in the BigInteger.&nbsp; If we don't do this, any byte 
+array where the MSB of byte[0] is set will be treated as a negative number, 
+which we don't want when comparing the range of a bucket.&nbsp; This is handled 
+by a simple extension method:</li>
+</ol>
+<pre>/// &lt;summary&gt;
+/// Append a 0 to the byte array so that when converting to a BigInteger, the value remains positive.
+/// &lt;/summary&gt;
+public static byte[] Append0(this byte[] b)
+{
+  return b.Concat(new byte[] { 0 }).ToArray();
+}</pre>
+<ol>
+	<li value="2">The byte array is in little-endian order, meaning that the 
+	least significant value is stored first.</li>
+</ol>
+<h4>Unit Tests</h4>
+<pre>[TestMethod]
+public void LittleEndianTest()
+{
+  byte[] test = new byte[20];
+  test[0] = 1;
+  Assert.IsTrue(new ID(test).Value == new BigInteger(1), &quot;Expected value to be 1.&quot;);
+}
+
+[TestMethod]
+public void PositiveValueTest()
+{
+  byte[] test = new byte[20];
+  test[19] = 0x80;
+  Assert.IsTrue(new ID(test).Value == BigInteger.Pow(new BigInteger(2), 159), &quot;Expected value to be 1.&quot;);
+}
+
+[TestMethod, ExpectedException(typeof(IDLengthException))]
+public void BadIDTest()
+{
+  byte[] test = new byte[21];
+  new ID(test);
+}</pre>
+<h3>The Router Class</h3>
+<p>At the moment, the router simply manages the host's node:</p>
+<pre>namespace Clifton.Kademlia
+{
+  public class Router
+  {
+#if DEBUG // for unit testing
+    public Node Node { get { return node; } }
+#endif
+
+    protected Node node;
+
+    public Router(Node node)
+    {
+      this.node = node;
+    }
+  }
+}</pre>
+<h3>The Contact Class</h3>
+<p>The contact class manages the contact's ID, last seen, and network 
+connectivity.&nbsp; Because I want to abstract the way network protocols are 
+handled, such that it is easy to test nodes in a virtual (in-memory) network, or 
+nodes that use different protocols (UDP, TCP/IP, WebSockets, etc.) the network 
+protocol is abstracted in an interface.</p>
+<pre>using System;
+
+namespace Clifton.Kademlia
+{
+  public class Contact
+  {
+    public DateTime LastSeen { get; protected set; }
+    public IProtocol Protocol { get; protected set; }
+    public ID ContactID { get; protected set; }
+
+    /// &lt;summary&gt;
+    /// Initialize a contact with its protocol and ID.
+    /// &lt;/summary&gt;
+    public Contact(IProtocol protocol, ID contactID)
+    {
+      Protocol = protocol;
+      ContactID = contactID;
+      Touch();
+    }
+
+    /// &lt;summary&gt;
+    /// Update the fact that we've just seen this contact.
+    /// &lt;/summary&gt;
+    public void Touch()
+    {
+      LastSeen = DateTime.Now;
+    }
+  }
+}</pre>
+<h3>The KBucket Class</h3>
+<p>Each k-bucket maintains a list of up to <i>k</i> contacts.</p>
+<pre>using System.Collections.Generic;
+using System.Numerics;
+
+namespace Clifton.Kademlia
+{
+  public class KBucket
+  {
+#if DEBUG // For unit testing.
+    public List&lt;Contact&gt; Contacts { get { return contacts; } }
+    public BigInteger Low { get { return low; } }
+    public BigInteger High { get { return high; } }
+#endif
+
+    protected List&lt;Contact&gt; contacts;
+    protected BigInteger low;
+    protected BigInteger high;
+
+    /// &lt;summary&gt;
+    /// Initializes a k-bucket with the default range of 0 - 2^160
+    /// &lt;/summary&gt;
+    public KBucket()
+    {
+      contacts = new List&lt;Contact&gt;();
+      low = 0;
+      high = BigInteger.Pow(new BigInteger(2), 160);
+    }
+
+    /// &lt;summary&gt;
+    /// Initializes a k-bucket with a specific ID range.
+    /// &lt;/summary&gt;
+    public KBucket(BigInteger low, BigInteger high)
+    {
+      contacts = new List&lt;Contact&gt;();
+      this.low = low;
+      this.high = high;
+    }
+
+    /// &lt;summary&gt;
+    /// Add a contact to the bucket, at the end, as this is the most recently seen contact.
+    /// A full bucket throws an exception.
+    /// &lt;/summary&gt;
+    public void AddContact(Contact contact)
+    {
+      Validate.IsTrue&lt;TooManyContactsException&gt;(contacts.Count &lt; Constants.K, &quot;Bucket is full&quot;);
+      contacts.Add(contact);
+    }
+  }
+}</pre>
+<h4>Unit Test</h4>
+<pre>[TestMethod, ExpectedException(typeof(TooManyContactsException))]
+public void TooManyContactsTest()
+{
+  KBucket kbucket = new KBucket();
+
+  // Add max # of contacts.
+  Constants.K.ForEach(n =&gt; kbucket.AddContact(new Contact(null, new ID(n))));
+
+  // Add one more.
+  kbucket.AddContact(new Contact(null, new ID(21)));
+}</pre>
+<h3>The BucketList Class</h3>
+<p>The bucket list class is a high level singleton container for buckets and operations 
+that manipulate buckets.&nbsp; For the moment, most of this is stubbed with 
+minimal behavior:</p>
+<pre>using System.Collections.Generic;
+
+namespace Clifton.Kademlia
+{
+  public class BucketList
+  {
+#if DEBUG // Used for unit testing.
+    public List&lt;KBucket&gt; Buckets { get { return buckets; } }
+#endif
+
+    protected List&lt;KBucket&gt; buckets;
+    protected ID ourID;
+
+    /// &lt;summary&gt;
+    /// Initialize the bucket list with our host ID and create a single bucket for the full ID range.
+    /// &lt;/summary&gt;
+    /// &lt;param name=&quot;ourID&quot;&gt;&lt;/param&gt;
+    public BucketList(ID ourID)
+    {
+      this.ourID = ourID;
+      buckets = new List&lt;KBucket&gt;();
+
+      // First kbucket has max range.
+      buckets.Add(new KBucket());
+    }
+
+    public void AddContact(Contact contact)
+    {
+      // to be implemented...
+    }
+  }
+}</pre>
+<h3>The Node Class</h3>
+<p>The node class is another high level singleton container for handling the Kademlia 
+commands sent over the wire.&nbsp; This is mostly stubbed for now:</p>
+<pre>using System.Collections.Generic;
+
+namespace Clifton.Kademlia
+{
+  public class Node
+  {
+#if DEBUG // For unit testing.
+    public BucketList BucketList { get { return bucketList; } }
+    public IStorage Storage { get; set; }
+    public Contact OurContact { get; }
+#endif
+
+    protected Contact ourContact;
+    protected BucketList bucketList;
+
+    public Node(Contact us, IStorage storage)
+    {
+      ourContact = us;
+      bucketList = new BucketList(us.ContactID);
+      this.storage = storage;
+    }
+
+    /// &lt;summary&gt;
+    /// Someone is pinging us. Register the contact and respond.
+    /// &lt;/summary&gt;
+    public Contact Ping(Contact sender)
+    {
+      // TODO...
+
+      return ourContact;
+    }
+
+    /// &lt;summary&gt;
+    /// Store a key-value pair in our storage space.
+    /// &lt;/summary&gt;
+    public void Store(Contact sender, ID keyID, string val)
+    {
+      // TODO...
+    }
+
+    /// &lt;summary&gt;
+    /// From the spec: FindNode takes a 160-bit ID as an argument. The recipient of the RPC returns (IP address, UDP port, Node ID) triples 
+    /// for the k nodes it knows about closest to the target ID. These triples can come from a single k-bucket, or they may come from 
+    /// multiple k-buckets if the closest k-bucket is not full. In any case, the RPC recipient must return k items (unless there are 
+    /// fewer than k nodes in all its k-buckets combined, in which case it returns every node it knows about).
+    /// &lt;/summary&gt;
+    /// &lt;returns&gt;&lt;/returns&gt;
+    public (List&lt;Contact&gt; contacts, string val) FindNode(Contact sender, ID toFind)
+    {
+      // TODO...
+      return (null, null);
+    }
+
+    /// &lt;summary&gt;
+    /// Returns either a list of close contacts or a the value, if the node's storage contains the value for the key.
+    /// &lt;/summary&gt;
+    public (List&lt;Contact&gt; contacts, string val) FindValue(Contact sender, ID keyID)
+    {
+      // TODO:
+
+      return (null, null);
+    }
+  }
+}</pre>
+<p>Of note here is the interface <code>IStorage</code> which abstracts the storage mechanism 
+for key-value pairs.</p>
+<h3>The Dht Class</h3>
+<p>The Dht class is the &quot;server&quot; - the entry point for instantiating our peer.&nbsp; At the moment, the Dht class is simply a container for the Router:</p>
+<pre>using System;
+
+namespace Clifton.Kademlia
+{
+  public class Dht
+  {
+#if DEBUG // for unit testing
+    public Router Router { get { return router; } }
+#endif
+
+    protected Router router;
+  }
+}</pre>
+<h2>Adding Contacts - The First Interesting Algorithm</h2>
+<p>Version 2, Section 2.2 of the specification initially states this simple 
+algorithm for dealing adding contacts:</p>
+<p><font color="#FF00FF">When a Kademlia node receives any message (request or 
+reply) from another node, it updates the appropriate k-bucket for the sender’s 
+node ID. If the sending node already exists in the recipient’s k-bucket, the 
+recipient moves it to the tail of the list. If the node is not already in the 
+appropriate k-bucket and the bucket has fewer than k entries, then the recipient 
+just inserts the new sender at the tail of the list. If the appropriate k-bucket 
+is full, however, then the recipient pings the k-bucket’s least-recently seen 
+node to decide what to do. If the least recently seen node fails to respond, it 
+is evicted from the k-bucket and the new sender inserted at the tail. Otherwise, 
+if the least-recently seen node responds, it is moved to the tail of the list, 
+and the new sender’s contact is discarded.</font></p>
+<p>Let's define a few terms (if you aren't sure, don't know, or just want some 
+clarity):</p>
+<ul>
+	<li>head of the list - the first entry in the list</li>
+	<li>tail of the list - the last entry in the list</li>
+	<li>&quot;the appropriate k-bucket for the sender's node ID&quot; - this is the 
+	k-bucket for which the sender's node ID is in the range of the k-bucket.</li>
+</ul>
+<p>Here's a flowchart of what the spec says:</p>
+<p align="center">
+<img border="0" src="addContact1.png" width="520" height="679"></p>
+<p>This seems reasonable and the spec goes on to state:</p>
+<p><font color="#FF00FF">k-buckets effectively implement a least-recently seen 
+eviction policy, except that live nodes are never removed from the list. This 
+preference for old contacts is driven by our analysis of Gnutella trace data 
+collected by Saroiu et. al. ... The longer a node has been up, the more likely 
+it is to remain up another hour. By keeping the oldest live contacts around, 
+k-buckets maximize the probability that the nodes they contain will remain 
+online.&nbsp; A second benefit of k-buckets is that they provide resistance to 
+certain DoS attacks. One cannot flush nodes' routing state by flooding the 
+system with new nodes. Kademlia nodes will only insert the new nodes in the 
+k-buckets when old nodes leave the system.</font></p>
+<p>We also observe that this has nothing to do with binary trees, which is 
+something version 2 of the spec introduced.&nbsp; This is basically a hang-over 
+from version 1 of the spec.</p>
+<h3>Contradiction #2</h3>
+<p>Section 2.4 states something slightly different:</p>
+<p><font color="#FF00FF">Nodes in the routing tree are allocated dynamically, as 
+needed. Initially, a node u’s routing tree has a single node— one k-bucket 
+covering the entire ID space. When u learns of a new contact, it attempts to 
+insert the contact in the appropriate k-bucket. If that bucket is not full, the 
+new contact is simply inserted. Otherwise, if the k-bucket’s range includes u’s 
+own node ID, then the bucket is split into two new buckets, the old contents 
+divided between the two, and the insertion attempt repeated. If a k-bucket with 
+a different range is full, the new contact is simply dropped.</font></p>
+<h4>Terminology</h4>
+<ul>
+	<li>&quot;u's routing tree&quot; - the host's bucket list.</li>
+	<li>&quot;if a k-bucket with a different range is full&quot; - meaning, a k-bucket 
+	that does not include u's own node ID.</li>
+</ul>
+<p>The purpose of allowing a bucket to split if it contains the host's node ID 
+is so that the host keeps a list of nodes that are &quot;close to it&quot; -- closeness 
+defined essentially by the integer difference of the node ID's, not the XOR 
+difference (more on this whole XOR thing later.)</p>
+<p>So this algorithm looks like this:</p>
+<p><img border="0" src="addContact2.png" width="761" height="625"></p>
+<p>What happened to pinging the least seen contact and replacing it?&nbsp; </p>
+<h3>Contradiction #3</h3>
+<p>But the spec then goes on to say:</p>
+<p><font color="#FF00FF">One complication arises in highly unbalanced trees.&nbsp; 
+Suppose node <i>u</i> joins the system and is the only node whose ID begins 000. 
+Suppose further that the system already has more than k nodes with prefix 001. 
+Every node with prefix 001 would have an empty k-bucket into which <i>u</i> 
+should be inserted, yet <i>u</i>’s bucket refresh would only notify k of the 
+nodes.&nbsp; To avoid this problem, Kademlia nodes keep all valid contacts in a 
+subtree of size at least k nodes, even if this requires splitting buckets in 
+which the node’s own ID does not reside. Figure 5 illustrates these additional 
+splits.</font></p>
+<h4>Terminology</h4>
+<ul>
+	<li>&quot;a subtree of size at least k nodes&quot; - ok, we can vaguely see that a 
+	subtree contains other subtrees where the total number of contacts is 
+	greater than k.</li>
+	<li>&quot;even if this requires splitting buckets in which the node's own ID does 
+	not reside&quot; - not only is this contradictory, but there's no explanation of 
+	what &quot;even if this requires&quot; means.&nbsp; How do you code this?</li>
+</ul>
+<p>This section of the specification apparently creates much confusion -- I 
+found several links with people asking about this section.&nbsp; It's 
+unfortunate that the original authors do not themselves answer these questions.&nbsp; 
+Jim Dixon has a very interesting response<sup>12</sup> on The Mail Archive which 
+I present in full here:</p>
+<blockquote>
+	<p>&quot;The source of confusion is that the 13-page version of the Kademlia uses<br>
+	the same term to refer to two different data structures. The first is<br>
+	well-defined: k-bucket i contains zero to k contacts whose XOR distance is<br>
+	[2^i..2^(i+1)). It cannot be split. The current node can only be in<br>
+	bucket zero, if it is present at all. In fact its presence would be<br>
+	pointless or worse.<br>
+	<br>
+	The second thing referred to as a k-bucket doesn't have the same<br>
+	properties. Specifically, the current node must be present, it wanders<br>
+	from one k-bucket to another, these k-buckets can be split, and there are<br>
+	sometimes ill-defined constraints on the characteristics of subtrees of<br>
+	k-buckets, such as the requirement that &quot;Kademlia nodes keep all valid<br>
+	contacts in a subtree of size of at least k nodes, even if this requires<br>
+	splitting buckets in which the node's own ID does not reside&quot; (section<br>
+	2.4, near the end).<br>
+	<br>
+	In a generous spirit, you might say that the logical content of the two<br>
+	descriptions is the same. However, for someone trying to implement<br>
+	Kademlia, the confusion of terms causes headaches -- and leads to a<br>
+	situation where all sorts of things are described as Kademlia, because<br>
+	they can be said to be, if you are of a generous disposition. However,<br>
+	not surprisingly, they don't interoperate.&quot;</p>
+</blockquote>
+<p>So my decision, given the lack of clarity and by the authors of the spec, is 
+to ignore this, because, as you will see next, there is yet another version of 
+how contacts are added.</p>
+<h3>Contradiction #4</h3>
 <p>&nbsp;</p>
-<h3>Node Implementation</h3>
-<p>After resolving the ambiguity and contradiction, we can implement a Node 
-class like this:</p>
+<p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
@@ -348,7 +800,9 @@ https://en.wikipedia.org/wiki/BitTorrent</a></p>
 https://en.wikipedia.org/wiki/Kad_network</a></p>
 <p><sup>10</sup> - <a href="https://en.wikipedia.org/wiki/Chord_(peer-to-peer)">https://en.wikipedia.org/wiki/Chord_(peer-to-peer)</a> </p>
 <p><sup>11</sup> - <a href="https://en.wikipedia.org/wiki/Pastry_(DHT)">https://en.wikipedia.org/wiki/Pastry_(DHT)</a> </p>
-<p>&nbsp;</p>
+<p><sup>12</sup> -
+<a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html">
+https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html</a> </p>
 
 </body>
 
