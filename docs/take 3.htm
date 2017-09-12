@@ -143,7 +143,11 @@ http://www.tm.uka.de/doc/SKademlia_2007.pdf</a></p>
 <h3>Things Kademlia Doesn't Address</h3>
 <p>Some of the things the specification does not address:</p>
 <ul>
-	<li>key collision.</li>
+	<li>key collisions in key-values.&nbsp; While improbable, the best way to 
+	mitigate this is to have your own peer create a random key for you, so we 
+	don't all create a key called &quot;Nancy's Number.&quot;</li>
+	<li>peer ID collision - again, the node ID should be created for you, so we 
+	don't all create peers called &quot;Marc's Peer.&quot;</li>
 	<li>encrypting of values.</li>
 	<li>privacy of keys - while not practical with today's technology, a 
 	malicious peer could query for stored values across the entire 2<sup>160</sup> 
@@ -152,6 +156,9 @@ http://www.tm.uka.de/doc/SKademlia_2007.pdf</a></p>
 	<li>ability to limit what a peer stores based on value length.</li>
 	<li>private peer groups -- joining a public P2P network but creating a 
 	private peer group within the network.</li>
+	<li>what if you want to participate in a peer network for storing / 
+	retrieving key-values, but don't want to store key-values yourself?&nbsp; 
+	Perhaps you're running an IoT device with limited storage?</li>
 </ul>
 <h3>What is Accomplished Here</h3>
 <p>The goal in this article is to:</p>
@@ -768,6 +775,55 @@ def sharedPrefix(args):
     i += 1
   return args[0][:i]</pre>
 <p>Here, the depth is determined by the shared prefixes in the nodes.</p>
+<h3>What is the Bucket Splitting Algorithm Actually Doing?</h3>
+<p>So, when we use the following algorithm to determine whether a bucket can be 
+split:</p>
+<pre>kbucket.HasInRange(ourID) || ((kbucket.Depth() % Constants.B) != 0)</pre>
+<p>What is this actually doing?</p>
+<ol>
+	<li>First, the HasInRange is testing whether our node ID is close to the 
+	contact's node ID.&nbsp; If our node ID is in the range of the bucket 
+	associated with the contact's node ID, then we know the two nodes are 
+	&quot;close&quot; in terms of the integer difference.&nbsp; Initially, the range spans 
+	the entire 2<sup>160</sup> ID space, so everybody is &quot;close.&quot;&nbsp; This 
+	test of &quot;closeness&quot; is refined as new contacts are added.</li>
+	<li>Regarding the depth mod 5 computation, I asked Brian Muller this 
+	question: &quot;is the purpose of the depth to limit the number of &quot;new&quot; nodes 
+	that a host will maintain (ignoring for the moment the issue of pinging an 
+	old contact to see if can be replaced)?&quot; to which he replied: &quot;Yep! The idea 
+	is that a node should know about nodes spread across the network - though 
+	definitely not all of them. The depth is used as a way to control how &quot;deep&quot; 
+	a nodes' understanding of the network is (and the number of nodes it knows 
+	about).&quot;</li>
+</ol>
+<p>As buckets split, eventually buckets will become full that do not contain the 
+node ID.&nbsp; The depth to which the bucket has split is based on the number of 
+bits shared in the prefix of the contacts in the bucket.&nbsp; With random ID's, 
+this number will initially be small, but as bucket ranges become more narrow 
+from subsequent splits, more contacts will begin the share the same prefix and 
+the bucket when split, will result in less &quot;room&quot; for new contacts.&nbsp; 
+Eventually, when the bucket range becomes narrow enough, the number of bits 
+shared in the prefix of the contacts in the bucket reaches the threshold <i>b</i> 
+which the spec says should be 5.</p>
+<h3>Failing to add Yourself to a Peer - Self Correcting</h3>
+<p>Let's say your a new node and you want to register yourself with a known 
+peer, but that peer is basically maxed out for the number of contacts that it 
+can hold in the particular bucket for your ID -- the depth is <i>b</i>.&nbsp; In 
+this case, you will not be added to the peer's contact list.&nbsp; The Kademlia 
+spec does not indicate in its protocol how this condition should be handled.&nbsp; 
+Interestingly, this is not an issue.&nbsp; Whether you are successfully added as 
+a contact or not, you will receive back &quot;nearby&quot; peers.&nbsp; Any time you 
+contact those peers (to store a value, for example) all the peers that you 
+contact will try to add your contact.&nbsp; When one succeeds, your contact ID 
+will be disseminated slowly through the network. </p>
+<h3>Algorithmic Problems - Bad Randomness</h3>
+<p>A peer with an ID, say, of less than 2<sup>159</sup> will initially split 
+once for contacts that have ID's greater than 2<sup>159</sup>.&nbsp; 
+Subsequently, if contacts have ID's where the shared bits is mod 5 == 0, your 
+contact will not be added.&nbsp; We can this (and therefore the scenario above 
+as well) with a unit test:</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
 <h2>Adding Contacts - Implementation</h2>
 <p>As I'm using Brian Muller's implementation as the authority with regards to 
 the spec, we'll go with how he coded the algorithm and (eventually) 

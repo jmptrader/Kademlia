@@ -9,6 +9,5 @@ namespace Clifton.Kademlia
 #endif
 
         protected Router router;
-
     }
 }

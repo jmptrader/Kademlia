@@ -16,7 +16,7 @@ namespace UnitTests2
             // Add max # of contacts.
             Constants.K.ForEach(n => kbucket.AddContact(new Contact(null, new ID(n))));
 
-            // Add one more
+            // Add one more.
             kbucket.AddContact(new Contact(null, new ID(21)));
         }
     }
