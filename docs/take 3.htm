@@ -177,6 +177,9 @@ http://www.tm.uka.de/doc/SKademlia_2007.pdf</a></p>
 	</ol>
 </li>
 </ol>
+<h3>Notation</h3>
+<p>In this document, <font color="#FF00FF">fuchsia text</font> is used when 
+quoting from the Kademlia specification and other documents.</p>
 <h2>Key Concepts</h2>
 <p>The Kademlia specification essentially consists of several sub-algorithms:</p>
 <ol>
@@ -207,7 +210,7 @@ consists of a key-value pair.</p>
 <h4>Router</h4>
 <p>The router manages the collection of k-buckets and also determines into which 
 nodes a key-value should be stored.</p>
-<h4>Distance</h4>
+<h4>Distance / &quot;Closeness&quot;</h4>
 <p>The distance between a host and the key is an XOR computation of the host's 
 ID with the key.&nbsp; </p>
 <h4>Prefix</h4>
@@ -230,10 +233,113 @@ within the bucket's range.&nbsp; At this point, an algorithm kicks in that:</p>
 <p>If the bucket can't be split, there is a third fallback that replaces an old 
 contact that is no longer responding with the new contact.</p>
 <h3>Communication Protocol</h3>
-<p><font color="#FF0000">TODO</font></p>
+<p>The Kademlia protocol consists of four Remote Procedure Calls (RPC's).&nbsp; 
+All RPC's require that the sender provides a random RPC ID which must be echoed 
+by the recipient: <font color="#FF00FF">In all RPCs, the recipient must echo a 
+160-bit random RPC ID, which provides some resistance to address forgery, PINGS 
+can also be piggy-backed on RPC replies for the RPC recipient to obtain 
+additional assurance of the sender’s network address.</font></p>
+<p>Any time a peer is contacted with any of the four RPC's, it goes through the 
+process of adding/updating the contact in its own list.&nbsp; In the description 
+below, the concept of &quot;closeness&quot; will be discussed in detail later.</p>
+<h4>Ping</h4>
+<p><font color="#FF00FF">The PING RPC probes a node to see if it is online.</font>&nbsp; 
+This is considered a &quot;primitive&quot; function, in that it just returns the random 
+RPC ID that accompanied the Ping request.</p>
+<h4>Store</h4>
+<p>STORE instructs a node to store a (key, value) pair for later retrieval.&nbsp; 
+This is also considered a &quot;primitive&quot; function, as it again just returns the 
+random RPC ID that accompanied the Store request.&nbsp; <font color="#FF00FF">To 
+store a (key,value) pair, a participant locates the k closest nodes to the key 
+and sends them STORE RPCS.</font>&nbsp; The participant does this by inspecting 
+its own k closest nodes to the key.</p>
+<h4>Find Node</h4>
+<p><font color="#FF00FF">FIND_NODE takes a 160-bit ID as an argument. The 
+recipient of a the RPC returns (IP address, UDP port, Node ID) triples for the k 
+nodes it knows about closest to the target ID. These triples can come from a 
+single k-bucket, or they may come from multiple k-buckets if the closest 
+k-bucket is not full. In any case, the RPC recipient must return k items (unless 
+there are fewer than k nodes in all its k-buckets combined, in which case it 
+returns every node it knows about).</font></p>
+<p>In an abstracted communication protocol, the recipient needs to return 
+information about the protocol -- the kind of protocol and whatever is required 
+to contact a peer using that protocol.&nbsp; If multiple protocols are 
+supported, we can consider two options:</p>
+<ol>
+	<li>Return node information only for the protocols that the requester says 
+	it supports.</li>
+	<li>Alternatively (and not as good an option) is for the requester to filter 
+	out returned nodes whose protocols aren't supported.</li>
+</ol>
+<p>Other considerations when supporting multiple protocols are:</p>
+<ul>
+	<li>The peer itself may support multiple protocols, so it should probably 
+	indicate what those are when it registers with another peer.</li>
+	<li>The peer may have a preferred protocol.</li>
+</ul>
+<p>None of the issues of different protocols is discussed in the spec, this is 
+purely my own enhancement.</p>
+<p>The Find Node protocol has several purposes:</p>
+<ul>
+	<li>A peer can issue this RPC on contacts it knows about, updating its own 
+	list of &quot;close&quot; peers.</li>
+<li>A peer may issue this RPC to discover other peers on the network.</li>
+</ul>
+<h4>Find Value</h4>
+<p><font color="#FF00FF">FIND_VALUE behaves like FIND_NODE - returning (IP 
+address, UDP port, Node ID) triples - with one exception. If the RPC recipient 
+has received a STORE RPC for the key, it just returns the stored value.</font></p>
+<p>If the Find Value RPC returns a list of other peers, it is up to the 
+requester to continue searching for the desired value from that list.&nbsp; 
+Also, note this technique for caching key-values:</p>
+<p><font color="#FF0000">TODO: Implement</font></p>
+<p><font color="#FF00FF">To find a (key,value) pair, a node starts by performing 
+a lookup to find the k nodes with IDs closest to the key. However, value lookups 
+use FIND_VALUE rather than FIND_NODE RPCS. Moreover, the procedure halts 
+immediately when any node returns the value. For caching purposes, once a lookup 
+succeeds, the requesting node stores the (key,value) pair at the closest node it 
+observed to the key that did not return the value.</font></p>
+<h3>Other Considerations</h3>
+<h4>Expiration Time</h4>
+<p><font color="#FF00FF">Additionally, each node re-publishes (key,value) pairs 
+as necessary to keep them alive, as described later in Section 2.5. This ensures 
+persistence (as we show in our proof sketch) of the (key,value) pair with very 
+high probability. For Kademlia’s current application (file sharing), we also 
+require the original publisher of a (key,value) pair to republish it every 24 
+hours. Otherwise, (key,value) pairs expire 24 hours after publication, so as to 
+limit stale index information in the system. For other applications, such as 
+digital certificates or cryptographic hash to value mappings, longer expiration 
+times may be appropriate.</font></p>
+<p>If we want to consider using Kademlia in a distributed blockchain 
+implementation, it would seem necessary that key-values never expire, otherwise 
+this would result in an integrity loss of the blockchain data.</p>
+<h4>Over-caching</h4>
+<p><font color="#FF00FF">Because of the uni-directionality of the topology, 
+future searches for the same key are likely to hit cached entries before 
+querying the closest node. During times of high popularity for a certain key, 
+the system might end up caching it at many nodes. To avoid “over-caching,” we 
+make the expiration time of a (key,value) pair in any node’s database 
+exponentially inversely proportional to the number of nodes between the current 
+node and the node whose ID is closest to the key ID. While simple LRU eviction 
+would result in a similar lifetime distribution, there is no natural way of 
+choosing the cache size, since nodes have no a priori knowledge of how many 
+values the system will store.</font></p>
+<h4>Bucket Refreshes</h4>
+<p><font color="#FF00FF">Buckets are generally kept fresh by the traffic of 
+requests traveling through nodes. To handle pathological cases in which there 
+are no lookups for a particular ID range, each node refreshes any bucket to 
+which it has not performed a node lookup in the past hour. Refreshing means 
+picking a random ID in the bucket’s range and performing a node search for that 
+ID.</font></p>
+<h4>Joining a Network</h4>
+<p><font color="#FF00FF">To join the network, a node <i>u</i> must have a 
+contact to an already participating node <i>w</i>. <i>u</i> inserts <i>w</i> 
+into the appropriate k-bucket. <i>u</i> then performs a node lookup for its own 
+node ID. Finally, <i>u</i> refreshes all k-buckets further away than its closest 
+neighbor. During the refreshes, <i>u</i> both populates its own k-buckets and 
+inserts itself into other nodes’ k-buckets as necessary.</font></p>
 <h2>Node Requirements</h2>
-<p>Let's cover some basic implementation requirements for a node first.&nbsp; In this document, <font color="#FF00FF">fuchsia text</font> is used when 
-quoting from the Kademlia specification and other documents.</p>
+<p>Let's cover some basic implementation requirements for a node first.&nbsp; </p>
 <h3>The BigInteger Class</h3>
 <p>We could write our own byte array manipulation and comparison operators, 
 which is what zencoders did, or we could use the <code>BigInteger</code> class to handle the 
@@ -912,6 +1018,7 @@ providing a unique ID in its contact request.</li>
 	= 5.</li>
 </ol>
 <h2>Adding Contacts - Implementation</h2>
+<p><font color="#FF0000">Add flowchart picture of actual implementation</font></p>
 <p>As I'm using Brian Muller's implementation as the authority with regards to 
 the spec, we'll go with how he coded the algorithm and (eventually) 
 incorporating the fallback where we discard nodes in a full k-bucket that don't 
@@ -1283,7 +1390,76 @@ on an even distribution in the prefix space vs. simply a random integer ID, I
 think this clearly demonstrates that a random integer ID is the best choice.&nbsp; 
 If we want to support more than an average of ~700 contacts in our peer, we can 
 always increase <i>b</i>. </p>
-<p align="left">&nbsp;</p>
+<h2 align="left">Node Lookup - Discussion</h2>
+<p align="left"><font color="#FF00FF">The most important procedure a Kademlia 
+participant must perform is to locate the k closest nodes to some given node ID. 
+We call this procedure a node lookup. Kademlia employs a recursive algorithm for 
+node lookups. The lookup initiator starts by picking a nodes from its closest 
+non-empty k-bucket (or, if that bucket has fewer than a entries, it just takes 
+the a closest nodes it knows of). The initiator then sends parallel, 
+asynchronous FIND_NODE RPCS to the a nodes it has chosen, a is a system-wide 
+concurrency parameter, such as 3.</font></p>
+<p>and:</p>
+<p><font color="#FF00FF">In the recursive step, the initiator resends the 
+FIND_NODE to nodes it has learned about from previous RPCs. (This recursion can 
+begin before all a of the previous RPCs have returned). Of the k nodes the 
+initiator has heard of closest to the target, it picks a that it has not yet 
+queried and resends the FIND_NODE RPC to them. Nodes that fail to respond 
+quickly are removed from consideration until and unless they do respond. If a 
+round of FIND_NODES fails to return a node any closer than the closest already 
+seen, the initiator resends the FIND_NODE to all of the k closest nodes it has 
+not already queried. The lookup terminates when the initiator has queried and 
+gotten responses from the k closest nodes it has seen. When a = 1, the lookup 
+algorithm resembles Chord’s in terms of message cost and the latency of 
+detecting failed nodes. However, Kademlia can route for lower latency because it 
+has the flexibility of choosing any one of k nodes to forward a request to.</font></p>
+<p>The idea here is to:</p>
+<ol>
+	<li>Try really hard to return k close nodes.</li>
+	<li>Contact other peers in parallel to minimize latency.</li>
+</ol>
+<h3>Terminology and Ambiguities</h3>
+<p>The lookup initiator - this is your own peer wanting to make a store or 
+retrieve call.&nbsp; The node lookup is performed before you store or retrieve a 
+value so that your peer has a reasonable&nbsp;&nbsp; Given &quot;<font color="#FF00FF">To 
+store a (key,value) pair, a participant locates the k closest nodes to the key 
+and sends them STORE RPCS.</font>&quot; here the term &quot;locates&quot; actually means 
+performing the lookup.&nbsp; Contrast with &quot;<font color="#FF00FF">To find a (key,value) 
+pair, a node starts by performing a lookup to find the k nodes with IDs closest 
+to the key.</font>&quot; in which the term &quot;lookup&quot; is specifically used.</p>
+<p>We can see this implemented in the Python code:</p>
+<pre>async def get(self, key):
+  &quot;&quot;&quot;
+  Get a key if the network has it.
+  Returns:
+  :class:`None` if not found, the value otherwise.
+  &quot;&quot;&quot;
+  dkey = digest(key)
+  # if this node has it, return it
+  if self.storage.get(dkey) is not None:
+    return self.storage.get(dkey)
+    node = Node(dkey)
+<b>    nearest = self.protocol.router.findNeighbors(node)</b>
+    ...</pre>
+<p>and:</p>
+<pre>async def set(self, key, value):
+  &quot;&quot;&quot;
+  Set the given string key to the given value in the network.
+  &quot;&quot;&quot;
+  self.log.debug(&quot;setting '%s' = '%s' on network&quot; % (key, value))
+  dkey = digest(key)
+  return await self.set_digest(dkey, value)
+
+async def set_digest(self, dkey, value):
+  &quot;&quot;&quot;
+  Set the given SHA1 digest key (bytes) to the given value in the network.
+  &quot;&quot;&quot;
+  node = Node(dkey)
+
+  nearest = self.protocol.router.findNeighbors(node)
+  ...</pre>
+<p>where <code>findNeighbors</code> is the lookup algorithm described in the specification.</p>
+			<p>&nbsp;</p>
 <p>&nbsp;</p>
 <h2>Thread Safety</h2>
 <p>&nbsp;</p>
