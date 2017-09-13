@@ -143,22 +143,27 @@ http://www.tm.uka.de/doc/SKademlia_2007.pdf</a></p>
 <h3>Things Kademlia Doesn't Address</h3>
 <p>Some of the things the specification does not address:</p>
 <ul>
-	<li>key collisions in key-values.&nbsp; While improbable, the best way to 
+	<li>Key collisions in key-values.&nbsp; While improbable, the best way to 
 	mitigate this is to have your own peer create a random key for you, so we 
 	don't all create a key called &quot;Nancy's Number.&quot;</li>
-	<li>peer ID collision - again, the node ID should be created for you, so we 
+	<li>Peer ID collision - again, the node ID should be created for you, so we 
 	don't all create peers called &quot;Marc's Peer.&quot;</li>
-	<li>encrypting of values.</li>
-	<li>privacy of keys - while not practical with today's technology, a 
+	<li>Encrypting of values.</li>
+	<li>Privacy of keys - while not practical with today's technology, a 
 	malicious peer could query for stored values across the entire 2<sup>160</sup> 
 	key space.</li>
-	<li>serialization format of packets sent over the wire.</li>
-	<li>ability to limit what a peer stores based on value length.</li>
-	<li>private peer groups -- joining a public P2P network but creating a 
+	<li>Serialization format of packets sent over the wire.</li>
+	<li>Ability to limit what a peer stores based on value length.&nbsp; I 
+	certainly don't want to store the value for the key &quot;TheWholeInternet.&quot;</li>
+	<li>Private peer groups -- joining a public P2P network but creating a 
 	private peer group within the network.</li>
-	<li>what if you want to participate in a peer network for storing / 
+	<li>Partial participation -- What if you want to participate in a peer network for storing / 
 	retrieving key-values, but don't want to store key-values yourself?&nbsp; 
 	Perhaps you're running an IoT device with limited storage?</li>
+	<li>Registering multiple peer ID's from the same network address - this is 
+	of particular concern because you can use this to degrade the performance of 
+	a peer, as discussed
+	<a href="#Breaking_Kademlia">here</a>.</li>
 </ul>
 <h3>What is Accomplished Here</h3>
 <p>The goal in this article is to:</p>
@@ -816,15 +821,96 @@ a contact or not, you will receive back &quot;nearby&quot; peers.&nbsp; Any time
 contact those peers (to store a value, for example) all the peers that you 
 contact will try to add your contact.&nbsp; When one succeeds, your contact ID 
 will be disseminated slowly through the network. </p>
-<h3>Algorithmic Problems - Bad Randomness</h3>
-<p>A peer with a both and ID and a single contact ID of less than 2<sup>159</sup> 
-will initially split once for 20 contacts that have ID's greater than 2<sup>159</sup>.&nbsp; 
-All of those 20 contacts having ID's greater than 2159 will go in the second 
-bucket.&nbsp; Subsequently, if contacts have ID's where the shared bits is mod 5 
-== 0, your contact will not be added.&nbsp; We can this (and therefore the 
-scenario above as well) with a unit test:</p>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
+<h3><a name="Breaking_Kademlia">Degrading a Kademlia</a> Peer</h3>
+<p>Given a peer with both an ID and a single contact ID of less than 2<sup>159</sup>, 
+it 
+will initially split once for 20 contacts that are added having ID's greater than 2<sup>159</sup>.&nbsp; 
+</p>
+<p><font color="#FF0000">[picture]</font></p>
+<p>All of those 20 contacts having ID's greater than 2<sup>159</sup> will go in the second 
+bucket.&nbsp; The peer ID will not be in this second bucket range.&nbsp; If those contacts 
+in the second bucket have ID's where the number of shared bits is <i>b</i>, 
+therefore <i>b</i> mod <i>b</i> 
+== 0, any new contact in the range of the second bucket will not be added.&nbsp; We can 
+verify this with a unit test:</p>
+<pre>/// &lt;summary&gt;
+/// Force a failed add by choosing node ID's that cause depth mod 5 != 0 to be false.
+/// &lt;/summary&gt;
+[TestMethod]
+public void ForceFailedAddTest()
+{
+  // force host node ID to &lt; 2^159 so the node ID is not in the 2^159 ... 2^160 range
+  byte[] hostID = new byte[20];
+  hostID[19] = 0x7F;
+  BucketList bucketList = new BucketList(new ID(hostID));
+
+  // Also add a contact in this 0 - 2^159 range, arbitrarily something not our host ID.
+  // This ensures that only one bucket split will occur after 20 nodes with ID &gt;= 2^159 are added,
+  // otherwise, buckets will in the 2^159 ... 2^160 space.
+  byte[] id = new byte[20];
+  id[0] = 1;
+  bucketList.AddContact(new Contact(null, new ID(id)));
+
+  // make sure contact ID's all have the same 5 bit prefix and are in the 2^159 ... 2^160 - 1 space
+  byte[] contactID = new byte[20];
+  contactID[19] = 0x80;
+  // 1000 xxxx prefix, xxxx starts at 1000 (8)
+  // this ensures that all the contacts in a bucket match only the prefix as only the first 5 bits are shared.
+  // |----| shared range
+  // 1000 1000 ...
+  // 1000 1100 ...
+  // 1000 1110 ...
+  byte shifter = 0x08;
+  int pos = 19;
+
+  Constants.K.ForEach(() =&gt;
+  {
+    contactID[pos] |= shifter;
+    bucketList.AddContact(new Contact(null, new ID(contactID)));
+    shifter &gt;&gt;= 1;
+
+    if (shifter == 0)
+    {
+      shifter = 0x80;
+      --pos;
+    }
+  });
+
+  Assert.IsTrue(bucketList.Buckets.Count == 2, &quot;Bucket split should not have occurred.&quot;);
+  Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, &quot;Expected 1 contact in bucket 0.&quot;);
+  Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, &quot;Expected 20 contacts in bucket 1.&quot;);
+
+  // This next contact should not split the bucket as depth == 5 and therefore adding the contact will fail.
+  // Any unique ID &gt;= 2^159 will do.
+  id = new byte[20];
+  id[19] = 0x80;
+  bucketList.AddContact(new Contact(null, new ID(id)));
+
+  Assert.IsTrue(bucketList.Buckets.Count == 2, &quot;Bucket split should not have occurred.&quot;);
+  Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, &quot;Expected 1 contact in bucket 0.&quot;);
+  Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, &quot;Expected 20 contacts in bucket 1.&quot;);
+}</pre>
+<p>What we've effectively done is break Kademlia, as the peer will no longer 
+accept half of the possible ID range.&nbsp; As long as the peer ID is outside 
+the range of a bucket whose shared prefix mod <i>b</i> is 0, we can continue 
+this process by adding contacts with a shared prefixes (assume <i>b</i>==5)&nbsp; 
+01xxx, 001xx, 0001x, and 00001 and again for every multiple of <i>b</i> bits.&nbsp; 
+If a peer has a &quot;small&quot; ID, you can easily prevent it from accepting new 
+contacts within half of its bucket ranges.</p>
+<p>There are several ways to mitigate this:</p>
+<ol>
+	<li>ID's should not be created by the user, they should be assigned by the 
+	library.&nbsp; Of course, given the open source nature of all these 
+	implementations, enforcing this is impossible.</li>
+<li>A contact's ID should be unique for its network address -- in other words, a 
+malicious peer should not be able to create multiple contacts simply by 
+providing a unique ID in its contact request.</li>
+	<li>One might consider increasing <i>b</i> as <i>i</i> in 2<sup><i>i</i></sup> 
+	increases.&nbsp; There might be some justification for this, as the range 2<sup>159</sup> 
+	through 2<sup>160</sup> - 1 contains half the possible contacts, one might 
+	allow the depth for bucket splitting to be greater than the recommended <i>b</i> 
+	= 5.</li>
+</ol>
 <h2>Adding Contacts - Implementation</h2>
 <p>As I'm using Brian Muller's implementation as the authority with regards to 
 the spec, we'll go with how he coded the algorithm and (eventually) 
@@ -1013,7 +1099,7 @@ public void BucketSplitTest()
   bucketList.AddContact(new Contact(null, ID.RandomID));
   Assert.IsTrue(bucketList.Buckets.Count &gt; 1, &quot;Bucket should have split into two or more buckets.&quot;);
 }</pre>
-<h2>Add Contacts - Distribution Tests Reveal Behavior and Issues</h2>
+<h2>Adding Contacts - Distribution Tests Reveal Importance of Randomness</h2>
 <p>Some very interesting things are revealed with the above implementation.&nbsp; 
 Let's write a unit test that runs the process of adding 3200 contacts, and we do 
 this 100 times, to get some results about the number of contacts that are 
@@ -1055,7 +1141,7 @@ succeed at adding around 720 contacts.</li>
 	<li>If we increase <i>b </i>we can affect this number.&nbsp; For example, 
 	increasing b to 6 (from 5) doubles the number of contacts that are added.</li>
 </ol>
-<h4>The Issue of Randomness</h4>
+<h4>The Question of Randomness</h4>
 <p>As noted above, the ID was determined by a random value of 0-255 for each 
 byte in the 20 bytes ID space.&nbsp; What happens instead if we randomize the ID 
 based instead on its prefix?&nbsp; Meaning that the distribution of ID's, based 
@@ -1128,26 +1214,76 @@ test:</p>
 <pre>[TestMethod]
 public void RandomPrefixDistributionTest()
 {
-  BucketList bucketList = new BucketList(ID.RandomID);
   List&lt;int&gt; contactsAdded = new List&lt;int&gt;();
 
   100.ForEach(() =&gt;
   {
+    BucketList bucketList = new BucketList(ID.RandomID);
     3200.ForEach(() =&gt; bucketList.AddContact(new Contact(null, ID.RandomID)));
     int contacts = bucketList.Buckets.Sum(b =&gt; b.Contacts.Count);
     contactsAdded.Add(contacts);
   });
 
-  Assert.IsTrue(contactsAdded.Average().ApproximatelyEquals(3300, 100), &quot;Unexpected distribution.&quot;);
-  Assert.IsTrue(contactsAdded.Select(n =&gt; (double)n).StdDev().ApproximatelyEquals(630, 60), &quot;Bad distribution&quot;);
+  Assert.IsTrue(contactsAdded.Average().ApproximatelyEquals(1900, 200), &quot;Unexpected distribution.&quot;);
+  Assert.IsTrue(contactsAdded.Select(n =&gt; (double)n).StdDev().ApproximatelyEquals(750, 50), &quot;Bad distribution&quot;);
 }</pre>
-<p>Notice, on average, almost all our nodes are always added, but notice how 
-large the standard deviation is -- there are definitely outliers.</p>
-<h4>How a Host Node ID Affects Adding Contacts</h4>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
-<h2>The Issue of Randomness</h2>
-<p>&nbsp;</p>
+<p>Notice how 
+large the standard deviation is -- there is something go on here, which we'll 
+explore next.</p>
+<h3>How a Contact ID Affects Distribution</h3>
+<p>Let's look at what happens when we assign a node ID as one of 2<sup>i</sup> 
+where 0 &lt;= i &lt; 160 and add 3200 integer random contact ID's.&nbsp; Here's the unit test, which outputs the count of 
+contacts added to each node ID in the set of <i>i</i>:</p>
+<pre>[TestMethod]
+public void DistributionTestForEachPrefix()
+{
+  Random rnd = new Random();
+  StringBuilder sb = new StringBuilder();
+  byte[] buffer = new byte[20];
+
+  160.ForEach((i) =&gt;
+  {
+    BucketList bucketList = new BucketList(new ID(BigInteger.Pow(new BigInteger(2), i)));
+    rnd.NextBytes(buffer);
+
+    3200.ForEach(() =&gt;
+    {
+      rnd.NextBytes(buffer);
+      bucketList.AddContact(new Contact(null, new ID(buffer)));
+    });
+
+    int contacts = bucketList.Buckets.Sum(b =&gt; b.Contacts.Count);
+    sb.Append(i + &quot;,&quot; + contacts + CRLF);
+  });
+
+  File.WriteAllText(&quot;prefixTest.txt&quot;, sb.ToString());
+}</pre>
+<p align="center"><img border="0" src="dist3.png" width="482" height="289"></p>
+<p>That looks fairly reasonable.&nbsp; Compare the above with the distribution of contact counts when the contact ID 
+is selected from a random prefix with randomized bits after the prefix as 
+opposed to a random integer ID:</p>
+<pre>[TestMethod]
+public void DistributionTestForEachPrefixWithRandomPrefixDistributedContacts()
+{
+  StringBuilder sb = new StringBuilder();
+
+  160.ForEach((i) =&gt;
+  {
+    BucketList bucketList = new BucketList(new ID(BigInteger.Pow(new BigInteger(2), i)));
+    3200.ForEach(() =&gt; bucketList.AddContact(new Contact(null, ID.RandomID)));
+    int contacts = bucketList.Buckets.Sum(b =&gt; b.Contacts.Count);
+    sb.Append(i + &quot;,&quot; + contacts + CRLF);
+  });
+
+  File.WriteAllText(&quot;prefixTest.txt&quot;, sb.ToString());
+}</pre>
+<p align="center"><img border="0" src="dist2.png" width="487" height="296"></p>
+<p align="left">If there was a question as to whether to choose a node ID based 
+on an even distribution in the prefix space vs. simply a random integer ID, I 
+think this clearly demonstrates that a random integer ID is the best choice.&nbsp; 
+If we want to support more than an average of ~700 contacts in our peer, we can 
+always increase <i>b</i>. </p>
+<p align="left">&nbsp;</p>
 <p>&nbsp;</p>
 <h2>Thread Safety</h2>
 <p>&nbsp;</p>
