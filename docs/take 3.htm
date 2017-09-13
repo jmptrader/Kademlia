@@ -1418,10 +1418,14 @@ has the flexibility of choosing any one of k nodes to forward a request to.</fon
 	<li>Try really hard to return k close nodes.</li>
 	<li>Contact other peers in parallel to minimize latency.</li>
 </ol>
-<h3>Terminology and Ambiguities</h3>
-<p>The lookup initiator - this is your own peer wanting to make a store or 
-retrieve call.&nbsp; The node lookup is performed before you store or retrieve a 
-value so that your peer has a reasonable&nbsp;&nbsp; Given &quot;<font color="#FF00FF">To 
+<h3>Terminology</h3>
+<ul>
+	<li>The lookup initiator - this is your own peer wanting to make a store or 
+retrieve call to other peers.&nbsp; The node lookup is performed before you 
+	store or retrieve a value so that your peer has a reasonable.</li>
+</ul>
+<h3>Ambiguities</h3>
+<p>Given &quot;<font color="#FF00FF">To 
 store a (key,value) pair, a participant locates the k closest nodes to the key 
 and sends them STORE RPCS.</font>&quot; here the term &quot;locates&quot; actually means 
 performing the lookup.&nbsp; Contrast with &quot;<font color="#FF00FF">To find a (key,value) 
@@ -1459,7 +1463,38 @@ async def set_digest(self, dkey, value):
   nearest = self.protocol.router.findNeighbors(node)
   ...</pre>
 <p>where <code>findNeighbors</code> is the lookup algorithm described in the specification.</p>
-			<p>&nbsp;</p>
+			<h3>The Concept of Closeness and Issues</h3>
+<p><font color="#FF00FF">Many of Kademlia’s benefits result from its use of a 
+novel XOR metric for distance between points in the key space. XOR is symmetric, 
+allowing Kademlia participants to receive lookup queries from precisely the same 
+distribution of nodes contained in their routing tables.</font></p>
+<p>Therefore, the distance between a node and a key is the node ID XOR'd with 
+the key.&nbsp; Unfortunately, an XOR distance metric is not amenable to a 
+pre-sorted list of ID's.&nbsp; The resulting &quot;distance&quot; computation can be very 
+different for two keys when XOR'd with the contact list.&nbsp; As described on 
+Stack Overflow<sup>13 </sup>:</p>
+<blockquote>
+	<p>&quot;The thing is that buckets don't have to be full, and if you want to 
+	send, let's say 20 nodes in a response a single bucket will not suffice.&nbsp; 
+	So you have to traverse the routing table (either sorted based on your own 
+	node ID or by the natural distance) in ascending distance (XOR) order 
+	relative to the target key to visit multiple buckets.&nbsp; Since the XOR 
+	distance metric folds at each bit-carry (XOR == carry-less addition) it does 
+	not map nicely to any routing table layout. In other words, visiting the 
+	nearest buckets won't do...I figure that many people simply iterate over the 
+	whole routing table because for regular nodes it will only contain a few 
+	dozen buckets at most and a DHT node does not see much traffic, so it only 
+	has to execute this operation a few times per second and if you implement 
+	this in a dense, cache-friendly datastructure then the lion's share might 
+	actually be the memory traffic and not the CPU instructions doing a few XORs 
+	and comparisons.<br>
+	<br>
+	I.e. a full-table-scan is just easy to implement.&quot;</p>
+</blockquote>
+<p>The author of that post provides an implementation<sup>14</sup> that doesn't 
+require a full table scan, but in my implementation, we'll just do the full 
+table scan.</p>
+<p>&nbsp;</p>
 <p>&nbsp;</p>
 <h2>Thread Safety</h2>
 <p>&nbsp;</p>
@@ -1527,6 +1562,14 @@ https://en.wikipedia.org/wiki/Kad_network</a></p>
 <p><sup>12</sup> -
 <a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html">
 https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html</a> </p>
+
+<p>13 -
+<a href="https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table">
+https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table</a></p>
+<p>14 -
+<a href="https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170">
+https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170</a></p>
+<p>&nbsp;</p>
 
 </body>
 
