@@ -817,11 +817,12 @@ contact those peers (to store a value, for example) all the peers that you
 contact will try to add your contact.&nbsp; When one succeeds, your contact ID 
 will be disseminated slowly through the network. </p>
 <h3>Algorithmic Problems - Bad Randomness</h3>
-<p>A peer with an ID, say, of less than 2<sup>159</sup> will initially split 
-once for contacts that have ID's greater than 2<sup>159</sup>.&nbsp; 
-Subsequently, if contacts have ID's where the shared bits is mod 5 == 0, your 
-contact will not be added.&nbsp; We can this (and therefore the scenario above 
-as well) with a unit test:</p>
+<p>A peer with a both and ID and a single contact ID of less than 2<sup>159</sup> 
+will initially split once for 20 contacts that have ID's greater than 2<sup>159</sup>.&nbsp; 
+All of those 20 contacts having ID's greater than 2159 will go in the second 
+bucket.&nbsp; Subsequently, if contacts have ID's where the shared bits is mod 5 
+== 0, your contact will not be added.&nbsp; We can this (and therefore the 
+scenario above as well) with a unit test:</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <h2>Adding Contacts - Implementation</h2>

@@ -24,6 +24,10 @@ namespace Clifton.Kademlia
 			}
 		}
 
+        public string AsBigEndianString
+        {
+            get { return String.Join("", Bytes.Bits().Reverse().Select(b => b ? "1" : "0")); } }
+
 		/// <summary>
 		/// Produce a random ID distributed evenly across the 160 bit space.
 		/// </summary>

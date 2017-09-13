@@ -40,7 +40,55 @@ namespace UnitTests2
 			Assert.IsTrue(bucketList.Buckets.Count > 1, "Bucket should have split into two or more buckets.");
 		}
 
-		[TestMethod]
+        /// <summary>
+        /// Force a failed add by choosing node ID's that cause depth mod 5 != 0 to be false.
+        /// </summary>
+        [TestMethod]
+        public void ForceFailedAddTest()
+        {
+            // force host node ID to < 2^159
+            byte[] hostID = new byte[20];
+            hostID[19] = 0x7F;      
+            BucketList bucketList = new BucketList(new ID(hostID));
+
+            // Also add a contact in this 0 - 2^159 range, arbitrarily something not our host ID.
+            byte[] id = new byte[20];
+            id[0] = 1;
+            bucketList.AddContact(new Contact(null, new ID(id)));
+
+            // make sure contact ID's all have the same 5 bit prefix and are in the 2^159 through 2^160 - 1 space
+            byte[] contactID = new byte[20];
+            contactID[19] = 0x80;
+            // 1000 0xxx prefix, xxx starts at 100 (4)
+            // this ensures that all the contacts in a bucket match only the prefix.
+            byte shifter = 0x4;
+            int pos = 19;
+
+            Constants.K.ForEach(() =>
+            {
+                contactID[pos] |= shifter;
+                bucketList.AddContact(new Contact(null, new ID(contactID)));
+                shifter >>= 1;
+
+                if (shifter == 0)
+                {
+                    shifter = 0x80;
+                    --pos;
+                }
+            });
+
+            Assert.IsTrue(bucketList.Buckets.Count == 2, "Bucket split should not have occurred.");
+            Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, "Expected 1 contact.");
+            Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, "Expected 20 contacts.");
+
+            // This next contact should not split the bucket as depth == 5.
+            contactID[pos] |= shifter;
+            bucketList.AddContact(new Contact(null, new ID(contactID)));
+            Assert.IsTrue(bucketList.Buckets.Count == 1, "Bucket split should not have occurred.");
+            Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 20, "Expected 20 contacts.");
+        }
+
+        [TestMethod]
 		public void RandomPrefixDistributionTest()
 		{
 			BucketList bucketList = new BucketList(ID.RandomID);
