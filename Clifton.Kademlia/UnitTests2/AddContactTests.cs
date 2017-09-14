@@ -63,6 +63,9 @@ namespace UnitTests2
             id[0] = 1;
             bucketList.AddContact(new Contact(null, new ID(id)));
 
+            Assert.IsTrue(bucketList.Buckets.Count == 1, "Bucket split should not have occurred.");
+            Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, "Expected 1 contact in bucket 0.");
+
             // make sure contact ID's all have the same 5 bit prefix and are in the 2^159 ... 2^160 - 1 space
             byte[] contactID = new byte[20];
             contactID[19] = 0x80;
@@ -88,7 +91,7 @@ namespace UnitTests2
                 }
             });
 
-            Assert.IsTrue(bucketList.Buckets.Count == 2, "Bucket split should not have occurred.");
+            Assert.IsTrue(bucketList.Buckets.Count == 2, "Bucket split should have occurred.");
             Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, "Expected 1 contact in bucket 0.");
             Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, "Expected 20 contacts in bucket 1.");
 

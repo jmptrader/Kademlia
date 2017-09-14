@@ -19,4 +19,16 @@ namespace Clifton.Kademlia
 		public OurNodeCannotBeAContactException() { }
 		public OurNodeCannotBeAContactException(string msg) : base(msg) { }
 	}
+
+    public class NoNonEmptyBucketsException : Exception
+    {
+        public NoNonEmptyBucketsException() { }
+        public NoNonEmptyBucketsException(string msg) : base(msg) { }
+    }
+
+    public class SendingQueryToSelfException : Exception
+    {
+        public SendingQueryToSelfException() { }
+        public SendingQueryToSelfException(string msg) : base(msg) { }
+    }
 }

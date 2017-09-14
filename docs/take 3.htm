@@ -27,7 +27,8 @@ implemented:</p>
 	shorter specification and seems to match Jim Dixon's<sup>3</sup> description 
 	of the algorithm.</li>
 	<li>Brian Muller<sup>4 </sup>has an excellent implementation in Python based 
-	on the longer specification.&nbsp; Note that the Python 3.5 branch should be 
+	on the longer specification.&nbsp; 
+	<img border="0" src="note.png" width="24" height="32"> Note that the Python 3.5 branch should be 
 	used, the master branch contains some bugs and is written for Python 2.</li>
 </ol>
 <p>Rarely do I end up with multiple versions of an article.&nbsp; What started 
@@ -457,7 +458,7 @@ namespace Clifton.Kademlia
       id = new BigInteger(data.Append0());    }
   }
 }</pre>
-<p>Two things of note here.</p>
+<p><img border="0" src="note.png" width="24" height="32"> Two things of note here.</p>
 <ol>
 	<li>The most interesting thing here is the appending the byte array with a 0 to 
 force unsigned values in the BigInteger.&nbsp; If we don't do this, any byte 
@@ -477,6 +478,7 @@ public static byte[] Append0(this byte[] b)
 	least significant value is stored first.</li>
 </ol>
 <h4>Unit Tests</h4>
+<p><img border="0" src="unittest.png" width="14" height="32"></p>
 <pre>[TestMethod]
 public void LittleEndianTest()
 {
@@ -603,6 +605,7 @@ namespace Clifton.Kademlia
   }
 }</pre>
 <h4>Unit Test</h4>
+<p><img border="0" src="unittest.png" width="14" height="32"></p>
 <pre>[TestMethod, ExpectedException(typeof(TooManyContactsException))]
 public void TooManyContactsTest()
 {
@@ -661,8 +664,8 @@ namespace Clifton.Kademlia
   {
 #if DEBUG // For unit testing.
     public BucketList BucketList { get { return bucketList; } }
-    public IStorage Storage { get; set; }
-    public Contact OurContact { get; }
+    public IStorage Storage { get { return storage; } }
+    public Contact OurContact { get { return ourContact; } }
 #endif
 
     protected Contact ourContact;
@@ -717,7 +720,7 @@ namespace Clifton.Kademlia
     }
   }
 }</pre>
-<p>Of note here is the interface <code>IStorage</code> which abstracts the storage mechanism 
+<p><img border="0" src="note.png" width="24" height="32"> Of note here is the interface <code>IStorage</code> which abstracts the storage mechanism 
 for key-value pairs.</p>
 <h3>The Dht Class</h3>
 <p>The Dht class is the &quot;server&quot; - the entry point for instantiating our peer.&nbsp; At the moment, the Dht class is simply a container for the Router:</p>
@@ -794,7 +797,7 @@ is so that the host keeps a list of nodes that are &quot;close to it&quot; -- cl
 defined essentially by the integer difference of the node ID's, not the XOR 
 difference (more on this whole XOR thing later.)</p>
 <p>So this algorithm looks like this:</p>
-<p><img border="0" src="addContact2.png" width="761" height="625"></p>
+<p align="center"><img border="0" src="addContact2.png" width="761" height="625"></p>
 <p>What happened to pinging the least seen contact and replacing it?&nbsp; </p>
 <h3>Contradiction #3</h3>
 <p>But the spec then goes on to say:</p>
@@ -932,12 +935,13 @@ will be disseminated slowly through the network. </p>
 it 
 will initially split once for 20 contacts that are added having ID's greater than 2<sup>159</sup>.&nbsp; 
 </p>
-<p><font color="#FF0000">[picture]</font></p>
 <p>All of those 20 contacts having ID's greater than 2<sup>159</sup> will go in the second 
 bucket.&nbsp; The peer ID will not be in this second bucket range.&nbsp; If those contacts 
 in the second bucket have ID's where the number of shared bits is <i>b</i>, 
 therefore <i>b</i> mod <i>b</i> 
-== 0, any new contact in the range of the second bucket will not be added.&nbsp; We can 
+== 0, any new contact in the range of the second bucket will not be added.&nbsp; </p>
+<p align="center"><img border="0" src="degrade1.png" width="651" height="449"></p>
+<p><img border="0" src="unittest.png" width="14" height="32"> We can 
 verify this with a unit test:</p>
 <pre>/// &lt;summary&gt;
 /// Force a failed add by choosing node ID's that cause depth mod 5 != 0 to be false.
@@ -956,6 +960,9 @@ public void ForceFailedAddTest()
   byte[] id = new byte[20];
   id[0] = 1;
   bucketList.AddContact(new Contact(null, new ID(id)));
+
+  Assert.IsTrue(bucketList.Buckets.Count == 1, &quot;Bucket split should not have occurred.&quot;);
+  Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, &quot;Expected 1 contact in bucket 0.&quot;);
 
   // make sure contact ID's all have the same 5 bit prefix and are in the 2^159 ... 2^160 - 1 space
   byte[] contactID = new byte[20];
@@ -982,7 +989,7 @@ public void ForceFailedAddTest()
     }
   });
 
-  Assert.IsTrue(bucketList.Buckets.Count == 2, &quot;Bucket split should not have occurred.&quot;);
+  Assert.IsTrue(bucketList.Buckets.Count == 2, &quot;Bucket split should have occurred.&quot;);
   Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, &quot;Expected 1 contact in bucket 0.&quot;);
   Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, &quot;Expected 20 contacts in bucket 1.&quot;);
 
@@ -1018,7 +1025,9 @@ providing a unique ID in its contact request.</li>
 	= 5.</li>
 </ol>
 <h2>Adding Contacts - Implementation</h2>
-<p><font color="#FF0000">Add flowchart picture of actual implementation</font></p>
+<p>This is the flowchart of what we're implementing:</p>
+<p align="center">
+<img border="0" src="addContact3.png" width="664" height="838"></p>
 <p>As I'm using Brian Muller's implementation as the authority with regards to 
 the spec, we'll go with how he coded the algorithm and (eventually) 
 incorporating the fallback where we discard nodes in a full k-bucket that don't 
@@ -1064,7 +1073,7 @@ public void AddContact(Contact contact)
   }
 }</pre>
 <p>We have a few helper methods in this class as well:</p>
-<pre>protected bool CanSplit(KBucket kbucket)
+<pre>protected virtual bool CanSplit(KBucket kbucket)
 {
   return kbucket.HasInRange(ourID) || ((kbucket.Depth() % Constants.B) != 0);
 }
@@ -1078,6 +1087,7 @@ public int GetKBucketIndex(ID otherID)
 {
   return buckets.FindIndex(b =&gt; b.HasInRange(otherID));
 }</pre>
+<p>The method <code>CanSplit</code> is <code>virtual</code> so you can provide a different implementation.</p>
 <p>The majority of the remaining work is done in the <code>KBucket</code> class:</p>
 <pre>/// &lt;summary&gt;
 /// Splits the kbucket into returning two new kbuckets filled with contacts separated by the new midpoint
@@ -1142,7 +1152,8 @@ protected bool[] SharedBits(bool[] bits, ID id)
   return sharedBits.ToArray();
 }</pre>
 <p>Recall that the ID is stored as a little-endian value, and the prefix is most 
-significant bits, so we have to work the ID backwards n-1 to 0.&nbsp; Also note 
+significant bits, so we have to work the ID backwards n-1 to 0.&nbsp; 
+<img border="0" src="note.png" width="24" height="32"> Also note 
 the implementation of the <code>Bytes</code> property in the <code>ID</code> class:</p>
 <pre>// Zero-pad msb's if ToByteArray length != Constants.LENGTH_BYTES
 // The array returned is in little-endian order (lsb at index 0)
@@ -1177,7 +1188,7 @@ public static IEnumerable&lt;bool&gt; Bits(this byte[] bytes)
   return bytes.SelectMany(GetBits);
 }</pre>
 <h3>Basic Unit Tests</h3>
-<p>A few basic unit tests:</p>
+<p><img border="0" src="unittest.png" width="14" height="32"> A few basic unit tests:</p>
 <pre>[TestMethod]
 public void UniqueIDAddTest()
 {
@@ -1212,6 +1223,7 @@ Let's write a unit test that runs the process of adding 3200 contacts, and we do
 this 100 times, to get some results about the number of contacts that are 
 actually added:</p>
 <h3>Distribution Tests</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"></p>
 <pre>[TestMethod]
 public void RandomIDDistributionTest()
 {
@@ -1237,13 +1249,13 @@ public void RandomIDDistributionTest()
   Assert.IsTrue(contactsAdded.Average().ApproximatelyEquals(720, 20), &quot;Unexpected distribution.&quot;);
   Assert.IsTrue(contactsAdded.Select(n=&gt;(double)n).StdDev().ApproximatelyEquals(10, 2), &quot;Bad distribution&quot;);
 }</pre>
-<p>Things to note:</p>
+<p><img border="0" src="note.png" width="24" height="32"> Things to note:</p>
 <ol>
 	<li>The ID is determined by a random value of 0-255 for each byte in the 20 
 	byte ID space.&nbsp; This biases the buckets that an ID can go into because 
 	a linear random ID results in very unbalanced bucket trees.&nbsp; More on 
 	this later.</li>
-<li>Note that of the 3200 contacts attempted to be added, on average we only 
+<li>Of the 3200 contacts attempted to be added, on average we only 
 succeed at adding around 720 contacts.</li>
 	<li>If we increase <i>b </i>we can affect this number.&nbsp; For example, 
 	increasing b to 6 (from 5) doubles the number of contacts that are added.</li>
@@ -1316,7 +1328,7 @@ public static ID RandomID
     return id;
   }
 }</pre>
-<p>This affects the bucket splitting algorithm.&nbsp; Notice with this unit 
+<p><img border="0" src="unittest.png" width="14" height="32"> This affects the bucket splitting algorithm.&nbsp; Notice with this unit 
 test:</p>
 <pre>[TestMethod]
 public void RandomPrefixDistributionTest()
@@ -1338,7 +1350,7 @@ public void RandomPrefixDistributionTest()
 large the standard deviation is -- there is something go on here, which we'll 
 explore next.</p>
 <h3>How a Contact ID Affects Distribution</h3>
-<p>Let's look at what happens when we assign a node ID as one of 2<sup>i</sup> 
+<p><img border="0" src="unittest.png" width="14" height="32"> Let's look at what happens when we assign a node ID as one of 2<sup>i</sup> 
 where 0 &lt;= i &lt; 160 and add 3200 integer random contact ID's.&nbsp; Here's the unit test, which outputs the count of 
 contacts added to each node ID in the set of <i>i</i>:</p>
 <pre>[TestMethod]
@@ -1366,7 +1378,8 @@ public void DistributionTestForEachPrefix()
   File.WriteAllText(&quot;prefixTest.txt&quot;, sb.ToString());
 }</pre>
 <p align="center"><img border="0" src="dist3.png" width="482" height="289"></p>
-<p>That looks fairly reasonable.&nbsp; Compare the above with the distribution of contact counts when the contact ID 
+<p>That looks fairly reasonable.&nbsp; </p>
+<p><img border="0" src="unittest.png" width="14" height="32"> Compare the above with the distribution of contact counts when the contact ID 
 is selected from a random prefix with randomized bits after the prefix as 
 opposed to a random integer ID:</p>
 <pre>[TestMethod]
@@ -1394,20 +1407,20 @@ always increase <i>b</i>. </p>
 <p align="left"><font color="#FF00FF">The most important procedure a Kademlia 
 participant must perform is to locate the k closest nodes to some given node ID. 
 We call this procedure a node lookup. Kademlia employs a recursive algorithm for 
-node lookups. The lookup initiator starts by picking a nodes from its closest 
-non-empty k-bucket (or, if that bucket has fewer than a entries, it just takes 
-the a closest nodes it knows of). The initiator then sends parallel, 
-asynchronous FIND_NODE RPCS to the a nodes it has chosen, a is a system-wide 
+node lookups. The lookup initiator starts by picking <i>a</i> nodes from its closest 
+non-empty k-bucket (or, if that bucket has fewer than <i>a</i> entries, it just takes 
+the <i>a</i> closest nodes it knows of). The initiator then sends parallel, 
+asynchronous FIND_NODE RPCS to the <i>a</i> nodes it has chosen, <i>a</i> is a system-wide 
 concurrency parameter, such as 3.</font></p>
 <p>and:</p>
 <p><font color="#FF00FF">In the recursive step, the initiator resends the 
 FIND_NODE to nodes it has learned about from previous RPCs. (This recursion can 
-begin before all a of the previous RPCs have returned). Of the k nodes the 
-initiator has heard of closest to the target, it picks a that it has not yet 
+begin before all a of the previous RPCs have returned). Of the <i>k</i> nodes the 
+initiator has heard of closest to the target, it picks <i>a</i> that it has not yet 
 queried and resends the FIND_NODE RPC to them. Nodes that fail to respond 
 quickly are removed from consideration until and unless they do respond. If a 
 round of FIND_NODES fails to return a node any closer than the closest already 
-seen, the initiator resends the FIND_NODE to all of the k closest nodes it has 
+seen, the initiator resends the FIND_NODE to all of the <i>k</i> closest nodes it has 
 not already queried. The lookup terminates when the initiator has queried and 
 gotten responses from the k closest nodes it has seen. When a = 1, the lookup 
 algorithm resembles Chord’s in terms of message cost and the latency of 
@@ -1418,13 +1431,15 @@ has the flexibility of choosing any one of k nodes to forward a request to.</fon
 	<li>Try really hard to return k close nodes.</li>
 	<li>Contact other peers in parallel to minimize latency.</li>
 </ol>
+<p align="center"><img border="0" src="lookup1.png" width="784" height="983"></p>
+<p>Got it?</p>
 <h3>Terminology</h3>
 <ul>
 	<li>The lookup initiator - this is your own peer wanting to make a store or 
 retrieve call to other peers.&nbsp; The node lookup is performed before you 
 	store or retrieve a value so that your peer has a reasonable.</li>
 </ul>
-<h3>Ambiguities</h3>
+<h3>Ambiguity #3</h3>
 <p>Given &quot;<font color="#FF00FF">To 
 store a (key,value) pair, a participant locates the k closest nodes to the key 
 and sends them STORE RPCS.</font>&quot; here the term &quot;locates&quot; actually means 
@@ -1463,6 +1478,23 @@ async def set_digest(self, dkey, value):
   nearest = self.protocol.router.findNeighbors(node)
   ...</pre>
 <p>where <code>findNeighbors</code> is the lookup algorithm described in the specification.</p>
+<h3>Ambiguity #4</h3>
+<p>What does &quot;<font color="#FF00FF">Nodes that fail to respond quickly&quot; </font>
+mean?&nbsp; Particularly, the term &quot;quickly?&quot;</p>
+<h3>Ambiguity #5</h3>
+<p>What if the peer you yourself don't have peers in any k-buckets?&nbsp; That 
+shouldn't happen (you should at least have the peer you are contacting) but if 
+that peer only has you in its k-buckets, then there's nothing to return.</p>
+<h3>Ambiguity #6</h3>
+<p>In &quot;<font color="#FF00FF"> from its closest non-empty k-bucket&quot;</font>, what 
+does &quot;closest&quot; mean?&nbsp; I am assuming here that it is the XOR distance 
+metric, but then the question is, what do we use as the &quot;key&quot; for a bucket with 
+a range of contacts?&nbsp; Here I'm going to assume that it means the high range 
+of the bucket:</p>
+<pre>/// &lt;summary&gt;
+/// We are going to assume that the &quot;key&quot; for this bucket is it's high range.
+/// &lt;/summary&gt;
+public BigInteger Key { get { return high; } }</pre>
 			<h3>The Concept of Closeness and Issues</h3>
 <p><font color="#FF00FF">Many of Kademlia’s benefits result from its use of a 
 novel XOR metric for distance between points in the key space. XOR is symmetric, 
@@ -1494,6 +1526,211 @@ Stack Overflow<sup>13 </sup>:</p>
 <p>The author of that post provides an implementation<sup>14</sup> that doesn't 
 require a full table scan, but in my implementation, we'll just do the full 
 table scan.</p>
+<h2>Node Lookup - Implementation</h2>
+<p>Let's start with a baseline implementation that for the moment:</p>
+<ol>
+	<li>Doesn't deal with the issue of parallelism.</li>
+<li>Doesn't deal with querying only <i>a</i> nodes - we set it that constant to
+<i>k</i> for the moment.</li>
+	<li>At the moment, we're also ignoring the fact that this algorithm is the 
+	same for node lookup as it is for value lookup.</li>
+</ol>
+<p>This simplifies the implementation so that we can provide some unit tests for 
+the basic algorithm, then add the parallelism and <i>a</i> concept later, and 
+our unit tests should still pass.</p>
+<p>Also, the methods here are all marked as <code>virtual</code> in case you want to override 
+the implementation.&nbsp; First, some helper methods:</p>
+<h3>FindClosestNonEmptyKBucket</h3>
+<pre>/// &lt;summary&gt;
+/// Using the k-bucket's key (it's high value), find the closest 
+/// k-bucket the given key that isn't empty.
+/// &lt;/summary&gt;
+protected virtual KBucket FindClosestNonEmptyKBucket(ID key)
+{
+  KBucket closest = Node.BucketList.Buckets.Where(b =&gt; b.Contacts.Count &gt; 0).OrderBy(b =&gt; b.Key ^ key.Value).FirstOrDefault();
+  Validate.IsTrue&lt;NoNonEmptyBucketsException&gt;(closest != null, &quot;No non-empty buckets exist. You must first register a peer and add that peer to your bucketlist.&quot;);
+
+  return closest;
+}
+</pre>
+<h3>GetClosestNodes</h3>
+<pre>/// &lt;summary&gt;
+/// Get sorted list of closest nodes to the given key.
+/// &lt;/summary&gt;
+protected List&lt;Contact&gt; GetClosestNodes(ID key, KBucket bucket)
+{
+  return bucket.Contacts.OrderBy(c =&gt; c.ID.Value ^ key.Value).ToList();
+}</pre>
+<h3>RpcFindNodes</h3>
+<pre>/// &lt;summary&gt;
+/// For each contact, call the FindNodes and return all the nodes whose contacts responded
+/// within a &quot;reasonable&quot; period of time.
+/// &lt;/summary&gt;
+protected List&lt;Contact&gt; RpcFindNodes(ID key, List&lt;Contact&gt; contacts)
+{
+  List&lt;Contact&gt; nodes = new List&lt;Contact&gt;();
+  contacts.ForEach(c =&gt; nodes.AddRange(c.Protocol.FindNode(key)));
+
+  return nodes;
+}</pre>
+<h3>GetCloserNodes</h3>
+<p>Note that we always exclude our own node.</p>
+<pre>/// &lt;summary&gt;
+/// Get closer nodes to the current uncontacted nodes and update the list of closer and farther nodes.
+/// &lt;/summary&gt;
+protected void GetCloserNodes(ID key, List&lt;Contact&gt; nodesToQuery, List&lt;Contact&gt; closerContacts, List&lt;Contact&gt; fartherContacts)
+{
+  List&lt;Contact&gt; peersNodes = RpcFindNodes(key, nodesToQuery).ExcludeBy(c =&gt; c.ID.Value == node.OurContact.ID.Value).ToList();
+  closerContacts.AddRangeDistinctBy(peersNodes.WhereAll(nodesToQuery, (a, b) =&gt; (a.ID.Value ^ key.Value) &lt; b.ID.Value), (a, b) =&gt; a.ID.Value == b.ID.Value);
+  fartherContacts.AddRangeDistinctBy(peersNodes.WhereAll(nodesToQuery, (a, b) =&gt; (a.ID.Value ^ key.Value) &gt;= b.ID.Value), (a, b) =&gt; a.ID.Value == b.ID.Value);
+}</pre>
+<h3>Lookup</h3>
+<p>This flowchart all comes together here:</p>
+<pre>public virtual List&lt;Contact&gt; Lookup(ID key)
+{
+  bool haveWork = true;
+  List&lt;Contact&gt; ret = new List&lt;Contact&gt;();
+  List&lt;Contact&gt; contactedNodes = new List&lt;Contact&gt;();
+  List&lt;Contact&gt; closerContacts = new List&lt;Contact&gt;();
+  List&lt;Contact&gt; fartherContacts = new List&lt;Contact&gt;();
+
+  KBucket bucket = FindClosestNonEmptyKBucket(key);
+
+  // Spec: The lookup initiator starts by picking a nodes from its closest non-empty k-bucket
+  List&lt;Contact&gt; nodesToQuery = GetClosestNodes(key, bucket).Take(Constants.ALPHA).ToList();
+
+  // We're about to contact these nodes.
+  contactedNodes.AddRangeDistinctBy(nodesToQuery, (a, b) =&gt; a.ID.Value == b.ID.Value);
+
+  // Spec: The initiator then sends parallel, asynchronous FIND_NODE RPCS to the a nodes it has chosen, a is a system-wide concurrency parameter, such as 3.
+  GetCloserNodes(key, nodesToQuery, closerContacts, fartherContacts);
+
+  // Add any new closer contacts to the list we're going to return.
+  ret.AddRangeDistinctBy(closerContacts, (a, b) =&gt; a.ID.Value == b.ID.Value);
+
+  // Spec: The lookup terminates when the initiator has queried and gotten responses from the k closest nodes it has seen.
+  while (ret.Count &lt; Constants.K &amp;&amp; haveWork)
+  {
+    List&lt;Contact&gt; closerUncontactedNodes = closerContacts.Except(contactedNodes).ToList();
+    List&lt;Contact&gt; fartherUncontactedNodes = fartherContacts.Except(contactedNodes).ToList();
+    bool haveCloser = closerUncontactedNodes.Count &gt; 0;
+    bool haveFarther = fartherUncontactedNodes.Count &gt; 0;
+
+    haveWork = haveCloser || haveFarther;
+
+    // Spec: Of the k nodes the initiator has heard of closest to the target...
+    if (haveCloser)
+    {
+      // We're about to contact these nodes.
+      contactedNodes.AddRangeDistinctBy(closerUncontactedNodes, (a, b) =&gt; a.ID.Value == b.ID.Value);
+
+      // Spec: ...it picks a that it has not yet queried and resends the FIND_NODE RPC to them. 
+      GetCloserNodes(key, closerUncontactedNodes.Take(Constants.ALPHA).ToList(), closerContacts, fartherContacts);
+    }
+    else if (haveFarther)
+    {
+      // We're about to contact these nodes.
+      contactedNodes.AddRangeDistinctBy(fartherUncontactedNodes, (a, b) =&gt; a.ID.Value == b.ID.Value);
+      GetCloserNodes(key, fartherUncontactedNodes, closerContacts, fartherContacts);
+    }
+  }
+
+  // Spec (sort of): Return max(k) closer nodes
+  return ret.Take(Constants.K).ToList();
+}</pre>
+<h3>Extension Methods</h3>
+<p>A couple extension methods are used:</p>
+<h4>AddRangeDistinctBy</h4>
+<pre>public static void AddRangeDistinctBy&lt;T&gt;(this List&lt;T&gt; target, IEnumerable&lt;T&gt; src, Func&lt;T, T, bool&gt; equalityComparer)
+{
+  src.ForEach(item =&gt;
+  {
+    // no items in the list must match the item.
+    if (target.None(q =&gt; equalityComparer(q, item)))
+    {
+      target.Add(item);
+    }
+  });
+}</pre>
+<h4>WhereAll</h4>
+<pre>public static IEnumerable&lt;T&gt; WhereAll&lt;T&gt;(this IEnumerable&lt;T&gt; a, IEnumerable&lt;T&gt; b, Func&lt;T, T, bool&gt; comparator)
+{
+  using (var aenum = a.GetEnumerator())
+  {
+    while (aenum.MoveNext())
+    {
+      T aa = aenum.Current;
+
+      if (b.All(bb =&gt; comparator(aa, bb)))
+      {
+        yield return aa;
+      }
+    }
+  }
+}
+</pre>
+<h3>Unit Tests</h3>
+<p>Before Getting Into Unit Tests we need to be able to create virtual nodes, which means implementing a 
+minimal virtual protocol:</p>
+<pre>public class VirtualProtocol : IProtocol
+{
+  protected Node node;
+
+  /// &lt;summary&gt;
+  /// Register the in-memory node with our virtual protocol.
+  /// &lt;/summary&gt;
+  public VirtualProtocol(Node node)
+  {
+    this.node = node;
+  }
+
+  /// &lt;summary&gt;
+  /// Get the list of contacts for this node closest to the key.
+  /// &lt;/summary&gt;
+  public List&lt;Contact&gt; FindNode(ID key)
+  {
+    return node.FindNode(node.OurContact, key).contacts;
+  }
+}</pre>
+<p>We also have to implement FindNode in the Node class:</p>
+<pre>/// &lt;summary&gt;
+/// From the spec: FindNode takes a 160-bit ID as an argument. The recipient of the RPC returns (IP address, UDP port, Node ID) triples 
+/// for the k nodes it knows about closest to the target ID. These triples can come from a single k-bucket, or they may come from 
+/// multiple k-buckets if the closest k-bucket is not full. In any case, the RPC recipient must return k items (unless there are 
+/// fewer than k nodes in all its k-buckets combined, in which case it returns every node it knows about).
+/// &lt;/summary&gt;
+/// &lt;returns&gt;&lt;/returns&gt;
+public (List&lt;Contact&gt; contacts, string val) FindNode(Contact sender, ID toFind)
+{
+  Validate.IsFalse&lt;SendingQueryToSelfException&gt;(sender.ID.Value == ourContact.ID.Value, &quot;Sender should not be ourself!&quot;);
+  bucketList.AddContact(sender);
+  var contacts = bucketList.GetCloseContacts(toFind, ourContact.ID);
+
+  return (contacts, null);
+}</pre>
+<p>Note how this also registers the sender as a contact, which either adds 
+(maybe) the contact to the recipient's bucket list or updates the contact 
+information.&nbsp; Ignore the tuple return for now.</p>
+<p>And we need an algorithm for finding close contacts across the recipient's 
+bucket range:</p>
+<pre>/// &lt;summary&gt;
+/// Brute force distance lookup of all known contacts, sorted by distance, then we take at most k (20) of the closest.
+/// &lt;/summary&gt;
+/// &lt;param name=&quot;toFind&quot;&gt;The ID for which we want to find close contacts.&lt;/param&gt;
+/// &lt;param name=&quot;exclude&quot;&gt;The ID to exclude (the requestor's ID)&lt;/param&gt;
+public List&lt;Contact&gt; GetCloseContacts(ID toFind, ID exclude)
+{
+  var contacts = buckets.
+    SelectMany(b =&gt; b.Contacts).
+    Where(c =&gt; c.ID.Value != exclude.Value).
+    Select(c =&gt; new { contact = c, distance = c.ID.Value ^ toFind.Value }).
+    OrderBy(d =&gt; d.distance).
+    Take(Constants.K);
+
+  return contacts.Select(c =&gt; c.contact).ToList();
+}</pre>
+<h4>GetCloseContacts Unit Test</h4>
+<p><img border="0" src="unittest.png" width="14" height="32"></p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <h2>Thread Safety</h2>

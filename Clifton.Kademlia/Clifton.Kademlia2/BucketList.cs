@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 
 namespace Clifton.Kademlia
 {
@@ -64,7 +65,7 @@ namespace Clifton.Kademlia
 			}
 		}
 
-		protected bool CanSplit(KBucket kbucket)
+		protected virtual bool CanSplit(KBucket kbucket)
 		{
 			return kbucket.HasInRange(ourID) || ((kbucket.Depth() % Constants.B) != 0);
 		}
@@ -79,7 +80,24 @@ namespace Clifton.Kademlia
 			return buckets.FindIndex(b => b.HasInRange(otherID));
 		}
 
-		/*
+        /// <summary>
+        /// Brute force distance lookup of all known contacts, sorted by distance, then we take at most k (20) of the closest.
+        /// </summary>
+        /// <param name="toFind">The ID for which we want to find close contacts.</param>
+        /// <param name="exclude">The ID to exclude (the requestor's ID)</param>
+        public List<Contact> GetCloseContacts(ID toFind, ID exclude)
+        {
+            var contacts = buckets.
+                SelectMany(b => b.Contacts).
+                Where(c => c.ID.Value != exclude.Value).
+                Select(c => new { contact = c, distance = c.ID.Value ^ toFind.Value }).
+                OrderBy(d => d.distance).
+                Take(Constants.K);
+
+            return contacts.Select(c => c.contact).ToList();
+        }
+
+        /*
         public int GetKBucketIndex(ID otherID)
         {
             return buckets.FindIndex(b => b.HasInRange(otherID));
@@ -97,24 +115,6 @@ namespace Clifton.Kademlia
         }
 
         /// <summary>
-        /// Algorithm idea from https://github.com/zencoders/sambatyon/blob/master/Kademlia/Kademlia/BucketList.cs, starting on line 208.
-        /// Brute force distance lookup of all known contacts, sorted by distance, then we take at most k (20) of the closest.
-        /// </summary>
-        /// <param name="toFind">The ID for which we want to find close contacts.</param>
-        /// <param name="exclude">The ID to exclude (the requestor's ID)</param>
-        public List<Contact> GetCloseContacts(ID toFind, ID exclude)
-        {
-            var contacts = buckets.
-                SelectMany(b => b.Contacts).
-                Where(c => c.NodeID != exclude).
-                Select(c => new { contact = c, distance = c.NodeID ^ toFind }).
-                OrderBy(d => d.distance).
-                Take(Constants.K);
-
-            return contacts.Select(c => c.contact).ToList();
-        }
-
-        /// <summary>
         /// For unit testing...
         /// </summary>
         /// <returns>A list of tuples representing the bucket index and the count of contacts in each bucket.</returns>
@@ -127,5 +127,5 @@ namespace Clifton.Kademlia
             return contactCounts;
         }
         */
-	}
+    }
 }

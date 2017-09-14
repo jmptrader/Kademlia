@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 
 namespace Clifton.Kademlia
 {
@@ -6,8 +7,8 @@ namespace Clifton.Kademlia
     {
 #if DEBUG       // For unit testing.
         public BucketList BucketList { get { return bucketList; } }
-        public IStorage Storage { get; set; }
-        public Contact OurContact { get; }
+        public IStorage Storage { get { return storage; } }
+        public Contact OurContact { get { return ourContact; } }
 #endif
 
         protected Contact ourContact;
@@ -52,8 +53,11 @@ namespace Clifton.Kademlia
         /// <returns></returns>
         public (List<Contact> contacts, string val) FindNode(Contact sender, ID toFind)
         {
-            // TODO...
-            return (null, null);
+            Validate.IsFalse<SendingQueryToSelfException>(sender.ID.Value == ourContact.ID.Value, "Sender should not be ourself!");
+            bucketList.AddContact(sender);
+            var contacts = bucketList.GetCloseContacts(toFind, ourContact.ID);
+
+            return (contacts, null);
         }
 
         /// <summary>

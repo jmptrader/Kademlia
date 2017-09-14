@@ -11,8 +11,12 @@ namespace Clifton.Kademlia
         public BigInteger Low { get { return low; } }
         public BigInteger High { get { return high; } }
 #endif
+        /// <summary>
+        /// We are going to assume that the "key" for this bucket is it's high range.
+        /// </summary>
+        public BigInteger Key { get { return high; } }
 
-		public bool IsBucketFull { get { return contacts.Count == Constants.K; } }
+        public bool IsBucketFull { get { return contacts.Count == Constants.K; } }
 
         protected List<Contact> contacts;
         protected BigInteger low;
