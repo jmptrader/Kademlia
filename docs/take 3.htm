@@ -141,6 +141,9 @@ https://ipfs.io/ipfs/QmR7GSQM93Cx5eAg6a6yRzNde1FQv7uL6X1o4k7zrJa3LX/ipfs.draft3.
 <p>S/Kademlia: A Practicable Approach Towards Secure Key-Based Routing:
 <a href="http://www.tm.uka.de/doc/SKademlia_2007.pdf">
 http://www.tm.uka.de/doc/SKademlia_2007.pdf</a></p>
+<p>Improving Lookup Performance over a Widely-Deployed DHT:
+<a href="http://www.barsoom.org/papers/infocom-2006-kad.pdf">
+http://www.barsoom.org/papers/infocom-2006-kad.pdf</a> </p>
 <h3>Things Kademlia Doesn't Address</h3>
 <p>Some of the things the specification does not address:</p>
 <ul>
@@ -181,6 +184,22 @@ http://www.tm.uka.de/doc/SKademlia_2007.pdf</a></p>
 <h3>Notation</h3>
 <p>In this document, <font color="#FF00FF">fuchsia text</font> is used when 
 quoting from the Kademlia specification and other documents.</p>
+<h3>A Word About the Unit Tests</h3>
+<p>Some of the unit tests set up specific conditions for testing code.&nbsp; 
+Others use a randomly generated ID's (node ID's and keys) and verify results 
+through a different implementation of the same algorithm.&nbsp; Those tests 
+should probably be revised to set up specific conditions.&nbsp; To mitigate 
+one's horror at using random values in unit tests, the Random class is seed in 
+debug mode with the same value, and is exposed as a public static field so that 
+some unit tests can perform their tests with a range of seeds:</p>
+<pre>#if DEBUG
+public static Random rnd = new Random(1);
+#else
+private static Random rnd = new Random();
+#endif</pre>
+<p>At some point I might put more work into improving the unit tests and 
+removing the random ID key generation, except for the distribution tests of 
+course.</p>
 <h2>Key Concepts</h2>
 <p>The Kademlia specification essentially consists of several sub-algorithms:</p>
 <ol>
@@ -1538,9 +1557,19 @@ if we want to exercise the algorithm, this is better:</p>
 <p>In the initial acquisition of a contacts as per the code above, should 
 contacts (I'm using &quot;contact&quot; and &quot;node&quot; rather interchangeably) that are closer 
 at this point be added to the list of closer contacts?&nbsp; The spec doesn't 
-say not to, and in implementations that I've seen, our own closer contacts <i>
-are</i> 
-added to the close contact list.</p>
+say not to, but it doesn't explicitly say one should do this.&nbsp; Given that 
+we pick only <i>a</i> contacts to start with, we definitely don't have the k 
+contacts that the lookup is expected to return, so I'm implementing this as 
+described above -- the <i>a</i> closest contacts we have are added to the 
+&quot;closer&quot; list, and the <i>a</i> farther contacts we have are added to the 
+&quot;farther&quot; list.</p>
+<pre>List&lt;Contact&gt; nodesToQuery = allNodes.Take(Constants.ALPHA).ToList();
+
+// Also not explicitly in spec:
+// Any closer node in the alpha list is immediately added to our closer contact list, and
+// any farther node in the alpha list is immediately added to our farther contact list.
+closerContacts.AddRange(nodesToQuery.Where(n =&gt; (n.ID.Value ^ key.Value) &lt; (node.OurContact.ID.Value ^ key.Value)));
+fartherContacts.AddRange(nodesToQuery.Where(n =&gt; (n.ID.Value ^ key.Value) &gt;= (node.OurContact.ID.Value ^ key.Value)));</pre>
 <h3>Ambiguity #9</h3>
 <p>What do we do with the contacts outside of <i>a</i>?&nbsp; Given this: &quot;<font color="#FF00FF">If 
 a round of FIND_NODES fails to return a node any closer than the closest already 
@@ -1549,6 +1578,10 @@ it has not already queried.&quot; </font>does it apply to the first query of <i>
 nodes, or only to the set of nodes returned after the query?&nbsp; I'm going to 
 assume that it applies to the remainder of the <i>a</i> nodes not queried in the 
 first query, which will be a maximum of <i>k</i>-<i>a</i> contacts.</p>
+<h3>Ambiguity #10</h3>
+<p>The spec says this: &quot;<font color="#FF00FF">Most operations are implemented in 
+terms of the above lookup procedure.</font>&quot;&nbsp; What operations, and when?&nbsp; 
+We'll have to address this later.</p>
 <h3>The Concept of Closeness and Issues</h3>
 <p><font color="#FF00FF">Many of Kademlia’s benefits result from its use of a 
 novel XOR metric for distance between points in the key space. XOR is symmetric, 
@@ -1736,6 +1769,11 @@ KBucket bucket = FindClosestNonEmptyKBucket(key);
     }
   }
 
+#if DEBUG // For unit testing.
+  CloserContacts = closerContacts;
+  FartherContacts = fartherContacts;
+#endif
+
   // Spec (sort of): Return max(k) closer nodes, sorted by distance.
   // For unit testing, giveMeAll can be true so that we can match against our alternate way of getting closer contacts.
   return giveMeAll ? ret : ret.Take(Constants.K).OrderBy(c=&gt;c.ID.Value ^ key.Value).ToList();
@@ -1791,10 +1829,10 @@ public static IEnumerable&lt;T&gt; ExceptBy&lt;T, TKey&gt;(this IEnumerable&lt;T
     }
   }
 }</pre>
-<h3>Unit Tests</h3>
-<h4>Virtual Node/Protocol</h4>
+<h2>Node Lookup - Unit Tests</h2>
 <p>Before Getting Into Unit Tests we need to be able to create virtual nodes, which means implementing a 
 minimal virtual protocol:</p>
+<h3>Virtual Node/Protocol</h3>
 <pre>public class VirtualProtocol : IProtocol
 {
   protected Node node;
@@ -1815,7 +1853,7 @@ minimal virtual protocol:</p>
     return node.FindNode(sender, key).contacts;
   }
 }</pre>
-<h4>Missing Implementation Needs to be Added Now</h4>
+<h3>Missing Implementation Needs to be Added Now</h3>
 <p>We also have to implement FindNode in the Node class:</p>
 <pre>/// &lt;summary&gt;
 /// From the spec: FindNode takes a 160-bit ID as an argument. The recipient of the RPC returns (IP address, UDP port, Node ID) triples 
@@ -1855,7 +1893,7 @@ public List&lt;Contact&gt; GetCloseContacts(ID toFind, ID exclude)
   // Spec (sort of): Return max(k) closer nodes, sorted by distance.
   return ret.Take(Constants.K).OrderBy(c=&gt;c.ID.Value ^ key.Value).ToList();
 }</pre>
-<h4>GetCloseContacts Unit Test</h4>
+<h3>GetCloseContacts Test</h3>
 <p>This tests the 
 sorting and the maximum number of contacts returned limit.&nbsp; Note that it's 
 probably not the most ideal situation that I'm using all random ID's, however, 
@@ -1898,7 +1936,45 @@ public void GetCloseContactsOrderedTest()
   var others = node.BucketList.Buckets.SelectMany(b =&gt; b.Contacts.Except(closest)).Where(c =&gt; (c.ID.Value ^ key.Value) &lt; lastDistance);
   Assert.IsTrue(others.Count() == 0, &quot;Expected no other contacts with a smaller distance than the greatest distance to exist.&quot;);
 }</pre>
-<h4>GetCloserNodes Unit Test</h4>
+<h3>NoNodesToQuery Test</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> This test simply 
+verifies that we get no new nodes to query given that all the nodes we're 
+contacting are already being contacted.</p>
+<pre> /// &lt;summary&gt;
+/// Given that all the nodes we're contacting are nodes *being* contacted, 
+/// the result should be no new nodes to contact.
+/// &lt;/summary&gt;
+[TestMethod]
+public void NoNodesToQueryTest()
+{
+  // Setup
+  router = new Router(new Node(new Contact(null, ID.Mid), null));
+
+  nodes = new List&lt;Node&gt;();
+  20.ForEach((n) =&gt; nodes.Add(new Node(new Contact(null, new ID(BigInteger.Pow(new BigInteger(2), n))), null)));
+
+  // Fixup protocols:
+  nodes.ForEach(n =&gt; n.OurContact.Protocol = new VirtualProtocol(n));
+
+  // Our contacts:
+  nodes.ForEach(n =&gt; router.Node.BucketList.AddContact(n.OurContact));
+
+  // Each peer needs to know about the other peers except of course itself.
+  nodes.ForEach(n =&gt; nodes.Where(nOther =&gt; nOther != n).ForEach(nOther =&gt; n.BucketList.AddContact(nOther.OurContact)));
+
+  // Select the key such that n ^ 0 == n
+  // This ensures that the distance metric uses only the node ID, which makes for an integer difference for distance, not an XOR distance.
+  key = ID.Zero; 
+  contactsToQuery = router.Node.BucketList.Buckets[0].Contacts; // all contacts are in one bucket.
+
+  closerContacts = new List&lt;Contact&gt;();
+  fartherContacts = new List&lt;Contact&gt;();
+  router.GetCloserNodes(key, contactsToQuery, closerContacts, fartherContacts);
+
+  Assert.IsTrue(closerContacts.Count == 0, &quot;No new nodes expected.&quot;);
+  Assert.IsTrue(fartherContacts.Count == 0, &quot;No new nodes expected.&quot;);
+}</pre>
+<h3>GetCloserNodes Test</h3>
 <p>Getting the system to exercise the different paths in the flowchart is an 
 interesting exercise.&nbsp; Again, note that it's probably not the most ideal 
 situation that I'm using all random ID's.&nbsp; Let's start with one of the first more complicated 
@@ -1992,7 +2068,7 @@ the system, and interestingly, as a result of these two different approaches, I 
 -- so much for &quot;it's not practical testing all the simple methods.&quot;&nbsp; As a 
 side note, it's interesting to see how much shorter the Linq for the code that 
 obtains the close and far contacts.</p>
-<h4>Lookup Unit Test</h4>
+<h3>Lookup Unit Test</h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> Ironically, there really is no alternative way of getting these nodes, 
 particularly with regards to the <code>while</code> loop in the <code>Lookup</code> method.&nbsp; 
 So without beating my head over the issue, I implemented this test:</p>
@@ -2022,43 +2098,311 @@ public void LookupTest()
 
     closerContactsAltComputation.ForEach(c =&gt; Assert.IsTrue(closeContacts.Contains(c)));
   });
+}</pre>
+<h3>Simple Closer Contacts Test</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> This test, and the 
+next one, essentially exercises the part of the <code>Lookup</code> algorithm before the 
+<code>while</code> loop.&nbsp;
+<img border="0" src="note.png" width="24" height="32">Note how the bucket and ID's are set 
+up.</p>
+<pre> /// &lt;summary&gt;
+/// Creates a single bucket with node ID's 2^i for i in [0, K) and
+/// 1. use a key with ID.Value == 0 to that distance computation is an integer difference
+/// 2. use an ID.Value == ID.Max for our node ID so all other nodes are closer.
+/// &lt;/summary&gt;
+[TestMethod]
+public void SimpleAllCloserContacts()
+{
+  // Setup
+  // By selecting our node ID to zero, we ensure that all distances of other nodes are &gt; the distance to our node.
+  router = new Router(new Node(new Contact(null, ID.Max), null));
+
+  nodes = new List&lt;Node&gt;();
+  Constants.K.ForEach((n) =&gt; nodes.Add(new Node(new Contact(null, new ID(BigInteger.Pow(new BigInteger(2), n))), null)));
+
+  // Fixup protocols:
+  nodes.ForEach(n =&gt; n.OurContact.Protocol = new VirtualProtocol(n));
+
+  // Our contacts:
+  nodes.ForEach(n =&gt; router.Node.BucketList.AddContact(n.OurContact));
+
+  // Each peer needs to know about the other peers except of course itself.
+  nodes.ForEach(n =&gt; nodes.Where(nOther =&gt; nOther != n).ForEach(nOther =&gt; n.BucketList.AddContact(nOther.OurContact)));
+
+  // Select the key such that n ^ 0 == n
+  // This ensures that the distance metric uses only the node ID, which makes for an integer difference for distance, not an XOR distance.
+  key = ID.Zero;
+  contactsToQuery = router.Node.BucketList.Buckets[0].Contacts; // all contacts are in one bucket.
+
+  var contacts = router.Lookup(key, true);
+
+  Assert.IsTrue(contacts.Count == Constants.K, &quot;Expected k closer contacts.&quot;);
+  Assert.IsTrue(router.CloserContacts.Count == Constants.K, &quot;All contacts should be closer.&quot;);
+  Assert.IsTrue(router.FartherContacts.Count == 0, &quot;Did not expected farther contacts.&quot;);
+}</pre>
+<h3>Simple Farther Contacts Test</h3>
+<p><img border="0" src="unittest.png" width="14" height="32">
+<img border="0" src="note.png" width="24" height="32"> Again note how the bucket 
+and ID's 
+are set up:</p>
+<pre> /// &lt;summary&gt;
+/// Creates a single bucket with node ID's 2^i for i in [0, K) and
+/// 1. use a key with ID.Value == 0 to that distance computation is an integer difference
+/// 2. use an ID.Value == 0 for our node ID so all other nodes are farther.
+/// &lt;/summary&gt;
+[TestMethod]
+public void SimpleAllFartherContacts()
+{
+  // Setup
+  // By selecting our node ID to zero, we ensure that all distances of other nodes are &gt; the distance to our node.
+  router = new Router(new Node(new Contact(null, ID.Zero), null));
+
+  nodes = new List&lt;Node&gt;();
+  Constants.K.ForEach((n) =&gt; nodes.Add(new Node(new Contact(null, new ID(BigInteger.Pow(new BigInteger(2), n))), null)));
+
+  // Fixup protocols:
+  nodes.ForEach(n =&gt; n.OurContact.Protocol = new VirtualProtocol(n));
+
+  // Our contacts:
+  nodes.ForEach(n =&gt; router.Node.BucketList.AddContact(n.OurContact));
+
+  // Each peer needs to know about the other peers except of course itself.
+  nodes.ForEach(n =&gt; nodes.Where(nOther =&gt; nOther != n).ForEach(nOther =&gt; n.BucketList.AddContact(nOther.OurContact)));
+
+  // Select the key such that n ^ 0 == n
+  // This ensures that the distance metric uses only the node ID, which makes for an integer difference for distance, not an XOR distance.
+  key = ID.Zero;
+  contactsToQuery = router.Node.BucketList.Buckets[0].Contacts; // all contacts are in one bucket.
+
+  var contacts = router.Lookup(key, true);
+
+  Assert.IsTrue(contacts.Count == 0, &quot;Expected no closer contacts.&quot;);
+  Assert.IsTrue(router.CloserContacts.Count == 0, &quot;Did not expected closer contacts.&quot;);
+  Assert.IsTrue(router.FartherContacts.Count == Constants.K, &quot;All contacts should be farther.&quot;);
+}</pre>
+<h2>Value Lookup - Discussion</h2>
+<p>From the spec: <font color="#FF00FF">FIND_VALUE behaves like FIND_NODE - 
+returning (IP address, UDP port, Node ID) triples - with one exception. If the 
+RPC recipient has received a STORE RPC for the key, it just returns the stored 
+value.</font></p>
+<p>That seems clear enough, but we have to consider this part of the spec as 
+well:</p>
+<p><font color="#FF00FF">To find a (key,value) pair, a node starts by performing 
+a lookup to find the k nodes with IDs closest to the key. However, value lookups 
+use FIND_VALUE rather than FIND_NODE RPCS. Moreover, the procedure halts 
+immediately when any node returns the value. For caching purposes, once a lookup 
+succeeds, the requesting node stores the (key,value) pair at the closest node it 
+observed to the key that did not return the value.</font></p>
+<p>We now get to address ambiguity #10: The spec says this: &quot;<font color="#FF00FF">Most 
+operations are implemented in terms of the above lookup procedure.</font>&quot;&nbsp; 
+When we're performing a lookup, the initiator will be using the lookup call for 
+both finding nodes and finding values.&nbsp; If it's finding values, it needs to 
+stop if/when the value is found.&nbsp; We need to some refactoring to pass in 
+the RPC call that we want to make, and how we handle a found value for the 
+FindValue RPC call.</p>
+<h4>Refactoring the Router.Lookup Method</h4>
+<p>We have some major refactoring to do to how lookups are performed.&nbsp; The 
+signature of the Lookup method changes so that:</p>
+<ol>
+	<li>We can pass in the particular RPC call to make.</li>
+<li>We get back either a list of contacts (val will be null) or the found value 
+(contacts will be null.)</li>
+</ol>
+<pre>public virtual (List&lt;Contact&gt; contacts, string val) Lookup(
+  ID key, 
+  Func&lt;ID, List&lt;Contact&gt;, (List&lt;Contact&gt; contacts, string val)&gt; rpcCall, 
+  bool giveMeAll = false)
+{
+  ...</pre>
+<p>We also need to pass the RPC call into <code>GetCloserNodes</code> (which meant 
+refactoring the unit tests!) and test whether it found a value (which will only 
+be true for when the RPC call is for finding values):</p>
+<pre>if (GetCloserNodes(key, rpcCall, nodesToQuery, closerContacts, fartherContacts, out val))
+{
+  return (null, val);
+}</pre>
+<p>This stops the lookup immediately when a value is found.</p>
+<h4>Refactoring the GetCloserNodes Method</h4>
+<p>The signature changes:</p>
+<pre>public bool GetCloserNodes(
+  ID key, 
+  Func&lt;ID, List&lt;Contact&gt;, (List&lt;Contact&gt; contacts, string val)&gt; rpcCall, 
+  List&lt;Contact&gt; nodesToQuery, 
+  List&lt;Contact&gt; closerContacts, 
+  List&lt;Contact&gt; fartherContacts,
+  out string val)</pre>
+<p>Also the way we call the RPC changes, and of course, the method now has a 
+return value:</p>
+<pre>var (contacts, foundVal) = rpcCall(key, nodesToQuery);
+val = foundVal;
+List&lt;Contact&gt; peersNodes = contacts.ExceptBy(node.OurContact, c =&gt; c.ID.Value).ExceptBy(nodesToQuery, c =&gt; c.ID.Value).ToList();
+...
+return val != null;</pre>
+<h4>Refactoring the RpcFindNodes Method</h4>
+<p>A slight change here, in that we know we're finding only nodes, but we need a 
+unified return with <code>RpcFindValue</code>.&nbsp; Notice the method is now 
+public so that the Dht (discussed later) and our unit tests can specify the 
+appropriate RPC call.</p>
+<pre>public (List&lt;Contact&gt; contacts, string val) RpcFindNodes(ID key, List&lt;Contact&gt; contacts)
+{
+List&lt;Contact&gt; nodes = new List&lt;Contact&gt;();
+contacts.ForEach(c =&gt; nodes.AddRange(c.Protocol.FindNode(Node.OurContact, key)));
+
+return (nodes, null);
 }
 </pre>
+<h4>Adding the RpcFindValue Method</h4>
+<pre> /// &lt;summary&gt;
+/// For each contact, call the FindNode and return all the nodes whose contacts responded
+/// within a &quot;reasonable&quot; period of time, unless a value is returned, at which point we stop.
+/// &lt;/summary&gt;
+public (List&lt;Contact&gt; contacts, string val) RpcFindValue(ID key, List&lt;Contact&gt; contacts)
+{
+  List&lt;Contact&gt; nodes = new List&lt;Contact&gt;();
+  string retval = null;
+
+  foreach(Contact c in contacts)
+  {
+   (var otherContacts, var val) = c.Protocol.FindValue(Node.OurContact, key);
+
+   if (otherContacts != null)
+   {
+     nodes.AddRange(otherContacts);
+   }
+   else
+   {
+     Validate.IsTrue&lt;ValueCannotBeNullException&gt;(val != null, &quot;Null values are not supported nor expected.&quot;);
+     retval = val;
+     break;
+    }
+  }
+
+  return (nodes, retval);
+}</pre>
+<p>After making these structural changes and refactoring the unit tests, they 
+still pass (well, that should be expected, as these changes were really only 
+structural.)</p>
+<h2>Value Lookup - Implementation</h2>
+<p>First, we need to implement a simple virtual (in memory) storage mechanism:</p>
+<pre>public class VirtualStorage : IStorage
+{
+  protected Dictionary&lt;BigInteger, string&gt; store;
+
+  public VirtualStorage()
+  {
+    store = new Dictionary&lt;BigInteger, string&gt;();
+  }
+
+  public bool Contains(ID key)
+  {
+    return store.ContainsKey(key.Value);
+  }
+
+  public string Get(ID key)
+  {
+    return store[key.Value];
+  }
+
+  public void Set(ID key, string val)
+  {
+    store[key.Value] = val;
+  }
+}</pre>
+<p>We can get away with using <code>BigInteger</code> as the key to the dictionary as it is a 
+<code>struct</code>.</p>
+<h3>The Store Implementation</h3>
+<p>In the <code>Node</code> class:</p>
+<pre>/// &lt;summary&gt;
+/// Store a key-value pair in our storage space, updating the contact if it's not us.
+/// &lt;/summary&gt;
+public void Store(Contact sender, ID key, string val)
+{
+  Validate.IsFalse&lt;SendingQueryToSelfException&gt;(sender.ID.Value == ourContact.ID.Value, &quot;Sender should not be ourself!&quot;);
+  bucketList.AddContact(sender);
+
+  storage.Set(key, val);
+}
+</pre>
+<h3>The FindValue Implementation</h3>
+<p>In the <code>Node</code> class:</p>
+<pre>/// &lt;summary&gt;
+/// Returns either a list of close contacts or a the value, if the node's storage contains the value for the key.
+/// &lt;/summary&gt;
+public (List&lt;Contact&gt; contacts, string val) FindValue(Contact sender, ID key)
+{
+  Validate.IsFalse&lt;SendingQueryToSelfException&gt;(sender.ID.Value == ourContact.ID.Value, &quot;Sender should not be ourself!&quot;);
+  bucketList.AddContact(sender);
+
+  if (storage.Contains(key))
+  {
+    return (null, storage.Get(key));
+  }
+  else
+  {
+    // Exclude sender.
+    return (bucketList.GetCloseContacts(key, sender.ID), null);
+  }
+}</pre>
+<h2>Value Lookup - Unit Tests</h2>
+<h2>The Dht Class - Discussion</h2>
+<p>We use a wrapper <code>Dht</code> class, which will 
+become the main entry point for <i>our</i> peer, for interacting with <i>other</i> 
+peers:</p>
+<pre>public class Dht
+{
+#if DEBUG // for unit testing
+  public Router Router { get { return router; } }
+#endif
+
+  protected Router router;
+  protected IStorage storage;
+  protected IProtocol protocol;
+  protected Node node;
+
+  public Dht(ID id, IProtocol protocol, IStorage storage)
+  {
+    this.storage = storage;
+    node = new Node(new Contact(protocol, id), storage);
+    router = new Router(node);
+  }
+
+  public void Store(ID key, string val)
+  {
+    // We're storing to ourselves as well as k closer contacts.
+    storage.Set(key, val);
+    List&lt;Contact&gt; contacts = router.Lookup(key, router.RpcFindNodes).contacts;
+    contacts.ForEach(c =&gt; c.Protocol.Store(node.OurContact, key, val));
+  }
+
+  public (bool found, List&lt;Contact&gt; contacts, string val) FindValue(ID key)
+  {
+    string ourval;
+
+    // If we have it, return with our value.
+    if (storage.TryGetValue(key, out ourval))
+    {
+      return (true, null, ourval);
+    }
+
+    var (contacts, val) = router.Lookup(key, router.RpcFindValue);
+    var found = contacts == null;
+
+    if (found)
+    {
+      node.Cache(key, val);
+    }
+
+    return (found, contacts, val);
+  }
+}</pre>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <h2>Thread Safety</h2>
-<p>&nbsp;</p>
-<h2>High Level Architecture</h2>
-<p>In this document, <font color="#FF00FF">fuchsia text</font> is used when 
-quoting from the Kademlia specification and other documents.</p>
-<p>There are four components to the high level architecture necessary to 
-implement the Kademlia protocol:</p>
-<ol>
-	<li>Node: The concept of a node.&nbsp; Each node has a private 160-bit ID (a 
-	SHA-1 hash).&nbsp; <font color="#FF00FF">Keys are opaque, 160-bit quantities 
-	(e.g., the SHA-1 hash of some larger data). Participating computers each 
-	have a node ID in the 160-bit key space. </font>(From the Introduction)</li>
-	<li>Storage: Each node stores key-value pairs, where the key is also a 
-	160-bit SHA-1 hash.&nbsp;&nbsp; <font color="#FF00FF">(key,value) pairs are 
-	stored on nodes with IDs “close” to the key for some notion of closeness.</font>&nbsp; 
-	The storage mechanism, whether in-memory, key-value database, file system, 
-	or other, is not specified and is a good point for abstraction. (From the 
-	Introduction)</li>
-	<li>Routing: Nearby servers for a given key are located with an efficient 
-	routing algorithm.&nbsp; <font color="#FF00FF">A node- ID-based routing 
-	algorithm lets anyone efficiently locate servers near any given target key. </font>
-	(From the Introduction)</li>
-	<li>Communication protocol: a means of communicating between nodes (usually 
-	separate computers) must exist.&nbsp; The original Kademlia specification 
-	states that <font color="#FF00FF">every node keeps a list of (IP address, 
-	UDP port, Node ID)</font> of nearby nodes.&nbsp; As with storage, this is a 
-	good place for abstraction so that different protocols can be easily 
-	employed. (Section 2.2 of the spec)</li>
-</ol>
-<p>This is expressed in the following diagram:</p>
-<p><img border="0" src="highlevel.png" width="625" height="271"></p>
-<h3>&nbsp;</h3>
+<h2>Some Enhancements</h2>
+<h3>Operator Overloading of the ID Class</h3>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <h2>&nbsp;</h2>

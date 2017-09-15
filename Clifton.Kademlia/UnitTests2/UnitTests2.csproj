@@ -57,6 +57,7 @@
     <Compile Include="AddContactTests.cs" />
     <Compile Include="LookupTests.cs" />
     <Compile Include="VirtualProtocol.cs" />
+    <Compile Include="VirtualStorage.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

@@ -31,4 +31,10 @@ namespace Clifton.Kademlia
         public SendingQueryToSelfException() { }
         public SendingQueryToSelfException(string msg) : base(msg) { }
     }
+
+    public class ValueCannotBeNullException : Exception
+    {
+        public ValueCannotBeNullException() { }
+        public ValueCannotBeNullException(string msg) : base(msg) { }
+    }
 }

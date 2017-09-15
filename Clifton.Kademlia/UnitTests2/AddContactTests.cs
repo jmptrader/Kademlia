@@ -148,7 +148,7 @@ namespace UnitTests2
 			double avg = contactsAdded.Average();
 			double stdev = contactsAdded.Select(n => (double)n).StdDev();
 			Assert.IsTrue(contactsAdded.Average().ApproximatelyEquals(1900, 200), "Unexpected distribution: avg = " + avg);
-			Assert.IsTrue(stdev.ApproximatelyEquals(750, 50), "Bad distribution: stdev = " + stdev);
+			Assert.IsTrue(stdev.ApproximatelyEquals(800, 100), "Bad distribution: stdev = " + stdev);
 		}
 
 		[TestMethod]

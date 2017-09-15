@@ -23,6 +23,112 @@ namespace UnitTests2
         Contact theNearestContactedNode;
         BigInteger distance;
 
+        /// <summary>
+        /// Given that all the nodes we're contacting are nodes *being* contacted, 
+        /// the result should be no new nodes to contact.
+        /// </summary>
+        [TestMethod]
+        public void NoNodesToQueryTest()
+        {
+            // Setup
+            router = new Router(new Node(new Contact(null, ID.Mid), null));
+
+            nodes = new List<Node>();
+            20.ForEach((n) => nodes.Add(new Node(new Contact(null, new ID(BigInteger.Pow(new BigInteger(2), n))), null)));
+
+            // Fixup protocols:
+            nodes.ForEach(n => n.OurContact.Protocol = new VirtualProtocol(n));
+
+            // Our contacts:
+            nodes.ForEach(n => router.Node.BucketList.AddContact(n.OurContact));
+
+            // Each peer needs to know about the other peers except of course itself.
+            nodes.ForEach(n => nodes.Where(nOther => nOther != n).ForEach(nOther => n.BucketList.AddContact(nOther.OurContact)));
+
+            // Select the key such that n ^ 0 == n
+            // This ensures that the distance metric uses only the node ID, which makes for an integer difference for distance, not an XOR distance.
+            key = ID.Zero;          
+            contactsToQuery = router.Node.BucketList.Buckets[0].Contacts;   // all contacts are in one bucket.
+
+            closerContacts = new List<Contact>();
+            fartherContacts = new List<Contact>();
+            router.GetCloserNodes(key, router.RpcFindNodes, contactsToQuery, closerContacts, fartherContacts, out var _);
+
+            Assert.IsTrue(closerContacts.Count == 0, "No new nodes expected.");
+            Assert.IsTrue(fartherContacts.Count == 0, "No new nodes expected.");
+        }
+
+        /// <summary>
+        /// Creates a single bucket with node ID's 2^i for i in [0, K) and
+        /// 1. use a key with ID.Value == 0 to that distance computation is an integer difference
+        /// 2. use an ID.Value == ID.Max for our node ID so all other nodes are closer.
+        /// </summary>
+        [TestMethod]
+        public void SimpleAllCloserContacts()
+        {
+            // Setup
+            // By selecting our node ID to zero, we ensure that all distances of other nodes are > the distance to our node.
+            router = new Router(new Node(new Contact(null, ID.Max), null));
+
+            nodes = new List<Node>();
+            Constants.K.ForEach((n) => nodes.Add(new Node(new Contact(null, new ID(BigInteger.Pow(new BigInteger(2), n))), null)));
+
+            // Fixup protocols:
+            nodes.ForEach(n => n.OurContact.Protocol = new VirtualProtocol(n));
+
+            // Our contacts:
+            nodes.ForEach(n => router.Node.BucketList.AddContact(n.OurContact));
+
+            // Each peer needs to know about the other peers except of course itself.
+            nodes.ForEach(n => nodes.Where(nOther => nOther != n).ForEach(nOther => n.BucketList.AddContact(nOther.OurContact)));
+
+            // Select the key such that n ^ 0 == n
+            // This ensures that the distance metric uses only the node ID, which makes for an integer difference for distance, not an XOR distance.
+            key = ID.Zero;
+            contactsToQuery = router.Node.BucketList.Buckets[0].Contacts;   // all contacts are in one bucket.
+
+            var contacts = router.Lookup(key, router.RpcFindNodes, true).contacts;
+
+            Assert.IsTrue(contacts.Count == Constants.K, "Expected k closer contacts.");
+            Assert.IsTrue(router.CloserContacts.Count == Constants.K, "All contacts should be closer.");
+            Assert.IsTrue(router.FartherContacts.Count == 0, "Did not expected farther contacts.");
+        }
+
+        /// <summary>
+        /// Creates a single bucket with node ID's 2^i for i in [0, K) and
+        /// 1. use a key with ID.Value == 0 to that distance computation is an integer difference
+        /// 2. use an ID.Value == 0 for our node ID so all other nodes are farther.
+        /// </summary>
+        [TestMethod]
+        public void SimpleAllFartherContacts()
+        {
+            // Setup
+            // By selecting our node ID to zero, we ensure that all distances of other nodes are > the distance to our node.
+            router = new Router(new Node(new Contact(null, ID.Zero), null));
+
+            nodes = new List<Node>();
+            Constants.K.ForEach((n) => nodes.Add(new Node(new Contact(null, new ID(BigInteger.Pow(new BigInteger(2), n))), null)));
+
+            // Fixup protocols:
+            nodes.ForEach(n => n.OurContact.Protocol = new VirtualProtocol(n));
+
+            // Our contacts:
+            nodes.ForEach(n => router.Node.BucketList.AddContact(n.OurContact));
+
+            // Each peer needs to know about the other peers except of course itself.
+            nodes.ForEach(n => nodes.Where(nOther => nOther != n).ForEach(nOther => n.BucketList.AddContact(nOther.OurContact)));
+
+            // Select the key such that n ^ 0 == n
+            // This ensures that the distance metric uses only the node ID, which makes for an integer difference for distance, not an XOR distance.
+            key = ID.Zero;
+            contactsToQuery = router.Node.BucketList.Buckets[0].Contacts;   // all contacts are in one bucket.
+
+            var contacts = router.Lookup(key, router.RpcFindNodes, true).contacts;
+
+            Assert.IsTrue(contacts.Count == 0, "Expected no closer contacts.");
+            Assert.IsTrue(router.CloserContacts.Count == 0, "Did not expected closer contacts.");
+            Assert.IsTrue(router.FartherContacts.Count == Constants.K, "All contacts should be farther.");
+        }
 
         [TestMethod]
         public void GetCloserNodesTest()
@@ -33,7 +139,7 @@ namespace UnitTests2
                 ID.rnd = new Random(seed);
                 Setup();
 
-                router.GetCloserNodes(key, contactsToQuery, closerContacts, fartherContacts);
+                router.GetCloserNodes(key, router.RpcFindNodes, contactsToQuery, closerContacts, fartherContacts, out var _);
 
                 // Test whether the results are correct:  
 
@@ -53,7 +159,7 @@ namespace UnitTests2
                 ID.rnd = new Random(seed);
                 Setup();
 
-                List<Contact> closeContacts = router.Lookup(key, true);
+                List<Contact> closeContacts = router.Lookup(key, router.RpcFindNodes, true).contacts;
                 List<Contact> contactedNodes = new List<Contact>(closeContacts);
 
                 // Is the above call returning the correct number of close contacts?

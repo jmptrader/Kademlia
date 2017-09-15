@@ -1,5 +1,6 @@
 ﻿// #define TRY_CLOSEST_BUCKET
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -9,6 +10,8 @@ namespace Clifton.Kademlia
     {
 #if DEBUG       // for unit testing
         public Node Node { get { return node; } }
+        public List<Contact> CloserContacts { get; protected set; }
+        public List<Contact> FartherContacts { get; protected set; }
 #endif
 
         protected Node node;
@@ -18,13 +21,17 @@ namespace Clifton.Kademlia
             this.node = node;
         }
 
-        public virtual List<Contact> Lookup(ID key, bool giveMeAll = false)
+        public virtual (List<Contact> contacts, string val) Lookup(
+            ID key, 
+            Func<ID, List<Contact>, (List<Contact> contacts, string val)> rpcCall, 
+            bool giveMeAll = false)
         {
             bool haveWork = true;
             List<Contact> ret = new List<Contact>();
             List<Contact> contactedNodes = new List<Contact>();
             List<Contact> closerContacts = new List<Contact>();
             List<Contact> fartherContacts = new List<Contact>();
+            string val = null;
 
 #if TRY_CLOSEST_BUCKET
             // Spec: The lookup initiator starts by picking a nodes from its closest non-empty k-bucket
@@ -57,7 +64,10 @@ namespace Clifton.Kademlia
             contactedNodes.AddRangeDistinctBy(nodesToQuery, (a, b) => a.ID.Value == b.ID.Value);
 
             // Spec: The initiator then sends parallel, asynchronous FIND_NODE RPCS to the a nodes it has chosen, a is a system-wide concurrency parameter, such as 3.
-            GetCloserNodes(key, nodesToQuery, closerContacts, fartherContacts);
+            if (GetCloserNodes(key, rpcCall, nodesToQuery, closerContacts, fartherContacts, out val))
+            {
+                return (null, val);
+            }
 
             // Add any new closer contacts to the list we're going to return.
             ret.AddRangeDistinctBy(closerContacts, (a, b) => a.ID.Value == b.ID.Value);
@@ -79,34 +89,60 @@ namespace Clifton.Kademlia
                     contactedNodes.AddRangeDistinctBy(closerUncontactedNodes, (a, b) => a.ID.Value == b.ID.Value);
 
                     // Spec: ...it picks a that it has not yet queried and resends the FIND_NODE RPC to them. 
-                    GetCloserNodes(key, closerUncontactedNodes.Take(Constants.ALPHA).ToList(), closerContacts, fartherContacts);
+                    if (GetCloserNodes(key, rpcCall, closerUncontactedNodes.Take(Constants.ALPHA).ToList(), closerContacts, fartherContacts, out val))
+                    {
+                        return (null, val);
+                    }
                 }
                 else if (haveFarther)
                 {
                     // We're about to contact these nodes.
                     contactedNodes.AddRangeDistinctBy(fartherUncontactedNodes, (a, b) => a.ID.Value == b.ID.Value);
-                    GetCloserNodes(key, fartherUncontactedNodes, closerContacts, fartherContacts);
+
+                    if (GetCloserNodes(key, rpcCall, fartherUncontactedNodes, closerContacts, fartherContacts, out val))
+                    {
+                        return (null, val);
+                    }
                 }
             }
 
+#if DEBUG       // For unit testing.
+            CloserContacts = closerContacts;
+            FartherContacts = fartherContacts;
+#endif
+
             // Spec (sort of): Return max(k) closer nodes, sorted by distance.
             // For unit testing, giveMeAll can be true so that we can match against our alternate way of getting closer contacts.
-            return giveMeAll ? ret : ret.Take(Constants.K).OrderBy(c=>c.ID.Value ^ key.Value).ToList();
+            return (giveMeAll ? ret : ret.Take(Constants.K).OrderBy(c => c.ID.Value ^ key.Value).ToList(), val);
         }
 
         /// <summary>
         /// Get closer nodes to the current uncontacted nodes and update the list of closer and farther nodes.
         /// </summary>
 #if DEBUG           // For unit testing.
-        public void GetCloserNodes(ID key, List<Contact> nodesToQuery, List<Contact> closerContacts, List<Contact> fartherContacts)
+        public bool GetCloserNodes(
+            ID key, 
+            Func<ID, List<Contact>, (List<Contact> contacts, string val)> rpcCall, 
+            List<Contact> nodesToQuery, 
+            List<Contact> closerContacts, 
+            List<Contact> fartherContacts,
+            out string val)
 #else
-        protected void GetCloserNodes(ID key, List<Contact> nodesToQuery, List<Contact> closerContacts, List<Contact> fartherContacts)
+        protected bool GetCloserNodes(
+            ID key, 
+            Func<ID, List<Contact>, (List<Contact> contacts, string val)> rpcCall, 
+            List<Contact> nodesToQuery, 
+            List<Contact> closerContacts, 
+            List<Contact> fartherContacts,
+            out string val)
 #endif
         {
             // As in, peer's nodes:
             // Exclude ourselves and the peers we're contacting to a get unique list of new peers.
             // Compare by ID's as Contact is different instance except with a virtual network.
-            List<Contact> peersNodes = RpcFindNodes(key, nodesToQuery).ExceptBy(node.OurContact, c => c.ID.Value).ExceptBy(nodesToQuery, c => c.ID.Value).ToList();
+            var (contacts, foundVal) = rpcCall(key, nodesToQuery);
+            val = foundVal;
+            List<Contact> peersNodes = contacts.ExceptBy(node.OurContact, c => c.ID.Value).ExceptBy(nodesToQuery, c => c.ID.Value).ToList();
             var nearestNodeDistance = nodesToQuery.OrderBy(n => n.ID.Value ^ key.Value).First().ID.Value;
 
             closerContacts.
@@ -118,6 +154,8 @@ namespace Clifton.Kademlia
                 AddRangeDistinctBy(peersNodes.
                     Where(p => (p.ID.Value ^ key.Value) >= nearestNodeDistance),
                     (a, b) => a.ID.Value == b.ID.Value);
+
+            return val != null;
         }
 
         /// <summary>
@@ -152,12 +190,40 @@ namespace Clifton.Kademlia
         /// For each contact, call the FindNodes and return all the nodes whose contacts responded
         /// within a "reasonable" period of time.
         /// </summary>
-        protected List<Contact> RpcFindNodes(ID key, List<Contact> contacts)
+        public (List<Contact> contacts, string val) RpcFindNodes(ID key, List<Contact> contacts)
         {
             List<Contact> nodes = new List<Contact>();
             contacts.ForEach(c => nodes.AddRange(c.Protocol.FindNode(Node.OurContact, key)));
 
-            return nodes;
+            return (nodes, null);
+        }
+
+        /// <summary>
+        /// For each contact, call the FindNodes and return all the nodes whose contacts responded
+        /// within a "reasonable" period of time.
+        /// </summary>
+        public (List<Contact> contacts, string val) RpcFindValue(ID key, List<Contact> contacts)
+        {
+            List<Contact> nodes = new List<Contact>();
+            string retval = null;
+
+            foreach(Contact c in contacts)
+            {
+                (var otherContacts, var val) = c.Protocol.FindValue(Node.OurContact, key);
+
+                if (otherContacts != null)
+                {
+                    nodes.AddRange(otherContacts);
+                }
+                else
+                {
+                    Validate.IsTrue<ValueCannotBeNullException>(val != null, "Null values are not supported nor expected.");
+                    retval = val;
+                    break;
+                }
+            }
+
+            return (nodes, retval);
         }
     }
 }

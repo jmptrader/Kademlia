@@ -27,5 +27,21 @@ namespace UnitTests2
         {
             return node.FindNode(sender, key).contacts;
         }
+
+        /// <summary>
+        /// Returns either contacts or null if the value is found.
+        /// </summary>
+        public (List<Contact> contacts, string val) FindValue(Contact sender, ID key)
+        {
+            return node.FindValue(sender, key);
+        }
+
+        /// <summary>
+        /// Stores the key-value on the remote peer.
+        /// </summary>
+        public void Store(Contact sender, ID key, string val)
+        {
+            node.Store(sender, key, val);
+        }
     }
 }

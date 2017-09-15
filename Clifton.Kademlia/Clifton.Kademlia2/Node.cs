@@ -6,10 +6,10 @@ namespace Clifton.Kademlia
     public class Node
     {
 #if DEBUG       // For unit testing.
-        public IStorage Storage { get { return storage; } }
         public Contact OurContact { get { return ourContact; } }
 #endif
         public BucketList BucketList { get { return bucketList; } }
+        public IStorage Storage { get { return storage; } }
 
         protected Contact ourContact;
         protected BucketList bucketList;
@@ -37,11 +37,14 @@ namespace Clifton.Kademlia
         }
 
         /// <summary>
-        /// Store a key-value pair in our storage space.
+        /// Store a key-value pair in our storage space, updating the contact if it's not us.
         /// </summary>
-        public void Store(Contact sender, ID keyID, string val)
+        public void Store(Contact sender, ID key, string val)
         {
-            // TODO...
+            Validate.IsFalse<SendingQueryToSelfException>(sender.ID.Value == ourContact.ID.Value, "Sender should not be ourself!");
+            bucketList.AddContact(sender);
+
+            storage.Set(key, val);
         }
 
         /// <summary>
@@ -51,12 +54,13 @@ namespace Clifton.Kademlia
         /// fewer than k nodes in all its k-buckets combined, in which case it returns every node it knows about).
         /// </summary>
         /// <returns></returns>
-        public (List<Contact> contacts, string val) FindNode(Contact sender, ID toFind)
+        public (List<Contact> contacts, string val) FindNode(Contact sender, ID key)
         {
             Validate.IsFalse<SendingQueryToSelfException>(sender.ID.Value == ourContact.ID.Value, "Sender should not be ourself!");
             bucketList.AddContact(sender);
+
             // Exclude sender.
-            var contacts = bucketList.GetCloseContacts(toFind, sender.ID);
+            var contacts = bucketList.GetCloseContacts(key, sender.ID);
 
             return (contacts, null);
         }
@@ -64,11 +68,25 @@ namespace Clifton.Kademlia
         /// <summary>
         /// Returns either a list of close contacts or a the value, if the node's storage contains the value for the key.
         /// </summary>
-        public (List<Contact> contacts, string val) FindValue(Contact sender, ID keyID)
+        public (List<Contact> contacts, string val) FindValue(Contact sender, ID key)
         {
-            // TODO:
+            Validate.IsFalse<SendingQueryToSelfException>(sender.ID.Value == ourContact.ID.Value, "Sender should not be ourself!");
+            bucketList.AddContact(sender);
 
-            return (null, null);
+            if (storage.Contains(key))
+            {
+                return (null, storage.Get(key));
+            }
+            else
+            {
+                // Exclude sender.
+                return (bucketList.GetCloseContacts(key, sender.ID), null);
+            }
+        }
+
+        public void Cache(ID key, string val)
+        {
+            storage.Set(key, val);
         }
     }
 }

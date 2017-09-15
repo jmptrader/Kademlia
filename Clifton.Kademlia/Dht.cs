@@ -11,13 +11,11 @@ namespace Clifton.Kademlia
 			this.node = node;
 		}
 
-		/// <summary>
-		/// Caller specifies the keyID.
-		/// </summary>
 		public void Store(ID keyID, string val)
 		{
 			Router router = new Router();
-			node.Store(node.OurContact, keyID, val);      // we're storing to ourselves as well as k contacts.
+            // We're storing to ourselves as well as k closer contacts.
+            node.Store(node.OurContact, keyID, val);      
 			List<Contact> contacts = router.Lookup(keyID, node, NodeLookup).contacts;
 			contacts.ForEach(c => c.Address.Store(node.OurContact, c.Address, ID.RandomID(), keyID, val));
 		}

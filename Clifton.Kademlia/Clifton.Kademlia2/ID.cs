@@ -62,6 +62,21 @@ namespace Clifton.Kademlia
             }
         }
 
+        public static ID Zero { get { return new ID(new byte[Constants.ID_LENGTH_BYTES]); } }
+
+        public static ID Mid
+        {
+            get
+            {
+                byte[] data = new byte[Constants.ID_LENGTH_BYTES];
+                data[Constants.ID_LENGTH_BYTES - 1] = 0x80;
+
+                return new ID(data);
+            }
+        }
+
+        public static ID Max { get { return new ID(Enumerable.Repeat((byte)0xFF, Constants.ID_LENGTH_BYTES).ToArray()); } }
+
         protected BigInteger id;
 
 #if DEBUG

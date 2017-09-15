@@ -4,12 +4,7 @@ namespace Clifton.Kademlia
 {
     public class Contact
     {
-#if DEBUG       // For unit testing
         public IProtocol Protocol { get; set; }
-#else
-        public IProtocol Protocol { get; protected set; }
-#endif
-
         public DateTime LastSeen { get; protected set; }
         public ID ID { get; protected set; }
 
