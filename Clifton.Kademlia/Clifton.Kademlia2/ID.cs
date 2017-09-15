@@ -10,12 +10,14 @@ namespace Clifton.Kademlia
         public BigInteger Value { get { return id; } }
 #endif
 
-        // Zero-pad msb's if ToByteArray length != Constants.LENGTH_BYTES
-        // The array returned is in little-endian order (lsb at index 0)
+        /// <summary>
+        /// The array returned is in little-endian order (lsb at index 0)
+        /// </summary>
         public byte[] Bytes
         {
             get
             {
+                // Zero-pad msb's if ToByteArray length != Constants.LENGTH_BYTES
                 byte[] bytes = new byte[Constants.ID_LENGTH_BYTES];
                 byte[] partial = id.ToByteArray().Take(Constants.ID_LENGTH_BYTES).ToArray();    // remove msb 0 at index 20.
                 partial.CopyTo(bytes, 0);
@@ -26,7 +28,10 @@ namespace Clifton.Kademlia
 
         public string AsBigEndianString
         {
-            get { return String.Join("", Bytes.Bits().Reverse().Select(b => b ? "1" : "0")); } }
+            get { return String.Join("", Bytes.Bits().Reverse().Select(b => b ? "1" : "0")); }
+        }
+
+        public bool[] AsBigEndianBool { get { return Bytes.Bits().Reverse().ToArray(); } }
 
         /// <summary>
         /// Produce a random ID distributed evenly across the 160 bit space.
@@ -112,16 +117,50 @@ namespace Clifton.Kademlia
             id = bi;
         }
 
-		/// <summary>
-		/// Initialize the ID from a byte array, appending a 0 to force unsigned values.
-		/// </summary>
-		protected void IDInit(byte[] data)
+        /// <summary>
+        /// Returns an ID within the range of the bucket's Low and High range.
+        /// The optional parameter forceBit1 is for our unit tests.
+        /// This works because the bucket low-high range will always be a power of 2!
+        /// </summary>
+        public static ID RandomIDWithinBucket(KBucket bucket, bool forceBit1 = false)
+        {
+            // Simple case:
+            // High = 1000
+            // Low  = 0010
+            // We want random values between 0010 and 1000
+
+            // Low and High will always be powers of 2.
+            var lowBits = new ID(bucket.Low).Bytes.Bits().Reverse();
+            var highBits = new ID(bucket.High).Bytes.Bits().Reverse();
+
+            // We randomize "below" this High prefix range.
+            int highPrefix = highBits.TakeWhile(b => !b).Count() + 1;
+            // Up to the prefix of the Low range.
+            // This sets up a mask of 0's for the LSB's in the Low prefix.
+            int lowPrefix = lowBits.TakeWhile(b => !b).Count();
+            // RandomizeBeyond is little endian for "bits after" so reverse high/low prefixes.
+            ID id = Zero.RandomizeBeyond(Constants.ID_LENGTH_BITS - highPrefix, Constants.ID_LENGTH_BITS - lowPrefix, forceBit1);
+
+            // The we add the low range.
+            id = new ID(bucket.Low + id.Value);
+
+            return id;
+        }
+
+        /// <summary>
+        /// Initialize the ID from a byte array, appending a 0 to force unsigned values.
+        /// </summary>
+        protected void IDInit(byte[] data)
         {
             Validate.IsTrue<IDLengthException>(data.Length == Constants.ID_LENGTH_BYTES, "ID must be " + Constants.ID_LENGTH_BYTES + " bytes in length.");
             id = new BigInteger(data.Append0());
         }
 
-		protected ID RandomizeBeyond(int bit)
+        /// <summary>
+        /// Little endian randomization of of an ID beyond the specified (little endian) bit number.
+        /// The optional parameter forceBit1 is for our unit tests.
+        /// </summary>
+		protected ID RandomizeBeyond(int bit, int minLsb = 0, bool forceBit1 = false)
 		{
 			byte[] randomized = Bytes;
 
@@ -134,9 +173,9 @@ namespace Clifton.Kademlia
 			}
 
 			// TODO: Optimize
-			for (int i = 0; i < bit; i++)
+			for (int i = minLsb; i < bit; i++)
 			{
-				if (rnd.NextDouble() < 0.5)
+				if ((rnd.NextDouble() < 0.5) || forceBit1)
 				{
 					newid.SetBit(i);
 				}
@@ -146,7 +185,7 @@ namespace Clifton.Kademlia
 		}
 
 		/// <summary>
-		/// Clears the bit n, from the LSB.
+		/// Clears the bit n, from the little-endian LSB.
 		/// </summary>
 		public void ClearBit(int n)
 		{
@@ -155,10 +194,10 @@ namespace Clifton.Kademlia
 			id = new BigInteger(bytes.Append0());
 		}
 
-		/// <summary>
-		/// Sets the bit n, from the LSB.
-		/// </summary>
-		public void SetBit(int n)
+        /// <summary>
+        /// Sets the bit n, from the little-endian LSB.
+        /// </summary>
+        public void SetBit(int n)
 		{
 			byte[] bytes = Bytes;
 			bytes[n / 8] |= (byte)(1 << (n % 8));

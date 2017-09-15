@@ -115,17 +115,15 @@ namespace UnitTests2
 
             // We want an integer distance, not an XOR distance.
             ID key = ID.Zero;
-
-            // Set the value in the other node, to be discovered by the lookup process.
             string val = "Test";
 
             Assert.IsFalse(store1.Contains(key), "Obviously we don't have the key-value yet.");
-            Assert.IsFalse(store2.Contains(key), "And equally obvious, our peer doesn't have the key-value yet either.");
+            Assert.IsFalse(store2.Contains(key), "And equally obvious, the other peer doesn't have the key-value yet either.");
 
             dht.Store(key, val);
 
-            Assert.IsTrue(store1.Contains(key), "Expected our peer to have cached the key-value.");
-            Assert.IsTrue(store2.Contains(key), "Expected our peer to have cached the key-value.");
+            Assert.IsTrue(store1.Contains(key), "Expected our peer to have stored the key-value.");
+            Assert.IsTrue(store2.Contains(key), "Expected the other peer to have stored the key-value.");
         }
     }
 }

@@ -2443,7 +2443,7 @@ the lookup algorithm to find other closer nodes that might have the value.</li>
 }</pre>
 <h2>The Dht Class - Unit Tests</h2>
 <h3>LocalStoreFoundValueTest</h3>
-<p>To get started, let's just make sure we can set/get values in our local store 
+<p><img border="0" src="unittest.png" width="14" height="32"> To get started, let's just make sure we can set/get values in our local store 
 with an empty bucket list.</p>
 <pre>[TestMethod]
 public void LocalStoreFoundValueTest()
@@ -2458,7 +2458,7 @@ public void LocalStoreFoundValueTest()
   Assert.IsTrue(retval == val, &quot;Expected to get back what we stored&quot;);
 }</pre>
 <h3>ValueStoredInCloserNodeTest</h3>
-<p>This test creates a single contact and stores the value in that contact.&nbsp; 
+<p><img border="0" src="unittest.png" width="14" height="32"> This test creates a single contact and stores the value in that contact.&nbsp; 
 We set up the ID's so that the contact's ID is less (XOR metric) than our peer's 
 ID, and we use a key of ID.Zero to prevent further complexities when computing 
 the distance.&nbsp; Note that we also verify that the value is cached in our 
@@ -2500,7 +2500,7 @@ public void ValueStoredInCloserNodeTest()
   Assert.IsTrue(store1.Contains(key), &quot;Expected our peer to have cached the key-value.&quot;);
 }</pre>
 <h3>ValueFoundInFartherNodeTest</h3>
-<p>We can change the setup of the ID's and verify that the we find the value in 
+<p><img border="0" src="unittest.png" width="14" height="32"> We can change the setup of the ID's and verify that the we find the value in 
 a farther node.</p>
 <pre>[TestMethod]
 public void ValueStoredInFartherNodeTest()
@@ -2538,7 +2538,8 @@ public void ValueStoredInFartherNodeTest()
   Assert.IsTrue(store1.Contains(key), &quot;Expected our peer to have cached the key-value.&quot;);
 }</pre>
 <h3>ValueStoredGetsPropagatedTest</h3>
-<p>Here we test that when we store a value to our peer, it gets propagated to 
+<p><img border="0" src="unittest.png" width="14" height="32"> Here we test that when we store a value to our peer, it 
+also gets propagated to 
 another peer that our peer knows about:</p>
 <pre>[TestMethod]
 public void ValueStoredGetsPropagatedTest()
@@ -2565,16 +2566,129 @@ public void ValueStoredGetsPropagatedTest()
   string val = &quot;Test&quot;;
 
   Assert.IsFalse(store1.Contains(key), &quot;Obviously we don't have the key-value yet.&quot;);
-  Assert.IsFalse(store2.Contains(key), &quot;And equally obvious, our peer doesn't have the key-value yet either.&quot;);
+  Assert.IsFalse(store2.Contains(key), &quot;And equally obvious, the other peer doesn't have the key-value yet either.&quot;);
 
   dht.Store(key, val);
 
-  Assert.IsTrue(store1.Contains(key), &quot;Expected our peer to have cached the key-value.&quot;);
-  Assert.IsTrue(store2.Contains(key), &quot;Expected our peer to have cached the key-value.&quot;);
+  Assert.IsTrue(store1.Contains(key), &quot;Expected our peer to have stored the key-value.&quot;);
+  Assert.IsTrue(store2.Contains(key), &quot;Expected the other peer to have stored the key-value.&quot;);
 }</pre>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
-<h2>The Dht - Bootstrapping</h2>
+<h2>The Dht - Bootstrapping Discussion</h2>
+<p>From the spec: <font color="#FF00FF">To join the network, a node <i>u</i> 
+must have a contact to an already participating node <i>w</i>. <i>u</i> inserts
+<i>w</i> into the appropriate k-bucket. <i>u</i> then performs a node lookup for 
+its own node ID. Finally, <i>u</i> refreshes all k-buckets further away than its 
+closest neighbor. During the refreshes, <i>u</i> both populates its own 
+k-buckets and inserts itself into other nodes' k-buckets as necessary.</font>  The wikipedia 
+page adds a little more detail:</p>
+<blockquote>
+	<p>&quot;The joining node inserts the bootstrap node into one of its k-buckets. 
+	The joining node then does a FIND_NODE of its own ID against the bootstrap 
+	node (the only other node it knows). The &quot;self-lookup&quot; will populate other 
+	nodes' k-buckets with the new node ID, and will populate the joining node's 
+	k-buckets with the nodes in the path between it and the bootstrap node. 
+	After this, the joining node refreshes all k-buckets further away than the 
+	k-bucket the bootstrap node falls in. This refresh is just a lookup of a 
+	random key that is within that k-bucket range.&quot;</p>
+</blockquote>
+<p>By choosing a random ID within the contact's bucket range, we are creating an 
+ID whose prefix determines the ordering of the contacts returned by 
+<code>GetCloseContacts</code>:</p>
+<pre>Select(c =&gt; new { contact = c, distance = c.ID.Value ^ key.Value }).
+OrderBy(d =&gt; d.distance).</pre>
+<p>This will sort the contacts such that those that are closer -- those where no 
+bits are set in the prefix of the contact -- are first in the list.&nbsp; 
+Ideally, with many peers participating, we should get <i>k</i> contacts that are 
+closer.</p>
+<h2>The Dht - Bootstrapping Implementation</h2>
+<h3>RandomIDWithinBucket</h3>
+<p>Getting a random ID within a bucket range is interesting and based on knowing 
+that bucket ranges are always powers of 2:</p>
+<pre> /// &lt;summary&gt;
+/// Returns an ID within the range of the bucket's Low and High range.
+/// The optional parameter forceBit1 is for our unit tests.
+/// This works because the bucket low-high range will always be a power of 2!
+/// &lt;/summary&gt;
+public static ID RandomIDWithinBucket(KBucket bucket, bool forceBit1 = false)
+{
+  // Simple case:
+  // High = 1000
+  // Low = 0010
+  // We want random values between 0010 and 1000
+
+  // Low and High will always be powers of 2.
+  var lowBits = new ID(bucket.Low).Bytes.Bits().Reverse();
+  var highBits = new ID(bucket.High).Bytes.Bits().Reverse();
+
+  // We randomize &quot;below&quot; this High prefix range.
+  int highPrefix = highBits.TakeWhile(b =&gt; !b).Count() + 1;
+  // Up to the prefix of the Low range.
+  // This sets up a mask of 0's for the LSB's in the Low prefix.
+  int lowPrefix = lowBits.TakeWhile(b =&gt; !b).Count();
+  // RandomizeBeyond is little endian for &quot;bits after&quot; so reverse high/low prefixes.
+  ID id = Zero.RandomizeBeyond(Constants.ID_LENGTH_BITS - highPrefix, Constants.ID_LENGTH_BITS - lowPrefix, forceBit1);
+
+  // The we add the low range.
+  id = new ID(bucket.Low + id.Value);
+
+  return id;
+}</pre>
+<h3>Bootstrap</h3>
+<pre>/// &lt;summary&gt;
+/// Bootstrap our peer by contacting another peer, adding its contacts
+/// to our list, then getting the contacts for other peers not in the
+/// bucket range of our known peer we're joining.
+/// &lt;/summary&gt;
+/// &lt;param name=&quot;knownPeer&quot;&gt;&lt;/param&gt;
+public void Bootstrap(Contact knownPeer)
+{
+  node.BucketList.AddContact(knownPeer);
+  List&lt;Contact&gt; contacts = knownPeer.Protocol.FindNode(ourContact, ourId);
+  contacts.ForEach(c =&gt; node.BucketList.AddContact(c));
+  KBucket knownPeerBucket = node.BucketList.Buckets.Single(b =&gt; b.HasInRange(knownPeer.ID));
+  // Resolve the list now, so we don't include additional contacts as we add to our bucket additional contacts.
+  var otherBuckets = node.BucketList.Buckets.Where(b =&gt; b != knownPeerBucket);
+
+  foreach (KBucket otherBucket in otherBuckets)
+  {
+    ID rndId = ID.RandomIDWithinBucket(otherBucket);
+    List&lt;Contact&gt; contactsFurtherAway = otherBucket.Contacts.ToList();
+    contactsFurtherAway.ForEach(c =&gt; c.Protocol.FindNode(ourContact, rndId).ForEach(otherContact =&gt; node.BucketList.AddContact(otherContact)));
+  }
+}</pre>
+<h2>The Dht - Bootstrapping Unit Test</h2>
+<p><img border="0" src="unittest.png" width="14" height="32"> Getting a random 
+ID within a bucket range was 
+complicated enough that it deserves a unit test:</p>
+<pre>[TestMethod]
+public void RandomWithinBucketTests()
+{
+  // Must be powers of 2.
+  List&lt;(int low, int high)&gt; testCases = new List&lt;(int low, int high)&gt;()
+  {
+    (0, 256), // 7 bits should be set
+    (256, 1024), // 2 bits (256 + 512) should be set
+    (65536, 65536 * 2), // no additional bits should be set.
+    (65536, 65536 * 4), // 2 bits (65536 and 65536*2) should be set.
+    (65536, 65536 * 16), // 4 bits (65536, 65536*2, 65536*4, 65536*8) should be set.
+  };
+
+  foreach (var testCase in testCases)
+  {
+    KBucket bucket = new KBucket(testCase.low, testCase.high);
+    // We force all bits in the range we are &quot;randomizing&quot; to be true
+    // so it's not really randomized. This verifies the outer algorithm
+    // that figures out which bits to randomize.
+    ID id = ID.RandomIDWithinBucket(bucket, true); 
+
+    Assert.IsTrue(id.Value &gt;= bucket.Low &amp;&amp; id.Value &lt; bucket.High, &quot;ID is outside of bucket range.&quot;);
+
+    // The ID, because we're forcing bits, should always be (high - 1) &amp; ~max(0, low - 1)
+    int bitCheck = (testCase.high - 1) &amp; ~Math.Max(0, testCase.low - 1);
+
+    Assert.IsTrue(id.Value == bitCheck, &quot;Expected bits are not correct.&quot;);
+  }
+}</pre>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>

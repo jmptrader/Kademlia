@@ -106,7 +106,7 @@ namespace UnitTests2
 			Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, "Expected 20 contacts in bucket 1.");
 		}
 
-		[TestMethod]
+		[TestMethod, Ignore]
 		public void RandomIDDistributionTest()
 		{
 			Random rnd = new Random();
@@ -132,7 +132,7 @@ namespace UnitTests2
 			Assert.IsTrue(contactsAdded.Select(n=>(double)n).StdDev().ApproximatelyEquals(10, 2), "Bad distribution");
 		}
 
-		[TestMethod]
+		[TestMethod, Ignore]
 		public void RandomPrefixDistributionTest()
 		{
 			List<int> contactsAdded = new List<int>();
@@ -151,7 +151,7 @@ namespace UnitTests2
 			Assert.IsTrue(stdev.ApproximatelyEquals(800, 100), "Bad distribution: stdev = " + stdev);
 		}
 
-		[TestMethod]
+		[TestMethod, Ignore]
 		public void DistributionTestForEachPrefix()
 		{
 			Random rnd = new Random();
@@ -175,7 +175,7 @@ namespace UnitTests2
 			File.WriteAllText("prefixTest.txt", sb.ToString());
 		}
 
-		[TestMethod]
+		[TestMethod, Ignore]
 		public void DistributionTestForEachPrefixWithRandomPrefixDistributedContacts()
 		{
 			StringBuilder sb = new StringBuilder();
