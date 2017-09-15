@@ -18,7 +18,7 @@ namespace Clifton.Kademlia
             this.node = node;
         }
 
-        public virtual List<Contact> Lookup(ID key)
+        public virtual List<Contact> Lookup(ID key, bool giveMeAll = false)
         {
             bool haveWork = true;
             List<Contact> ret = new List<Contact>();
@@ -35,8 +35,21 @@ namespace Clifton.Kademlia
             List<Contact> nodesToQuery = allNodes.Take(Constants.ALPHA).ToList();
             fartherContacts.AddRange(allNodes.Skip(Constants.ALPHA).Take(Constants.K - Constants.ALPHA));
 #else
+#if DEBUG
+            List<Contact> allNodes = node.BucketList.GetKBucket(key).Contacts.Take(Constants.K).ToList();
+#else
+            // This is a bad way to get a list of close contacts with virtual nodes because we're always going to get the closest nodes right at the get go.
             List<Contact> allNodes = node.BucketList.GetCloseContacts(key, node.OurContact.ID).Take(Constants.K).ToList(); 
+#endif
             List<Contact> nodesToQuery = allNodes.Take(Constants.ALPHA).ToList();
+
+            // Also not explicitly in spec:
+            // Any closer node in the alpha list is immediately added to our closer contact list, and
+            // any farther node in the alpha list is immediately added to our farther contact list.
+            closerContacts.AddRange(nodesToQuery.Where(n => (n.ID.Value ^ key.Value) < (node.OurContact.ID.Value ^ key.Value)));
+            fartherContacts.AddRange(nodesToQuery.Where(n => (n.ID.Value ^ key.Value) >= (node.OurContact.ID.Value ^ key.Value)));
+
+            // The remaining contacts not tested yet can be put here.
             fartherContacts.AddRange(allNodes.Skip(Constants.ALPHA).Take(Constants.K - Constants.ALPHA));
 #endif
 
@@ -76,8 +89,9 @@ namespace Clifton.Kademlia
                 }
             }
 
-            // Spec (sort of): Return max(k) closer nodes
-            return ret.Take(Constants.K).ToList();
+            // Spec (sort of): Return max(k) closer nodes, sorted by distance.
+            // For unit testing, giveMeAll can be true so that we can match against our alternate way of getting closer contacts.
+            return giveMeAll ? ret : ret.Take(Constants.K).OrderBy(c=>c.ID.Value ^ key.Value).ToList();
         }
 
         /// <summary>

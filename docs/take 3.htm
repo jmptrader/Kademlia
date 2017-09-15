@@ -1521,7 +1521,27 @@ List&lt;Contact&gt; nodesToQuery = GetClosestNodes(key, bucket).Take(Constants.A
 <p>otherwise, the implementation simply gets the closest <i>a</i> contacts 
 across all buckets:</p>
 <pre>List&lt;Contact&gt; nodesToQuery = node.BucketList.GetCloseContacts(key, node.OurContact.ID).Take(Constants.ALPHA).ToList();</pre>
+<p>However, this implementation, when testing with virtual nodes (where the 
+system essentially knows every other node) effectively gets the k closest 
+contacts, because it's searched all the buckets in virtual node space.&nbsp; So, 
+if we want to exercise the algorithm, this is better:</p>
+<pre>#if DEBUG
+  List&lt;Contact&gt; allNodes = node.BucketList.GetKBucket(key).Contacts.Take(Constants.K).ToList();
+#else
+  // This is a bad way to get a list of close contacts with virtual nodes because we're always going to get the closest nodes right at the get go.
+  List&lt;Contact&gt; allNodes = node.BucketList.GetCloseContacts(key, node.OurContact.ID).Take(Constants.K).ToList(); 
+#endif
+
+  List&lt;Contact&gt; nodesToQuery = allNodes.Take(Constants.ALPHA).ToList();</pre>
+<p>This actually leads to the next ambiguity.</p>
 <h3>Ambiguity #8</h3>
+<p>In the initial acquisition of a contacts as per the code above, should 
+contacts (I'm using &quot;contact&quot; and &quot;node&quot; rather interchangeably) that are closer 
+at this point be added to the list of closer contacts?&nbsp; The spec doesn't 
+say not to, and in implementations that I've seen, our own closer contacts <i>
+are</i> 
+added to the close contact list.</p>
+<h3>Ambiguity #9</h3>
 <p>What do we do with the contacts outside of <i>a</i>?&nbsp; Given this: &quot;<font color="#FF00FF">If 
 a round of FIND_NODES fails to return a node any closer than the closest already 
 seen, the initiator resends the FIND_NODE to all of the <i>k</i> closest nodes 
@@ -1645,7 +1665,7 @@ protected void GetCloserNodes(ID key, List&lt;Contact&gt; nodesToQuery, List&lt;
 }</pre>
 <h3>Lookup</h3>
 <p>This flowchart all comes together here:</p>
-<pre>public virtual List&lt;Contact&gt; Lookup(ID key)
+<pre>public virtual List&lt;Contact&gt; Lookup(ID key, bool giveMeAll = false)
 {
   bool haveWork = true;
   List&lt;Contact&gt; ret = new List&lt;Contact&gt;();
@@ -1655,15 +1675,28 @@ protected void GetCloserNodes(ID key, List&lt;Contact&gt; nodesToQuery, List&lt;
 
 #if TRY_CLOSEST_BUCKET
   // Spec: The lookup initiator starts by picking a nodes from its closest non-empty k-bucket
-  KBucket bucket = FindClosestNonEmptyKBucket(key);
+KBucket bucket = FindClosestNonEmptyKBucket(key);
 
   // Not in spec -- sort by the closest nodes in the closest bucket.
   List&lt;Contact&gt; allNodes = node.BucketList.GetCloseContacts(key, node.OurContact.ID).Take(Constants.K).ToList(); 
   List&lt;Contact&gt; nodesToQuery = allNodes.Take(Constants.ALPHA).ToList();
   fartherContacts.AddRange(allNodes.Skip(Constants.ALPHA).Take(Constants.K - Constants.ALPHA));
 #else
+#if DEBUG
+  List&lt;Contact&gt; allNodes = node.BucketList.GetKBucket(key).Contacts.Take(Constants.K).ToList();
+#else
+  // This is a bad way to get a list of close contacts with virtual nodes because we're always going to get the closest nodes right at the get go.
   List&lt;Contact&gt; allNodes = node.BucketList.GetCloseContacts(key, node.OurContact.ID).Take(Constants.K).ToList(); 
+#endif
   List&lt;Contact&gt; nodesToQuery = allNodes.Take(Constants.ALPHA).ToList();
+
+  // Also not explicitly in spec:
+  // Any closer node in the alpha list is immediately added to our closer contact list, and
+  // any farther node in the alpha list is immediately added to our farther contact list.
+  closerContacts.AddRange(nodesToQuery.Where(n =&gt; (n.ID.Value ^ key.Value) &lt; (node.OurContact.ID.Value ^ key.Value)));
+  fartherContacts.AddRange(nodesToQuery.Where(n =&gt; (n.ID.Value ^ key.Value) &gt;= (node.OurContact.ID.Value ^ key.Value)));
+
+  // The remaining contacts not tested yet can be put here.
   fartherContacts.AddRange(allNodes.Skip(Constants.ALPHA).Take(Constants.K - Constants.ALPHA));
 #endif
 
@@ -1703,8 +1736,9 @@ protected void GetCloserNodes(ID key, List&lt;Contact&gt; nodesToQuery, List&lt;
     }
   }
 
-  // Spec (sort of): Return max(k) closer nodes
-  return ret.Take(Constants.K).ToList();
+  // Spec (sort of): Return max(k) closer nodes, sorted by distance.
+  // For unit testing, giveMeAll can be true so that we can match against our alternate way of getting closer contacts.
+  return giveMeAll ? ret : ret.Take(Constants.K).OrderBy(c=&gt;c.ID.Value ^ key.Value).ToList();
 }</pre>
 <p><img border="0" src="note.png" width="24" height="32"> This algorithm is 
 iteration, not recursion, as the specification states.&nbsp; Every 
@@ -1818,7 +1852,8 @@ public List&lt;Contact&gt; GetCloseContacts(ID toFind, ID exclude)
     OrderBy(d =&gt; d.distance).
     Take(Constants.K);
 
-  return contacts.Select(c =&gt; c.contact).ToList();
+  // Spec (sort of): Return max(k) closer nodes, sorted by distance.
+  return ret.Take(Constants.K).OrderBy(c=&gt;c.ID.Value ^ key.Value).ToList();
 }</pre>
 <h4>GetCloseContacts Unit Test</h4>
 <p>This tests the 
@@ -1863,12 +1898,11 @@ public void GetCloseContactsOrderedTest()
   var others = node.BucketList.Buckets.SelectMany(b =&gt; b.Contacts.Except(closest)).Where(c =&gt; (c.ID.Value ^ key.Value) &lt; lastDistance);
   Assert.IsTrue(others.Count() == 0, &quot;Expected no other contacts with a smaller distance than the greatest distance to exist.&quot;);
 }</pre>
-<h4>Lookup Tests</h4>
+<h4>GetCloserNodes Unit Test</h4>
 <p>Getting the system to exercise the different paths in the flowchart is an 
 interesting exercise.&nbsp; Again, note that it's probably not the most ideal 
 situation that I'm using all random ID's.&nbsp; Let's start with one of the first more complicated 
 helper methods, <code>GetCloserNodes</code>.&nbsp; </p>
-<h5>GetCloserNodes Unit Test</h5>
 <p><img border="0" src="unittest.png" width="14" height="32">&nbsp; The unit test itself is a beast:</p>
 <pre>[TestMethod]
 public void GetCloserNodesTest()
@@ -1894,25 +1928,26 @@ public void GetCloserNodesTest()
 
     ID key = ID.RandomID; // Pick an ID
     // TODO: Pick a random bucket, or bucket where the key is in range, otherwise we're defeating the purpose of the algorithm.
+    // DO NOT DO THIS:
     // List&lt;Contact&gt; nodesToQuery = router.Node.BucketList.GetCloseContacts(key, router.Node.OurContact.ID).Take(Constants.ALPHA).ToList();
 
     List&lt;Contact&gt; nodesToQuery = router.Node.BucketList.GetKBucket(key).Contacts.Take(Constants.ALPHA).ToList();
-    // or
-    // router.FindClosestNonEmptyKBucket(key).Contacts.Take(Constants.ALPHA).ToList();
+    // or:
+    // List&lt;Contact&gt; nodesToQuery = router.FindClosestNonEmptyKBucket(key).Contacts.Take(Constants.ALPHA).ToList();
 
     List&lt;Contact&gt; closerContacts = new List&lt;Contact&gt;();
     List&lt;Contact&gt; fartherContacts = new List&lt;Contact&gt;();
+
+    List&lt;Contact&gt; closerContactsAltComputation = new List&lt;Contact&gt;();
+    List&lt;Contact&gt; fartherContactsAltComputation = new List&lt;Contact&gt;();
+    Contact theNearestContactedNode = nodesToQuery.OrderBy(n =&gt; n.ID.Value ^ key.Value).First();
+    var distance = theNearestContactedNode.ID.Value;
 
     // Setup done.
 
     router.GetCloserNodes(key, nodesToQuery, closerContacts, fartherContacts);
 
     // Test whether the results are correct: 
-
-    List&lt;Contact&gt; closerContactsAltComputation = new List&lt;Contact&gt;();
-    List&lt;Contact&gt; fartherContactsAltComputation = new List&lt;Contact&gt;();
-    Contact theNearestContactedNode = nodesToQuery.OrderBy(n =&gt; n.ID.Value ^ key.Value).First();
-    var distance = theNearestContactedNode.ID.Value;
 
     // For each node (ALPHA == K for testing) in our bucket (nodesToQuery) we're going to get k nodes closest to the key:
     foreach (Contact contact in nodesToQuery)
@@ -1921,6 +1956,8 @@ public void GetCloserNodesTest()
       Node contactNode = nodes.Single(n =&gt; n.OurContact == contact);
 
       // Close contacts except ourself and the nodes we're contacting.
+      // Note that of all the contacts in the bucket list, many of the k returned
+      // by the GetCloseContacts call are contacts we're querying, so they are being excluded.
       var closeContactsOfContactedNode =
         contactNode.
           BucketList.
@@ -1952,8 +1989,41 @@ public void GetCloserNodesTest()
 algorithm with a lot less Linq, we then iterate over the contacts in the nodes 
 we're querying, as set up by the unit test.&nbsp; This actually tests a lot of 
 the system, and interestingly, as a result of these two different approaches, I found a bug in the <code>GetCloseContacts</code> 
--- so much for &quot;it's not practical testing all the simple methods.&quot;</p>
-<p>&nbsp;</p>
+-- so much for &quot;it's not practical testing all the simple methods.&quot;&nbsp; As a 
+side note, it's interesting to see how much shorter the Linq for the code that 
+obtains the close and far contacts.</p>
+<h4>Lookup Unit Test</h4>
+<p><img border="0" src="unittest.png" width="14" height="32"> Ironically, there really is no alternative way of getting these nodes, 
+particularly with regards to the <code>while</code> loop in the <code>Lookup</code> method.&nbsp; 
+So without beating my head over the issue, I implemented this test:</p>
+<pre>[TestMethod]
+public void LookupTest()
+{
+  // Seed with different random values
+  100.ForEach(seed =&gt;
+  {
+    ID.rnd = new Random(seed);
+    Setup();
+
+    List&lt;Contact&gt; closeContacts = router.Lookup(key, true);
+    List&lt;Contact&gt; contactedNodes = new List&lt;Contact&gt;(closeContacts);
+
+    // Is the above call returning the correct number of close contacts?
+    // The unit test for this is sort of lame. We should get at least as many contacts 
+    // as when calling GetCloserNodes. 
+
+    GetAltCloseAndFar(contactsToQuery, closerContactsAltComputation, fartherContactsAltComputation);
+
+    Assert.IsTrue(closeContacts.Count &gt;= closerContactsAltComputation.Count, &quot;Expected at least as many contacts.&quot;);
+
+    // Technically, we can't even test whether the contacts returned in GetCloserNodes exists
+    // in router.Lookup because it may have found nodes even closer, and it only returns K nodes!
+    // We can overcome this by eliminating the Take in the return of router.Lookup().
+
+    closerContactsAltComputation.ForEach(c =&gt; Assert.IsTrue(closeContacts.Contains(c)));
+  });
+}
+</pre>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
