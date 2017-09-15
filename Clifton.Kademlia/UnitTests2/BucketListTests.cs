@@ -11,7 +11,7 @@ namespace UnitTests2
     public class BucketListTests
     {
         [TestMethod]
-        public void GetCloseContactTest()
+        public void GetCloseContactsOrderedTest()
         {
             Contact sender = new Contact(null, ID.RandomID);
             Node node = new Node(new Contact(null, ID.RandomID), null);
@@ -28,11 +28,17 @@ namespace UnitTests2
             var distances = closest.Select(c => c.ID.Value ^ key.Value).ToList();
             var distance = distances[0];
 
+            // Verify distances are in ascending order:
             distances.Skip(1).ForEach(d =>
             {
                 Assert.IsTrue(distance < d, "Expected contacts ordered by distance.");
                 distance = d;
             });
+
+            // Verify the contacts with the smallest distances were returned from all possible distances.
+            var lastDistance = distances[distances.Count - 1];
+            var others = node.BucketList.Buckets.SelectMany(b => b.Contacts.Except(closest)).Where(c => (c.ID.Value ^ key.Value) < lastDistance);
+            Assert.IsTrue(others.Count() == 0, "Expected no other contacts with a smaller distance than the greatest distance to exist.");
         }
     }
 }

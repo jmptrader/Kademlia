@@ -55,6 +55,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="KBucketTests.cs" />
     <Compile Include="AddContactTests.cs" />
+    <Compile Include="LookupTests.cs" />
     <Compile Include="VirtualProtocol.cs" />
   </ItemGroup>
   <ItemGroup>

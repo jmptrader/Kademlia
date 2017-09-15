@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿// #define TRY_CLOSEST_BUCKET
+
+using System.Collections.Generic;
 using System.Linq;
 
 namespace Clifton.Kademlia
@@ -24,10 +26,19 @@ namespace Clifton.Kademlia
             List<Contact> closerContacts = new List<Contact>();
             List<Contact> fartherContacts = new List<Contact>();
 
+#if TRY_CLOSEST_BUCKET
+            // Spec: The lookup initiator starts by picking a nodes from its closest non-empty k-bucket
             KBucket bucket = FindClosestNonEmptyKBucket(key);
 
-            // Spec: The lookup initiator starts by picking a nodes from its closest non-empty k-bucket
-            List<Contact> nodesToQuery = GetClosestNodes(key, bucket).Take(Constants.ALPHA).ToList();
+            // Not in spec -- sort by the closest nodes in the closest bucket.
+            List<Contact> allNodes = node.BucketList.GetCloseContacts(key, node.OurContact.ID).Take(Constants.K).ToList(); 
+            List<Contact> nodesToQuery = allNodes.Take(Constants.ALPHA).ToList();
+            fartherContacts.AddRange(allNodes.Skip(Constants.ALPHA).Take(Constants.K - Constants.ALPHA));
+#else
+            List<Contact> allNodes = node.BucketList.GetCloseContacts(key, node.OurContact.ID).Take(Constants.K).ToList(); 
+            List<Contact> nodesToQuery = allNodes.Take(Constants.ALPHA).ToList();
+            fartherContacts.AddRange(allNodes.Skip(Constants.ALPHA).Take(Constants.K - Constants.ALPHA));
+#endif
 
             // We're about to contact these nodes.
             contactedNodes.AddRangeDistinctBy(nodesToQuery, (a, b) => a.ID.Value == b.ID.Value);
@@ -72,19 +83,38 @@ namespace Clifton.Kademlia
         /// <summary>
         /// Get closer nodes to the current uncontacted nodes and update the list of closer and farther nodes.
         /// </summary>
+#if DEBUG           // For unit testing.
+        public void GetCloserNodes(ID key, List<Contact> nodesToQuery, List<Contact> closerContacts, List<Contact> fartherContacts)
+#else
         protected void GetCloserNodes(ID key, List<Contact> nodesToQuery, List<Contact> closerContacts, List<Contact> fartherContacts)
+#endif
         {
             // As in, peer's nodes:
-            List<Contact> peersNodes = RpcFindNodes(key, nodesToQuery).Where(c => c.ID.Value != node.OurContact.ID.Value).ToList();
-            closerContacts.AddRangeDistinctBy(peersNodes.WhereAll(nodesToQuery, (a, b) => (a.ID.Value ^ key.Value) < b.ID.Value), (a, b) => a.ID.Value == b.ID.Value);
-            fartherContacts.AddRangeDistinctBy(peersNodes.WhereAll(nodesToQuery, (a, b) => (a.ID.Value ^ key.Value) >= b.ID.Value), (a, b) => a.ID.Value == b.ID.Value);
+            // Exclude ourselves and the peers we're contacting to a get unique list of new peers.
+            // Compare by ID's as Contact is different instance except with a virtual network.
+            List<Contact> peersNodes = RpcFindNodes(key, nodesToQuery).ExceptBy(node.OurContact, c => c.ID.Value).ExceptBy(nodesToQuery, c => c.ID.Value).ToList();
+            var nearestNodeDistance = nodesToQuery.OrderBy(n => n.ID.Value ^ key.Value).First().ID.Value;
+
+            closerContacts.
+                AddRangeDistinctBy(peersNodes.
+                    Where(p => (p.ID.Value ^ key.Value) < nearestNodeDistance),
+                    (a, b) => a.ID.Value == b.ID.Value);
+
+            fartherContacts.
+                AddRangeDistinctBy(peersNodes.
+                    Where(p => (p.ID.Value ^ key.Value) >= nearestNodeDistance),
+                    (a, b) => a.ID.Value == b.ID.Value);
         }
 
         /// <summary>
         /// Using the k-bucket's key (it's high value), find the closest 
         /// k-bucket the given key that isn't empty.
         /// </summary>
+#if DEBUG           // For unit testing.
+        public virtual KBucket FindClosestNonEmptyKBucket(ID key)
+#else
         protected virtual KBucket FindClosestNonEmptyKBucket(ID key)
+#endif
         {
             KBucket closest = Node.BucketList.Buckets.Where(b => b.Contacts.Count > 0).OrderBy(b => b.Key ^ key.Value).FirstOrDefault();
             Validate.IsTrue<NoNonEmptyBucketsException>(closest != null, "No non-empty buckets exist.  You must first register a peer and add that peer to your bucketlist.");
@@ -95,7 +125,11 @@ namespace Clifton.Kademlia
         /// <summary>
         /// Get sorted list of closest nodes to the given key.
         /// </summary>
+#if DEBUG           // For unit testing.
+        public List<Contact> GetClosestNodes(ID key, KBucket bucket)
+#else
         protected List<Contact> GetClosestNodes(ID key, KBucket bucket)
+#endif
         {
             return bucket.Contacts.OrderBy(c => c.ID.Value ^ key.Value).ToList();
         }
@@ -107,7 +141,7 @@ namespace Clifton.Kademlia
         protected List<Contact> RpcFindNodes(ID key, List<Contact> contacts)
         {
             List<Contact> nodes = new List<Contact>();
-            contacts.ForEach(c => nodes.AddRange(c.Protocol.FindNode(key)));
+            contacts.ForEach(c => nodes.AddRange(c.Protocol.FindNode(Node.OurContact, key)));
 
             return nodes;
         }

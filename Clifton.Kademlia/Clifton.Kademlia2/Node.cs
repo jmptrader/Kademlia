@@ -55,7 +55,8 @@ namespace Clifton.Kademlia
         {
             Validate.IsFalse<SendingQueryToSelfException>(sender.ID.Value == ourContact.ID.Value, "Sender should not be ourself!");
             bucketList.AddContact(sender);
-            var contacts = bucketList.GetCloseContacts(toFind, ourContact.ID);
+            // Exclude sender.
+            var contacts = bucketList.GetCloseContacts(toFind, sender.ID);
 
             return (contacts, null);
         }

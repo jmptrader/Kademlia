@@ -31,7 +31,7 @@ namespace Clifton.Kademlia
 		/// <summary>
 		/// Produce a random ID distributed evenly across the 160 bit space.
 		/// </summary>
-		public static ID RandomID
+		public static ID RandomIDInKeySpace
 		{
 			get
 			{
@@ -48,13 +48,32 @@ namespace Clifton.Kademlia
 			}
 		}
 
-		protected BigInteger id;
-		private static Random rnd = new Random();
+        /// <summary>
+        /// Produce a random ID.
+        /// </summary>
+        public static ID RandomID
+        {
+            get
+            {
+                byte[] buffer = new byte[Constants.ID_LENGTH_BYTES];
+                rnd.NextBytes(buffer);
 
-		/// <summary>
-		/// Construct the ID from a byte array.
-		/// </summary>
-		public ID(byte[] data)
+                return new ID(buffer);
+            }
+        }
+
+        protected BigInteger id;
+
+#if DEBUG
+        public static Random rnd = new Random(1);
+#else
+        private static Random rnd = new Random();
+#endif
+
+        /// <summary>
+        /// Construct the ID from a byte array.
+        /// </summary>
+        public ID(byte[] data)
         {
             IDInit(data);
         }

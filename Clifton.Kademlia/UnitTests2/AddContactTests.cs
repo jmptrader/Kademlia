@@ -19,8 +19,8 @@ namespace UnitTests2
 		[TestMethod]
 		public void UniqueIDAddTest()
 		{
-			BucketList bucketList = new BucketList(ID.RandomID);
-			Constants.K.ForEach(() => bucketList.AddContact(new Contact(null, ID.RandomID)));
+			BucketList bucketList = new BucketList(ID.RandomIDInKeySpace);
+			Constants.K.ForEach(() => bucketList.AddContact(new Contact(null, ID.RandomIDInKeySpace)));
 			Assert.IsTrue(bucketList.Buckets.Count == 1, "No split should have taken place.");
 			Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == Constants.K, "K contacts should have been added.");									
 		}
@@ -28,8 +28,8 @@ namespace UnitTests2
 		[TestMethod]
 		public void DuplicateIDTest()
 		{
-			BucketList bucketList = new BucketList(ID.RandomID);
-			ID id = ID.RandomID;
+			BucketList bucketList = new BucketList(ID.RandomIDInKeySpace);
+			ID id = ID.RandomIDInKeySpace;
 			bucketList.AddContact(new Contact(null, id));
 			bucketList.AddContact(new Contact(null, id));
 			Assert.IsTrue(bucketList.Buckets.Count == 1, "No split should have taken place.");
@@ -39,9 +39,9 @@ namespace UnitTests2
 		[TestMethod]
 		public void BucketSplitTest()
 		{
-			BucketList bucketList = new BucketList(ID.RandomID);
-			Constants.K.ForEach(() => bucketList.AddContact(new Contact(null, ID.RandomID)));
-			bucketList.AddContact(new Contact(null, ID.RandomID));
+			BucketList bucketList = new BucketList(ID.RandomIDInKeySpace);
+			Constants.K.ForEach(() => bucketList.AddContact(new Contact(null, ID.RandomIDInKeySpace)));
+			bucketList.AddContact(new Contact(null, ID.RandomIDInKeySpace));
 			Assert.IsTrue(bucketList.Buckets.Count > 1, "Bucket should have split into two or more buckets.");
 		}
 
@@ -139,8 +139,8 @@ namespace UnitTests2
 
 			100.ForEach(() =>
 			{
-				BucketList bucketList = new BucketList(ID.RandomID);
-				3200.ForEach(() => bucketList.AddContact(new Contact(null, ID.RandomID)));
+				BucketList bucketList = new BucketList(ID.RandomIDInKeySpace);
+				3200.ForEach(() => bucketList.AddContact(new Contact(null, ID.RandomIDInKeySpace)));
 				int contacts = bucketList.Buckets.Sum(b => b.Contacts.Count);
 				contactsAdded.Add(contacts);
 			});
@@ -183,7 +183,7 @@ namespace UnitTests2
 			160.ForEach((i) =>
 			{
 				BucketList bucketList = new BucketList(new ID(BigInteger.Pow(new BigInteger(2), i)));
-				3200.ForEach(() => bucketList.AddContact(new Contact(null, ID.RandomID)));
+				3200.ForEach(() => bucketList.AddContact(new Contact(null, ID.RandomIDInKeySpace)));
 				int contacts = bucketList.Buckets.Sum(b => b.Contacts.Count);
 				sb.Append(i + "," + contacts + CRLF);
 			});

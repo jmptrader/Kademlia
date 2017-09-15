@@ -70,12 +70,16 @@ namespace Clifton.Kademlia
 			return kbucket.HasInRange(ourID) || ((kbucket.Depth() % Constants.B) != 0);
 		}
 
-		protected KBucket GetKBucket(ID otherID)
-		{
-			return buckets[buckets.FindIndex(b => b.HasInRange(otherID))];
+#if DEBUG
+        public KBucket GetKBucket(ID otherID)
+#else
+        protected KBucket GetKBucket(ID otherID)
+#endif
+        {
+            return buckets[buckets.FindIndex(b => b.HasInRange(otherID))];
 		}
 
-		public int GetKBucketIndex(ID otherID)
+		protected int GetKBucketIndex(ID otherID)
 		{
 			return buckets.FindIndex(b => b.HasInRange(otherID));
 		}
@@ -85,12 +89,12 @@ namespace Clifton.Kademlia
         /// </summary>
         /// <param name="toFind">The ID for which we want to find close contacts.</param>
         /// <param name="exclude">The ID to exclude (the requestor's ID)</param>
-        public List<Contact> GetCloseContacts(ID toFind, ID exclude)
+        public List<Contact> GetCloseContacts(ID key, ID exclude)
         {
             var contacts = buckets.
                 SelectMany(b => b.Contacts).
                 Where(c => c.ID.Value != exclude.Value).
-                Select(c => new { contact = c, distance = c.ID.Value ^ toFind.Value }).
+                Select(c => new { contact = c, distance = c.ID.Value ^ key.Value }).
                 OrderBy(d => d.distance).
                 Take(Constants.K);
 

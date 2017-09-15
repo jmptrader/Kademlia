@@ -88,10 +88,12 @@ namespace Clifton.Kademlia
 
         // TODO: Change the equalityComparer to a KeySelector for the these extension methods:
 
-        public static void AddDistinctBy<T>(this List<T> list, T item, Func<T, bool> equalityComparer)
+        public static void AddDistinctBy<T, TKey>(this List<T> list, T item, Func<T, TKey> keySelector)
         {
+            TKey itemKey = keySelector(item);
+
             // no items in the list must match the item.
-            if (list.None(q => equalityComparer(q)))
+            if (list.None(q => keySelector(q).Equals(itemKey)))
             {
                 list.Add(item);
             }
@@ -107,6 +109,40 @@ namespace Clifton.Kademlia
                     target.Add(item);
                 }
             });
+        }
+
+        public static IEnumerable<T> ExceptBy<T, TKey>(this IEnumerable<T> src, T item, Func<T, TKey> keySelector)
+        {
+            TKey itemKey = keySelector(item);
+
+            using (var enumerator = src.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    T current = enumerator.Current;
+
+                    if (!keySelector(current).Equals(itemKey))
+                    {
+                        yield return current;
+                    }
+                }
+            }
+        }
+
+        public static IEnumerable<T> ExceptBy<T, TKey>(this IEnumerable<T> src, IEnumerable<T> items, Func<T, TKey> keySelector)
+        {
+            using (var enumerator = src.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    T current = enumerator.Current;
+
+                    if (items.None(i => keySelector(current).Equals(keySelector(i))))
+                    {
+                        yield return current;
+                    }
+                }
+            }
         }
 
         public static bool None<TSource>(this IEnumerable<TSource> source)
@@ -235,6 +271,7 @@ namespace Clifton.Kademlia
             return stdDev;
         }
 
+        /*
         public static IEnumerable<T> WhereAll<T>(this IEnumerable<T> a, IEnumerable<T> b, Func<T, T, bool> comparator)
         {
             using (var aenum = a.GetEnumerator())
@@ -250,5 +287,6 @@ namespace Clifton.Kademlia
                 }
             }
         }
+        */
     }
 }
