@@ -5,9 +5,7 @@ namespace Clifton.Kademlia
 {
     public class Node
     {
-#if DEBUG       // For unit testing.
         public Contact OurContact { get { return ourContact; } }
-#endif
         public BucketList BucketList { get { return bucketList; } }
         public IStorage Storage { get { return storage; } }
 

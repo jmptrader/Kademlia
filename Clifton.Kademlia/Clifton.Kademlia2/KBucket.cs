@@ -6,11 +6,10 @@ namespace Clifton.Kademlia
 {
     public class KBucket
     {
-#if DEBUG       // For unit testing.
         public List<Contact> Contacts { get { return contacts; } }
         public BigInteger Low { get { return low; } }
         public BigInteger High { get { return high; } }
-#endif
+
         /// <summary>
         /// We are going to assume that the "key" for this bucket is it's high range.
         /// </summary>

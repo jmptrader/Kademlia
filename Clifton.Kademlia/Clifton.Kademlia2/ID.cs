@@ -6,9 +6,7 @@ namespace Clifton.Kademlia
 {
     public class ID
     {
-#if DEBUG       // For unit testing.
         public BigInteger Value { get { return id; } }
-#endif
 
         /// <summary>
         /// The array returned is in little-endian order (lsb at index 0)

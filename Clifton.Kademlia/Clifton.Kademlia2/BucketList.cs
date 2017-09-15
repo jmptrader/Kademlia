@@ -5,9 +5,7 @@ namespace Clifton.Kademlia
 {
     public class BucketList
     {
-#if DEBUG       // Used for unit testing.
         public List<KBucket> Buckets { get { return buckets; } }
-#endif
 
         protected List<KBucket> buckets;
         protected ID ourID;

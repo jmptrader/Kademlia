@@ -144,7 +144,7 @@ namespace UnitTests2
             vp[1].Node = dhtBootstrap.Router.Node;
             Node n = null;
 
-            // Out boostrapper knows 10 contacts
+            // Our boostrapper knows 10 contacts
             10.ForEach((i) =>
             {
                 Contact c = new Contact(vp[i + 2], ID.RandomID);
@@ -168,7 +168,6 @@ namespace UnitTests2
             Assert.IsTrue(dhtUs.Router.Node.BucketList.Buckets.Sum(c => c.Contacts.Count) == 11, "Expected our peer to get 11 contacts.");
         }
 
-
         [TestMethod]
         public void BootstrapOutsideBootstrappingBucketTest()
         {
@@ -188,7 +187,7 @@ namespace UnitTests2
             vp[1].Node = dhtBootstrap.Router.Node;
             Node n = null;
 
-            // Out boostrapper knows 20 contacts
+            // Our boostrapper knows 20 contacts
             20.ForEach((i) =>
             {
                 ID id;

@@ -171,7 +171,7 @@ namespace Clifton.Kademlia
         protected virtual KBucket FindClosestNonEmptyKBucket(ID key)
 #endif
         {
-            KBucket closest = Node.BucketList.Buckets.Where(b => b.Contacts.Count > 0).OrderBy(b => b.Key ^ key.Value).FirstOrDefault();
+            KBucket closest = node.BucketList.Buckets.Where(b => b.Contacts.Count > 0).OrderBy(b => b.Key ^ key.Value).FirstOrDefault();
             Validate.IsTrue<NoNonEmptyBucketsException>(closest != null, "No non-empty buckets exist.  You must first register a peer and add that peer to your bucketlist.");
 
             return closest;
@@ -196,7 +196,7 @@ namespace Clifton.Kademlia
         public (List<Contact> contacts, string val) RpcFindNodes(ID key, List<Contact> contacts)
         {
             List<Contact> nodes = new List<Contact>();
-            contacts.ForEach(c => nodes.AddRange(c.Protocol.FindNode(Node.OurContact, key)));
+            contacts.ForEach(c => nodes.AddRange(c.Protocol.FindNode(node.OurContact, key)));
 
             return (nodes, null);
         }
@@ -212,7 +212,7 @@ namespace Clifton.Kademlia
 
             foreach(Contact c in contacts)
             {
-                (var otherContacts, var val) = c.Protocol.FindValue(Node.OurContact, key);
+                (var otherContacts, var val) = c.Protocol.FindValue(node.OurContact, key);
 
                 if (otherContacts != null)
                 {
