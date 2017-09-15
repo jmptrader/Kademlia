@@ -6,11 +6,16 @@ namespace UnitTests2
 {
     public class VirtualProtocol : IProtocol
     {
-#if DEBUG
-        public Node Node { get { return node; } }
-#endif
+        public Node Node { get { return node; } set { node = value; } }
 
         protected Node node;
+
+        /// <summary>
+        /// For unit testing with deferred node setup.
+        /// </summary>
+        public VirtualProtocol()
+        {
+        }
 
         /// <summary>
         /// Register the in-memory node with our virtual protocol.

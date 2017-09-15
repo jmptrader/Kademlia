@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 
 namespace Clifton.Kademlia
 {
@@ -143,7 +144,9 @@ namespace Clifton.Kademlia
             var (contacts, foundVal) = rpcCall(key, nodesToQuery);
             val = foundVal;
             List<Contact> peersNodes = contacts.ExceptBy(node.OurContact, c => c.ID.Value).ExceptBy(nodesToQuery, c => c.ID.Value).ToList();
-            var nearestNodeDistance = nodesToQuery.OrderBy(n => n.ID.Value ^ key.Value).First().ID.Value;
+
+            // Null continuation is a special case primarily for unit testing when we have no nodes in any buckets.
+            var nearestNodeDistance = nodesToQuery.OrderBy(n => n.ID.Value ^ key.Value).FirstOrDefault()?.ID?.Value ?? -1;
 
             closerContacts.
                 AddRangeDistinctBy(peersNodes.
@@ -187,7 +190,7 @@ namespace Clifton.Kademlia
         }
 
         /// <summary>
-        /// For each contact, call the FindNodes and return all the nodes whose contacts responded
+        /// For each contact, call the FindNode and return all the nodes whose contacts responded
         /// within a "reasonable" period of time.
         /// </summary>
         public (List<Contact> contacts, string val) RpcFindNodes(ID key, List<Contact> contacts)
@@ -199,8 +202,8 @@ namespace Clifton.Kademlia
         }
 
         /// <summary>
-        /// For each contact, call the FindNodes and return all the nodes whose contacts responded
-        /// within a "reasonable" period of time.
+        /// For each contact, call the FindNode and return all the nodes whose contacts responded
+        /// within a "reasonable" period of time, unless a value is returned, at which point we stop.
         /// </summary>
         public (List<Contact> contacts, string val) RpcFindValue(ID key, List<Contact> contacts)
         {

@@ -10,43 +10,43 @@ namespace Clifton.Kademlia
         public BigInteger Value { get { return id; } }
 #endif
 
-		// Zero-pad msb's if ToByteArray length != Constants.LENGTH_BYTES
-		// The array returned is in little-endian order (lsb at index 0)
-		public byte[] Bytes
-		{
-			get
-			{
-				byte[] bytes = new byte[Constants.ID_LENGTH_BYTES];
-				byte[] partial = id.ToByteArray().Take(Constants.ID_LENGTH_BYTES).ToArray();    // remove msb 0 at index 20.
-				partial.CopyTo(bytes, 0);
+        // Zero-pad msb's if ToByteArray length != Constants.LENGTH_BYTES
+        // The array returned is in little-endian order (lsb at index 0)
+        public byte[] Bytes
+        {
+            get
+            {
+                byte[] bytes = new byte[Constants.ID_LENGTH_BYTES];
+                byte[] partial = id.ToByteArray().Take(Constants.ID_LENGTH_BYTES).ToArray();    // remove msb 0 at index 20.
+                partial.CopyTo(bytes, 0);
 
-				return bytes;
-			}
-		}
+                return bytes;
+            }
+        }
 
         public string AsBigEndianString
         {
             get { return String.Join("", Bytes.Bits().Reverse().Select(b => b ? "1" : "0")); } }
 
-		/// <summary>
-		/// Produce a random ID distributed evenly across the 160 bit space.
-		/// </summary>
-		public static ID RandomIDInKeySpace
-		{
-			get
-			{
-				byte[] data = new byte[Constants.ID_LENGTH_BYTES];
-				ID id = new ID(data);
-				// Uniform random bucket index.
-				int idx = rnd.Next(Constants.ID_LENGTH_BITS);
-				// 0 <= idx <= 159
-				// Remaining bits are randomized to get unique ID.
-				id.SetBit(idx);
-				id = id.RandomizeBeyond(idx);
+        /// <summary>
+        /// Produce a random ID distributed evenly across the 160 bit space.
+        /// </summary>
+        public static ID RandomIDInKeySpace
+        {
+            get
+            {
+                byte[] data = new byte[Constants.ID_LENGTH_BYTES];
+                ID id = new ID(data);
+                // Uniform random bucket index.
+                int idx = rnd.Next(Constants.ID_LENGTH_BITS);
+                // 0 <= idx <= 159
+                // Remaining bits are randomized to get unique ID.
+                id.SetBit(idx);
+                id = id.RandomizeBeyond(idx);
 
-				return id;
-			}
-		}
+                return id;
+            }
+        }
 
         /// <summary>
         /// Produce a random ID.
@@ -63,6 +63,17 @@ namespace Clifton.Kademlia
         }
 
         public static ID Zero { get { return new ID(new byte[Constants.ID_LENGTH_BYTES]); } }
+
+        public static ID One
+        {
+            get
+            {
+                byte[] data = new byte[Constants.ID_LENGTH_BYTES];
+                data[0] = 0x01;
+
+                return new ID(data);
+            }
+        }
 
         public static ID Mid
         {

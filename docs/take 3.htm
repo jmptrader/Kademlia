@@ -168,6 +168,12 @@ http://www.barsoom.org/papers/infocom-2006-kad.pdf</a> </p>
 	of particular concern because you can use this to degrade the performance of 
 	a peer, as discussed
 	<a href="#Breaking_Kademlia">here</a>.</li>
+	<li>Our peer tampering with a value when it propagates the value to other 
+	peers.&nbsp; This can be remedied by including a public key to ensure the 
+	value hasn't been changed.&nbsp; And while it's strange to say &quot;our peer&quot;, 
+	it becomes an issue when you download a peer application and you have no 
+	idea what's going on inside -- and even if you had the source, would you 
+	look, and know where to look?</li>
 </ul>
 <h3>What is Accomplished Here</h3>
 <p>The goal in this article is to:</p>
@@ -200,6 +206,10 @@ private static Random rnd = new Random();
 <p>At some point I might put more work into improving the unit tests and 
 removing the random ID key generation, except for the distribution tests of 
 course.</p>
+<p>Also, most of these unit tests are really system-level tests, or at least 
+partial system tests.&nbsp; Actual unit tests of specific code sections in a 
+particular method, well, it gets inane rather quickly.&nbsp; So you'll see a lot 
+of setup stuff being done in the higher level tests. </p>
 <h2>Key Concepts</h2>
 <p>The Kademlia specification essentially consists of several sub-algorithms:</p>
 <ol>
@@ -1835,7 +1845,16 @@ minimal virtual protocol:</p>
 <h3>Virtual Node/Protocol</h3>
 <pre>public class VirtualProtocol : IProtocol
 {
+  public Node Node { get { return node; } set { node = value; } }
+
   protected Node node;
+
+  /// &lt;summary&gt;
+  /// For unit testing with deferred node setup.
+  /// &lt;/summary&gt;
+  public VirtualProtocol()
+  {
+  }
 
   /// &lt;summary&gt;
   /// Register the in-memory node with our virtual protocol.
@@ -2281,7 +2300,10 @@ public (List&lt;Contact&gt; contacts, string val) RpcFindValue(ID key, List&lt;C
 }</pre>
 <p>After making these structural changes and refactoring the unit tests, they 
 still pass (well, that should be expected, as these changes were really only 
-structural.)</p>
+structural.)&nbsp; </p>
+<p><img border="0" src="note.png" width="24" height="32"> Discussing value 
+lookup tests doesn't make sense outside of the context of the <code>Dht</code> wrapper, so 
+the unit tests for the value lookup will be done in the <code>Dht</code> testing.</p>
 <h2>Value Lookup - Implementation</h2>
 <p>First, we need to implement a simple virtual (in memory) storage mechanism:</p>
 <pre>public class VirtualStorage : IStorage
@@ -2343,11 +2365,20 @@ public (List&lt;Contact&gt; contacts, string val) FindValue(Contact sender, ID k
     return (bucketList.GetCloseContacts(key, sender.ID), null);
   }
 }</pre>
-<h2>Value Lookup - Unit Tests</h2>
 <h2>The Dht Class - Discussion</h2>
 <p>We use a wrapper <code>Dht</code> class, which will 
 become the main entry point for <i>our</i> peer, for interacting with <i>other</i> 
-peers:</p>
+peers.&nbsp; The main purpose of this class is:</p>
+<ol>
+	<li>When storing a value, use the lookup algorithm to find other closer 
+	peers to propagate the key-value.</li>
+<li>When looking up a value, if our peer doesn't have the value, we again use 
+the lookup algorithm to find other closer nodes that might have the value.</li>
+	<li>Later we'll add a bootstrapping method that registers our peer with 
+	another peer and initializes our bucket list with that peer's closest 
+	contacts.</li>
+</ol>
+<h2>The Dht Class - Implementation</h2>
 <pre>public class Dht
 {
 #if DEBUG // for unit testing
@@ -2376,26 +2407,174 @@ peers:</p>
 
   public (bool found, List&lt;Contact&gt; contacts, string val) FindValue(ID key)
   {
-    string ourval;
+    string ourVal;
+    List&lt;Contact&gt; contactsQueried = new List&lt;Contact&gt;();
+    (bool found, List&lt;Contact&gt; contacts, string val) ret = (false, null, null);
 
     // If we have it, return with our value.
-    if (storage.TryGetValue(key, out ourval))
+    if (storage.TryGetValue(key, out ourVal))
     {
-      return (true, null, ourval);
+      ret = (true, null, ourVal);
+    }
+    else
+    {
+      ret = LookupValue(key);
+
+      if (ret.found)
+      {
+        node.Cache(key, ret.val);
+      }
     }
 
+    return ret;
+  }
+
+#if DEBUG // For unit testing
+  public (bool found, List&lt;Contact&gt; contacts, string val) LookupValue(ID key)
+#else
+  protected (bool found, List&lt;Contact&gt; contacts, string val) LookupValue(ID key)
+#endif
+  {
     var (contacts, val) = router.Lookup(key, router.RpcFindValue);
     var found = contacts == null;
-
-    if (found)
-    {
-      node.Cache(key, val);
-    }
 
     return (found, contacts, val);
   }
 }</pre>
+<h2>The Dht Class - Unit Tests</h2>
+<h3>LocalStoreFoundValueTest</h3>
+<p>To get started, let's just make sure we can set/get values in our local store 
+with an empty bucket list.</p>
+<pre>[TestMethod]
+public void LocalStoreFoundValueTest()
+{
+  VirtualProtocol vp = new VirtualProtocol();
+  Dht dht = new Dht(ID.RandomID, vp, new VirtualStorage());
+  vp.Node = dht.Router.Node;
+  ID key = ID.RandomID;
+  string val = &quot;Test&quot;;
+  dht.Store(key, val);
+  string retval = dht.FindValue(key).val;
+  Assert.IsTrue(retval == val, &quot;Expected to get back what we stored&quot;);
+}</pre>
+<h3>ValueStoredInCloserNodeTest</h3>
+<p>This test creates a single contact and stores the value in that contact.&nbsp; 
+We set up the ID's so that the contact's ID is less (XOR metric) than our peer's 
+ID, and we use a key of ID.Zero to prevent further complexities when computing 
+the distance.&nbsp; Note that we also verify that the value is cached in our 
+local store after finding it in another node.&nbsp; Most of the code here is to 
+set up the conditions to make this test!</p>
+<pre>[TestMethod]
+public void ValueStoredInCloserNodeTest()
+{
+  VirtualProtocol vp1 = new VirtualProtocol();
+  VirtualProtocol vp2 = new VirtualProtocol();
+  VirtualStorage store1 = new VirtualStorage();
+  VirtualStorage store2 = new VirtualStorage();
+
+  // Ensures that all nodes are closer, because ID.Max ^ n &lt; ID.Max when n &gt; 0.
+  Dht dht = new Dht(ID.Max, vp1, store1);
+  vp1.Node = dht.Router.Node;
+
+  ID contactID = ID.Mid; // a closer contact.
+  Contact otherContact = new Contact(vp2, contactID);
+  Node otherNode = new Node(otherContact, store2);
+  vp2.Node = otherNode;
+
+  // Add this other contact to our peer list.
+  dht.Router.Node.BucketList.AddContact(otherContact);
+
+  // We want an integer distance, not an XOR distance.
+  ID key = ID.Zero;
+
+  // Set the value in the other node, to be discovered by the lookup process.
+  string val = &quot;Test&quot;;
+  otherNode.Cache(key, val);
+
+  Assert.IsFalse(store1.Contains(key), &quot;Expected our peer to NOT have cached the key-value.&quot;);
+
+  // Try and find the value, given our Dht knows about the other contact.
+  string retval = dht.FindValue(key).val;
+
+  Assert.IsTrue(retval == val, &quot;Expected to get back what we stored&quot;);
+  Assert.IsTrue(store1.Contains(key), &quot;Expected our peer to have cached the key-value.&quot;);
+}</pre>
+<h3>ValueFoundInFartherNodeTest</h3>
+<p>We can change the setup of the ID's and verify that the we find the value in 
+a farther node.</p>
+<pre>[TestMethod]
+public void ValueStoredInFartherNodeTest()
+{
+  VirtualProtocol vp1 = new VirtualProtocol();
+  VirtualProtocol vp2 = new VirtualProtocol();
+  VirtualStorage store1 = new VirtualStorage();
+  VirtualStorage store2 = new VirtualStorage();
+
+  // Ensures that all nodes are closer, because ID.Max ^ n &lt; ID.Max when n &gt; 0.
+  Dht dht = new Dht(ID.Zero, vp1, store1);
+  vp1.Node = dht.Router.Node;
+
+  ID contactID = ID.Max; // a closer contact.
+  Contact otherContact = new Contact(vp2, contactID);
+  Node otherNode = new Node(otherContact, store2);
+  vp2.Node = otherNode;
+
+  // Add this other contact to our peer list.
+  dht.Router.Node.BucketList.AddContact(otherContact);
+
+  // We want an integer distance, not an XOR distance.
+  ID key = ID.One;
+
+  // Set the value in the other node, to be discovered by the lookup process.
+  string val = &quot;Test&quot;;
+  otherNode.Cache(key, val);
+
+  Assert.IsFalse(store1.Contains(key), &quot;Expected our peer to NOT have cached the key-value.&quot;);
+
+  // Try and find the value, given our Dht knows about the other contact.
+  string retval = dht.FindValue(key).val;
+
+  Assert.IsTrue(retval == val, &quot;Expected to get back what we stored&quot;);
+  Assert.IsTrue(store1.Contains(key), &quot;Expected our peer to have cached the key-value.&quot;);
+}</pre>
+<h3>ValueStoredGetsPropagatedTest</h3>
+<p>Here we test that when we store a value to our peer, it gets propagated to 
+another peer that our peer knows about:</p>
+<pre>[TestMethod]
+public void ValueStoredGetsPropagatedTest()
+{
+  VirtualProtocol vp1 = new VirtualProtocol();
+  VirtualProtocol vp2 = new VirtualProtocol();
+  VirtualStorage store1 = new VirtualStorage();
+  VirtualStorage store2 = new VirtualStorage();
+
+  // Ensures that all nodes are closer, because ID.Max ^ n &lt; ID.Max when n &gt; 0.
+  Dht dht = new Dht(ID.Max, vp1, store1);
+  vp1.Node = dht.Router.Node;
+
+  ID contactID = ID.Mid; // a closer contact.
+  Contact otherContact = new Contact(vp2, contactID);
+  Node otherNode = new Node(otherContact, store2);
+  vp2.Node = otherNode;
+
+  // Add this other contact to our peer list.
+  dht.Router.Node.BucketList.AddContact(otherContact);
+
+  // We want an integer distance, not an XOR distance.
+  ID key = ID.Zero;
+  string val = &quot;Test&quot;;
+
+  Assert.IsFalse(store1.Contains(key), &quot;Obviously we don't have the key-value yet.&quot;);
+  Assert.IsFalse(store2.Contains(key), &quot;And equally obvious, our peer doesn't have the key-value yet either.&quot;);
+
+  dht.Store(key, val);
+
+  Assert.IsTrue(store1.Contains(key), &quot;Expected our peer to have cached the key-value.&quot;);
+  Assert.IsTrue(store2.Contains(key), &quot;Expected our peer to have cached the key-value.&quot;);
+}</pre>
 <p>&nbsp;</p>
+<p>&nbsp;</p>
+<h2>The Dht - Bootstrapping</h2>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>

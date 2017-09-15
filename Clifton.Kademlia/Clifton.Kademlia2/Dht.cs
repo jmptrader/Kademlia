@@ -30,21 +30,36 @@ namespace Clifton.Kademlia
 
         public (bool found, List<Contact> contacts, string val) FindValue(ID key)
         {
-            string ourval;
+            string ourVal;
+            List<Contact> contactsQueried = new List<Contact>();
+            (bool found, List<Contact> contacts, string val) ret = (false, null, null);
 
             // If we have it, return with our value.
-            if (storage.TryGetValue(key, out ourval))
+            if (storage.TryGetValue(key, out ourVal))
             {
-                return (true, null, ourval);
+                ret = (true, null, ourVal);
+            }
+            else
+            {
+                ret = LookupValue(key);
+
+                if (ret.found)
+                {
+                    node.Cache(key, ret.val);
+                }
             }
 
+            return ret;
+        }
+
+#if DEBUG       // For unit testing
+        public (bool found, List<Contact> contacts, string val) LookupValue(ID key)
+#else
+        protected (bool found, List<Contact> contacts, string val) LookupValue(ID key)
+#endif
+        {
             var (contacts, val) = router.Lookup(key, router.RpcFindValue);
             var found = contacts == null;
-
-            if (found)
-            {
-                node.Cache(key, val);
-            }
 
             return (found, contacts, val);
         }
