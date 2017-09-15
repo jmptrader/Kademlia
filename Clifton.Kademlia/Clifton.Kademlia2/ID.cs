@@ -160,9 +160,13 @@ namespace Clifton.Kademlia
         /// Little endian randomization of of an ID beyond the specified (little endian) bit number.
         /// The optional parameter forceBit1 is for our unit tests.
         /// </summary>
-		protected ID RandomizeBeyond(int bit, int minLsb = 0, bool forceBit1 = false)
-		{
-			byte[] randomized = Bytes;
+#if DEBUG
+        public ID RandomizeBeyond(int bit, int minLsb = 0, bool forceBit1 = false)
+#else
+        protected ID RandomizeBeyond(int bit, int minLsb = 0, bool forceBit1 = false)
+#endif
+        {
+            byte[] randomized = Bytes;
 
 			ID newid = new ID(randomized);
 

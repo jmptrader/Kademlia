@@ -1,4 +1,4 @@
-﻿using System;
+﻿using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using Clifton.Kademlia;
@@ -124,6 +124,106 @@ namespace UnitTests2
 
             Assert.IsTrue(store1.Contains(key), "Expected our peer to have stored the key-value.");
             Assert.IsTrue(store2.Contains(key), "Expected the other peer to have stored the key-value.");
+        }
+
+        [TestMethod]
+        public void BootstrapWithinBootstrappingBucketTest()
+        {
+            // We need 22 virtual protocols.  One for the bootstrap peer,
+            // 10 for the nodes the bootstrap peer knows about, and 10 for the nodes
+            // one of those nodes knows about, and one for us to rule them all.
+            VirtualProtocol[] vp = new VirtualProtocol[22];
+            22.ForEach((i) => vp[i] = new VirtualProtocol());
+
+            // Us
+            Dht dhtUs = new Dht(ID.RandomID, vp[0], null);
+            vp[0].Node = dhtUs.Router.Node;
+
+            // Our bootstrap peer
+            Dht dhtBootstrap = new Dht(ID.RandomID, vp[1], null);
+            vp[1].Node = dhtBootstrap.Router.Node;
+            Node n = null;
+
+            // Out boostrapper knows 10 contacts
+            10.ForEach((i) =>
+            {
+                Contact c = new Contact(vp[i + 2], ID.RandomID);
+                n = new Node(c, null);
+                vp[i + 2].Node = n;
+                dhtBootstrap.Router.Node.BucketList.AddContact(c);
+            });
+
+            // One of those nodes, in this case the last one we added to our bootstrapper
+            // for convenience, knows about 10 other contacts.
+            10.ForEach((i) =>
+            {
+                Contact c = new Contact(vp[i + 12], ID.RandomID);
+                Node n2 = new Node(c, null);
+                vp[i + 12].Node = n;
+                n.BucketList.AddContact(c);     // Note we're adding these contacts to the 10th node.
+            });
+
+            dhtUs.Bootstrap(dhtBootstrap.Router.Node.OurContact);
+
+            Assert.IsTrue(dhtUs.Router.Node.BucketList.Buckets.Sum(c => c.Contacts.Count) == 11, "Expected our peer to get 11 contacts.");
+        }
+
+
+        [TestMethod]
+        public void BootstrapOutsideBootstrappingBucketTest()
+        {
+            // We need 32 virtual protocols.  One for the bootstrap peer,
+            // 20 for the nodes the bootstrap peer knows about, 10 for the nodes
+            // one of those nodes knows about, and one for us to rule them all.
+            VirtualProtocol[] vp = new VirtualProtocol[32];
+            32.ForEach((i) => vp[i] = new VirtualProtocol());
+
+            // Us, ID doesn't matter.
+            Dht dhtUs = new Dht(ID.RandomID, vp[0], null);
+            vp[0].Node = dhtUs.Router.Node;
+
+            // Our bootstrap peer
+            // All ID's are < 2^159
+            Dht dhtBootstrap = new Dht(ID.Zero.RandomizeBeyond(Constants.ID_LENGTH_BITS - 1), vp[1], null);
+            vp[1].Node = dhtBootstrap.Router.Node;
+            Node n = null;
+
+            // Out boostrapper knows 20 contacts
+            20.ForEach((i) =>
+            {
+                ID id;
+
+                // All ID's are < 2^159 except the last one, which is >= 2^159
+                // which will force a bucket split for _us_
+                if (i < 19)
+                {
+                    id = ID.Zero.RandomizeBeyond(Constants.ID_LENGTH_BITS - 1);
+                }
+                else
+                {
+                    id = ID.Max;
+                }
+
+                Contact c = new Contact(vp[i + 2], id);
+                n = new Node(c, null);
+                vp[i + 2].Node = n;
+                dhtBootstrap.Router.Node.BucketList.AddContact(c);
+            });
+
+            // One of those nodes, in this case specifically the last one we added to our bootstrapper
+            // so that it isn't in the bucket of our bootstrapper, we add 10 contacts.  The ID's of
+            // those contacts don't matter.
+            10.ForEach((i) =>
+            {
+                Contact c = new Contact(vp[i + 22], ID.RandomID);
+                Node n2 = new Node(c, null);
+                vp[i + 22].Node = n;
+                n.BucketList.AddContact(c);     // Note we're adding these contacts to the 10th node.
+            });
+
+            dhtUs.Bootstrap(dhtBootstrap.Router.Node.OurContact);
+
+            Assert.IsTrue(dhtUs.Router.Node.BucketList.Buckets.Sum(c => c.Contacts.Count) == 31, "Expected our peer to have 31 contacts.");
         }
     }
 }

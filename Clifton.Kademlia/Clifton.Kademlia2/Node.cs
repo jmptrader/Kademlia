@@ -19,10 +19,10 @@ namespace Clifton.Kademlia
         {
         }
 
-        public Node(Contact us, IStorage storage)
+        public Node(Contact contact, IStorage storage)
         {
-            ourContact = us;
-            bucketList = new BucketList(us.ID);
+            ourContact = contact;
+            bucketList = new BucketList(contact.ID);
             this.storage = storage;
         }
 

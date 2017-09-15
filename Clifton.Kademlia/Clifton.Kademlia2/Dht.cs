@@ -38,7 +38,7 @@ namespace Clifton.Kademlia
             contacts.ForEach(c => node.BucketList.AddContact(c));
             KBucket knownPeerBucket = node.BucketList.Buckets.Single(b => b.HasInRange(knownPeer.ID));
             // Resolve the list now, so we don't include additional contacts as we add to our bucket additional contacts.
-            var otherBuckets = node.BucketList.Buckets.Where(b => b != knownPeerBucket);
+            var otherBuckets = node.BucketList.Buckets.Where(b => b != knownPeerBucket).ToList();
 
             foreach (KBucket otherBucket in otherBuckets)
             {
