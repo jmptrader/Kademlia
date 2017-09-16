@@ -6,23 +6,35 @@ namespace UnitTests2
 {
     public class VirtualProtocol : IProtocol
     {
-        public Node Node { get { return node; } set { node = value; } }
-
-        protected Node node;
+        public Node Node { get; set; }
+        public bool Responds { get; set; }
 
         /// <summary>
         /// For unit testing with deferred node setup.
         /// </summary>
-        public VirtualProtocol()
+        public VirtualProtocol(bool responds = true)
         {
+            Responds = responds;
         }
 
         /// <summary>
         /// Register the in-memory node with our virtual protocol.
         /// </summary>
-        public VirtualProtocol(Node node)
+        public VirtualProtocol(Node node, bool responds = true)
         {
-            this.node = node;
+            Node = node;
+            Responds = responds;
+        }
+
+        public bool Ping(Contact sender)
+        {
+            // Ping still adds/updates the sender's contact.
+            if (Responds)
+            {
+                Node.Ping(sender);
+            }
+
+            return Responds;
         }
 
         /// <summary>
@@ -30,7 +42,7 @@ namespace UnitTests2
         /// </summary>
         public List<Contact> FindNode(Contact sender, ID key)
         {
-            return node.FindNode(sender, key).contacts;
+            return Node.FindNode(sender, key).contacts;
         }
 
         /// <summary>
@@ -38,7 +50,7 @@ namespace UnitTests2
         /// </summary>
         public (List<Contact> contacts, string val) FindValue(Contact sender, ID key)
         {
-            return node.FindValue(sender, key);
+            return Node.FindValue(sender, key);
         }
 
         /// <summary>
@@ -46,7 +58,7 @@ namespace UnitTests2
         /// </summary>
         public void Store(Contact sender, ID key, string val)
         {
-            node.Store(sender, key, val);
+            Node.Store(sender, key, val);
         }
     }
 }

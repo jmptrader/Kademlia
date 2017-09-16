@@ -4,6 +4,7 @@ namespace Clifton.Kademlia
 {
     public interface IProtocol
     {
+        bool Ping(Contact sender);
         List<Contact> FindNode(Contact sender, ID key);
         (List<Contact> contacts, string val) FindValue(Contact sender, ID key);
         void Store(Contact sender, ID key, string val);

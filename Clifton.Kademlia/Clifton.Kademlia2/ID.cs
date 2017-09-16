@@ -157,6 +157,7 @@ namespace Clifton.Kademlia
         /// <summary>
         /// Little endian randomization of of an ID beyond the specified (little endian) bit number.
         /// The optional parameter forceBit1 is for our unit tests.
+        /// This CLEARS bits from bit+1 to ID_LENGTH_BITS!
         /// </summary>
 #if DEBUG
         public ID RandomizeBeyond(int bit, int minLsb = 0, bool forceBit1 = false)
@@ -189,21 +190,27 @@ namespace Clifton.Kademlia
 		/// <summary>
 		/// Clears the bit n, from the little-endian LSB.
 		/// </summary>
-		public void ClearBit(int n)
+		public ID ClearBit(int n)
 		{
 			byte[] bytes = Bytes;
 			bytes[n / 8] &= (byte)((1 << (n % 8)) ^ 0xFF);
 			id = new BigInteger(bytes.Append0());
-		}
+
+            // for continuations.
+            return this;
+        }
 
         /// <summary>
         /// Sets the bit n, from the little-endian LSB.
         /// </summary>
-        public void SetBit(int n)
+        public ID SetBit(int n)
 		{
 			byte[] bytes = Bytes;
 			bytes[n / 8] |= (byte)(1 << (n % 8));
 			id = new BigInteger(bytes.Append0());
+
+            // for continuations.
+            return this;
 		}
 	}
 }

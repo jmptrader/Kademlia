@@ -9,14 +9,28 @@ namespace Clifton.Kademlia
 
         protected List<KBucket> buckets;
         protected ID ourID;
+        protected Contact ourContact;
+
+#if DEBUG       // For unit testing
+        public BucketList(ID id, Contact dummyContact)
+        {
+            ourID = id;
+            ourContact = dummyContact;
+            buckets = new List<KBucket>();
+
+            // First kbucket has max range.
+            buckets.Add(new KBucket());
+        }
+#endif
 
         /// <summary>
         /// Initialize the bucket list with our host ID and create a single bucket for the full ID range.
         /// </summary>
         /// <param name="ourID"></param>
-        public BucketList(ID ourID)
+        public BucketList(Contact ourContact)
         {
-            this.ourID = ourID;
+            this.ourContact = ourContact;
+            ourID = ourContact.ID;
             buckets = new List<KBucket>();
 
             // First kbucket has max range.
@@ -52,8 +66,14 @@ namespace Clifton.Kademlia
 				}
 				else
 				{
-					// TODO: Ping the oldest contact to see if it's still 
-					// around and replace it if not.
+                    Contact lastSeenContact = kbucket.Contacts.OrderBy(c => c.LastSeen).First();
+                    bool stillUp = lastSeenContact.Protocol.Ping(ourContact);
+
+                    if (!stillUp)
+                    {
+                        kbucket.EvictContact(lastSeenContact);
+                        kbucket.AddContact(contact);
+                    }
 				}
 			}
 			else

@@ -2806,7 +2806,23 @@ public void BootstrapOutsideBootstrappingBucketTest()
 
   Assert.IsTrue(dhtUs.Router.Node.BucketList.Buckets.Sum(c =&gt; c.Contacts.Count) == 31, &quot;Expected our peer to have 31 contacts.&quot;);
 }</pre>
-<p>&nbsp;</p>
+<h2>Bucket Management, Part I</h2>
+<p>We should now address this in the <code>AddContact</code> method:</p>
+<pre>// TODO: Ping the oldest contact to see if it's still 
+// around and replace it if not.
+</pre>
+<p>In our VirtualProtocol, we'll simulate a node that doesn't respond:</p>
+<pre>public bool Ping(Contact sender)
+{
+  // Ping still adds/updates the sender's contact.
+  if (Responds)
+  {
+    node.Ping(sender);
+  }
+
+  return Responds;
+}</pre>
+<p>We can then implement the handling of a non-responsive node:</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>

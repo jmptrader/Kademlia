@@ -6,6 +6,7 @@ namespace Clifton.Kademlia
     {
         public IProtocol Protocol { get; set; }
         public DateTime LastSeen { get; protected set; }
+
         public ID ID { get; protected set; }
 
         /// <summary>

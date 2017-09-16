@@ -67,6 +67,11 @@ namespace Clifton.Kademlia
             contacts.Add(contact);
         }
 
+        public void EvictContact(Contact contact)
+        {
+            contacts.Remove(contact);
+        }
+
 		/// <summary>
 		/// Replaces the contact with the new contact, thus updating the LastSeen and network addressinfo. 
 		/// </summary>
