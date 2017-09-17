@@ -130,7 +130,7 @@ namespace UnitTests2
             Assert.IsTrue(router.FartherContacts.Count == Constants.K, "All contacts should be farther.");
         }
 
-        [TestMethod]
+        [TestMethod, Ignore]
         public void GetCloserNodesTest()
         {
             // Seed with different random values
@@ -150,7 +150,7 @@ namespace UnitTests2
             });
         }
 
-        [TestMethod]
+        [TestMethod, Ignore]
         public void LookupTest()
         {
             // Seed with different random values

@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 
@@ -6,6 +7,7 @@ namespace Clifton.Kademlia
 {
     public class KBucket
     {
+        public DateTime TimeStamp { get; protected set; }
         public List<Contact> Contacts { get { return contacts; } }
         public BigInteger Low { get { return low; } }
         public BigInteger High { get { return high; } }
@@ -39,6 +41,11 @@ namespace Clifton.Kademlia
             contacts = new List<Contact>();
             this.low = low;
             this.high = high;
+        }
+
+        public void Touch()
+        {
+            TimeStamp = DateTime.Now;
         }
 
 		/// <summary>

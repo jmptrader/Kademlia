@@ -88,13 +88,9 @@ namespace Clifton.Kademlia
 			return kbucket.HasInRange(ourID) || ((kbucket.Depth() % Constants.B) != 0);
 		}
 
-#if DEBUG
         public KBucket GetKBucket(ID otherID)
-#else
-        protected KBucket GetKBucket(ID otherID)
-#endif
         {
-            return buckets[buckets.FindIndex(b => b.HasInRange(otherID))];
+            return buckets[GetKBucketIndex(otherID)];
 		}
 
 		protected int GetKBucketIndex(ID otherID)

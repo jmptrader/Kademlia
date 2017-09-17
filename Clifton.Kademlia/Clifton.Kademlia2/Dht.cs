@@ -1,5 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Timers;
 
 namespace Clifton.Kademlia
 {
@@ -15,6 +17,7 @@ namespace Clifton.Kademlia
         protected Node node;
         protected Contact ourContact;
         protected ID ourId;
+        protected Timer bucketRefreshTimer;
 
         public Dht(ID id, IProtocol protocol, IStorage storage)
         {
@@ -25,31 +28,30 @@ namespace Clifton.Kademlia
             router = new Router(node);
         }
 
-        /// <summary>
+/// <summary>
         /// Bootstrap our peer by contacting another peer, adding its contacts
         /// to our list, then getting the contacts for other peers not in the
         /// bucket range of our known peer we're joining.
         /// </summary>
-        /// <param name="knownPeer"></param>
         public void Bootstrap(Contact knownPeer)
         {
             node.BucketList.AddContact(knownPeer);
             List<Contact> contacts = knownPeer.Protocol.FindNode(ourContact, ourId);
             contacts.ForEach(c => node.BucketList.AddContact(c));
-            KBucket knownPeerBucket = node.BucketList.Buckets.Single(b => b.HasInRange(knownPeer.ID));
+            KBucket knownPeerBucket = node.BucketList.GetKBucket(knownPeer.ID);
             // Resolve the list now, so we don't include additional contacts as we add to our bucket additional contacts.
             var otherBuckets = node.BucketList.Buckets.Where(b => b != knownPeerBucket).ToList();
-
+            otherBuckets.ForEach(b => RefreshBucket(b));
             foreach (KBucket otherBucket in otherBuckets)
             {
-                ID rndId = ID.RandomIDWithinBucket(otherBucket);
-                List<Contact> contactsFurtherAway = otherBucket.Contacts.ToList();
-                contactsFurtherAway.ForEach(c => c.Protocol.FindNode(ourContact, rndId).ForEach(otherContact => node.BucketList.AddContact(otherContact)));
+                RefreshBucket(otherBucket);
             }
         }
 
         public void Store(ID key, string val)
         {
+            TouchBucketWithKey(key);
+
             // We're storing to ourselves as well as k closer contacts.
             storage.Set(key, val);
             List<Contact> contacts = router.Lookup(key, router.RpcFindNodes).contacts;
@@ -58,6 +60,8 @@ namespace Clifton.Kademlia
 
         public (bool found, List<Contact> contacts, string val) FindValue(ID key)
         {
+            TouchBucketWithKey(key);
+
             string ourVal;
             List<Contact> contactsQueried = new List<Contact>();
             (bool found, List<Contact> contacts, string val) ret = (false, null, null);
@@ -90,6 +94,35 @@ namespace Clifton.Kademlia
             var found = contacts == null;
 
             return (found, contacts, val);
+        }
+
+        protected void TouchBucketWithKey(ID key)
+        {
+            node.BucketList.GetKBucket(key).Touch();
+        }
+
+        protected void SetupBucketRefreshTimer()
+        {
+            bucketRefreshTimer = new Timer(Constants.BUCKET_REFRESH_INTERVAL);
+            bucketRefreshTimer.AutoReset = true;
+            bucketRefreshTimer.Elapsed += BucketRefreshTimerElapsed;
+            bucketRefreshTimer.Start();
+        }
+
+        private void BucketRefreshTimerElapsed(object sender, ElapsedEventArgs e)
+        {
+            node.BucketList.Buckets.
+                Where(b => (DateTime.Now - b.TimeStamp).TotalMilliseconds >= Constants.BUCKET_REFRESH_INTERVAL).
+                ForEach(b => RefreshBucket(b));
+        }
+
+        protected void RefreshBucket(KBucket bucket)
+        {
+            bucket.Touch();
+            ID rndId = ID.RandomIDWithinBucket(bucket);
+            // Isolate in a separate list as contacts collection for this bucket might change.
+            List<Contact> contacts = bucket.Contacts.ToList();
+            contacts.ForEach(c => c.Protocol.FindNode(ourContact, rndId).ForEach(otherContact => node.BucketList.AddContact(otherContact)));
         }
     }
 }

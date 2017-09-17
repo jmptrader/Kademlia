@@ -2643,7 +2643,6 @@ public static ID RandomIDWithinBucket(KBucket bucket, bool forceBit1 = false)
 /// to our list, then getting the contacts for other peers not in the
 /// bucket range of our known peer we're joining.
 /// &lt;/summary&gt;
-/// &lt;param name=&quot;knownPeer&quot;&gt;&lt;/param&gt;
 public void Bootstrap(Contact knownPeer)
 {
   node.BucketList.AddContact(knownPeer);
@@ -2652,13 +2651,15 @@ public void Bootstrap(Contact knownPeer)
   KBucket knownPeerBucket = node.BucketList.Buckets.Single(b =&gt; b.HasInRange(knownPeer.ID));
   // Resolve the list now, so we don't include additional contacts as we add to our bucket additional contacts.
   var otherBuckets = node.BucketList.Buckets.Where(b =&gt; b != knownPeerBucket);
+  otherBuckets.ForEach(b =&gt; RefreshBucket(b));
+}
 
-  foreach (KBucket otherBucket in otherBuckets)
-  {
-    ID rndId = ID.RandomIDWithinBucket(otherBucket);
-    List&lt;Contact&gt; contactsFurtherAway = otherBucket.Contacts.ToList();
-    contactsFurtherAway.ForEach(c =&gt; c.Protocol.FindNode(ourContact, rndId).ForEach(otherContact =&gt; node.BucketList.AddContact(otherContact)));
-  }
+protected void RefreshBucket(KBucket bucket)
+{
+  ID rndId = ID.RandomIDWithinBucket(bucket);
+  // Isolate in a separate list as contacts collection for this bucket might change.
+  List&lt;Contact&gt; contacts = bucket.Contacts.ToList();
+  contacts.ForEach(c =&gt; c.Protocol.FindNode(ourContact, rndId).ForEach(otherContact =&gt; node.BucketList.AddContact(otherContact)));
 }</pre>
 <h2>The Dht - Bootstrapping Unit Tests</h2>
 <h3>RandomWithinBucketTests</h3>
@@ -2806,7 +2807,8 @@ public void BootstrapOutsideBootstrappingBucketTest()
 
   Assert.IsTrue(dhtUs.Router.Node.BucketList.Buckets.Sum(c =&gt; c.Contacts.Count) == 31, &quot;Expected our peer to have 31 contacts.&quot;);
 }</pre>
-<h2>Bucket Management, Part I</h2>
+<h2>Bucket Management</h2>
+<h3>Evicting Unresponsive Contacts In Full Buckets</h3>
 <p>We should now address this in the <code>AddContact</code> method:</p>
 <pre>// TODO: Ping the oldest contact to see if it's still 
 // around and replace it if not.
@@ -2823,51 +2825,316 @@ public void BootstrapOutsideBootstrappingBucketTest()
   return Responds;
 }</pre>
 <p>We can then implement the handling of a non-responsive node:</p>
+<pre>if (CanSplit(kbucket))
+{
+  // Split the bucket and try again.
+  (KBucket k1, KBucket k2) = kbucket.Split();
+  int idx = GetKBucketIndex(contact.ID);
+  buckets[idx] = k1;
+  buckets.Insert(idx + 1, k2);
+  AddContact(contact);
+}
+else
+{
+  Contact lastSeenContact = kbucket.Contacts.OrderBy(c =&gt; c.LastSeen).Last();
+  bool stillUp = lastSeenContact.Protocol.Ping(ourContact);
+
+  if (!stillUp)
+  {
+    kbucket.EvictContact(lastSeenContact);
+    kbucket.AddContact(contact);
+  }
+}</pre>
+<p><img border="0" src="unittest.png" width="14" height="32"> The unit test for 
+this is straight forward -- we create a virtual node that simulates not 
+responding.&nbsp; </p>
+<p><img border="0" src="note.png" width="24" height="32"> Note how we're setting 
+up the contacts to force a split failure, so that we trigger the part of the 
+code that checks for non-responding contacts.</p>
+<pre>[TestMethod]
+public void NonRespondingContactTest()
+{
+  Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
+  ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, null);
+
+  BucketList bucketList = SetupSplitFailure();
+
+  Assert.IsTrue(bucketList.Buckets.Count == 2, &quot;Bucket split should have occurred.&quot;);
+  Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, &quot;Expected 1 contact in bucket 0.&quot;);
+  Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, &quot;Expected 20 contacts in bucket 1.&quot;);
+
+  // The bucket is now full. Pick the first contact, as it is last seen (they are added in chronological order.)
+  Contact nonRespondingContact = bucketList.Buckets[1].Contacts[0];
+
+  // Since the protocols are shared, we need to assign a unique protocol for this node for testing.
+  VirtualProtocol vpUnresponding = new VirtualProtocol(((VirtualProtocol)nonRespondingContact.Protocol).Node, false);
+  nonRespondingContact.Protocol = vpUnresponding;
+
+  // Setup the next new contact (it can respond.)
+  Contact nextNewContact = new Contact(dummyContact.Protocol, ID.Zero.SetBit(159));
+
+  bucketList.AddContact(nextNewContact);
+
+  Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, &quot;Expected 20 contacts in bucket 1.&quot;);
+
+  // Verify CanSplit -&gt; Evict happened.
+  Assert.IsFalse(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nonRespondingContact), &quot;Expected bucket to NOT contain non-responding contact.&quot;);
+  Assert.IsTrue(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nextNewContact), &quot;Expected bucket to contain new contact.&quot;);
+}</pre>
+<h3>Bucket Refresh</h3>
+<p>From the spec: <font color="#FF00FF">Buckets are generally kept fresh by the 
+traffic of requests traveling through nodes. To handle pathological cases in 
+which there are no lookups for a particular ID range, each node refreshes any 
+bucket to which it has not performed a node lookup in the past hour. Refreshing 
+means picking a random ID in the bucket’s range and performing a node search for 
+that ID.</font></p>
+<h4>Ambiguity #11</h4>
+<p>The phrase &quot;any bucket to which it has not performed a node lookup&quot; is 
+subject to interpretation.&nbsp; One way to interpret this is possibly &quot;the 
+bucket whose range contains the key in the key-value pair for a Store or 
+FindValue operation.&nbsp; Another interpretation is: the k-bucket containing 
+the range for any contact ID queried during 
+during the lookup process.&nbsp; This second approach might seem more correct 
+because&nbsp;the original alpha contacts is determined from the list of closest 
+contacts across all buckets, but it then becomes arbitrary as to whether to also touch 
+the buckets containing the contacts returned by the FindNodes query that are 
+then queried further.&nbsp; Therefore, I am choosing the first interpretation, which 
+means that the bucket gets touched based on the Store and FindValue key:</p>
+<pre>public void Store(ID key, string val)
+{
+  TouchBucketWithKey(key);
+  ...
+}
+
+public (bool found, List&lt;Contact&gt; contacts, string val) FindValue(ID key)
+{
+  TouchBucketWithKey(key);
+  ...
+}
+
+protected void TouchBucketWithKey(ID key)
+{
+  node.BucketList.GetKBucket(key).Touch();
+}</pre>
+<p>Then we set up a simple refresh timer in the <code>Dht</code> class:</p>
+<pre>protected void SetupBucketRefreshTimer()
+{
+  bucketRefreshTimer = new Timer(Constants.BUCKET_REFRESH_INTERVAL);
+  bucketRefreshTimer.AutoReset = true;
+  bucketRefreshTimer.Elapsed += BucketRefreshTimerElapsed;
+  bucketRefreshTimer.Start();
+}
+
+private void BucketRefreshTimerElapsed(object sender, ElapsedEventArgs e)
+{
+  node.BucketList.Buckets.
+  Where(b =&gt; (DateTime.Now - b.TimeStamp).TotalMilliseconds &gt;= Constants.BUCKET_REFRESH_INTERVAL).
+  ForEach(b =&gt; RefreshBucket(b));
+}
+
+protected void RefreshBucket(KBucket bucket)
+{
+  bucket.Touch();
+  ID rndId = ID.RandomIDWithinBucket(bucket);
+  // Isolate in a separate list as contacts collection for this bucket might change.
+  List&lt;Contact&gt; contacts = bucket.Contacts.ToList();
+  contacts.ForEach(c =&gt; c.Protocol.FindNode(ourContact, rndId).ForEach(otherContact =&gt; node.BucketList.AddContact(otherContact)));
+}</pre>
+<p><img border="0" src="note.png" width="24" height="32">Note that now when a 
+bucket is refreshed, it is always touched, which updates its last seen 
+timestamp:</p>
+<pre>public void Touch()
+{
+  TimeStamp = DateTime.Now;
+}</pre>
+<h2>Key-Value Management</h2>
+<p><font color="#FF00FF">When a new node joins the system, it must store any 
+key-value pair to which it is one of the k closest. Existing nodes, by similarly 
+exploiting complete knowledge of their surrounding subtrees, will know which 
+key-value pairs the new node should store. Any node learning of a new node 
+therefore issues STORE RPCs to transfer relevant key-value pairs to the new 
+node. To avoid redundant STORE RPCs, however, a node only transfers a key-value 
+pair if it’s own ID is closer to the key than are the IDs of other nodes.</font></p>
+<p>From wikipedia:</p>
+<p>&quot;Periodically, a node that stores a value will explore the network to find 
+the k nodes that are close to the key value and replicate the value onto them. 
+This compensates for disappeared nodes.&quot;</p>
+<p>and...</p>
+<p>&quot;Also, for popular values that might have many requests, the load in the 
+storer nodes is diminished by having a retriever store this value in some node 
+near, but outside of, the k closest ones.&nbsp; This allows popular searches to 
+find a storer more quickly. Because the value is returned from nodes farther 
+away from the key, this alleviates possible &quot;hot spots&quot;. Caching nodes will drop 
+the value after a certain time depending on their distance from the key.&quot;</p>
+<p>and...</p>
+<p>&quot;The node that is providing the file [value] will periodically refresh the 
+information onto the network (perform FIND_NODE and STORE messages). When all of 
+the nodes having the file go offline, nobody will be refreshing its values 
+(sources and keywords) and the information will eventually disappear from the 
+network.&quot;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <h2>Thread Safety</h2>
 <h2>Some Enhancements</h2>
 <h3>Operator Overloading of the ID Class</h3>
+<h2>Not Implemented</h2>
+<h3>Delayed Eviction (Optimized Contact Accounting)</h3>
+<p><font color="#FF00FF">To reduce traffic, Kademlia delays probing contacts 
+until it has useful messages to send them. When a Kademlia node receives an RPC 
+from an unknown contact and the k-bucket for that contact is already full with 
+<i>k</i> entries, the node places the new contact in a replacement cache of 
+nodes eligible to replace stale k-bucket entries. The next time the node queries 
+contacts in the k-bucket, any unresponsive ones can be evicted and replaced with 
+entries in the replacement cache. The replacement cache is kept sorted by time 
+last seen, with the most recently seen entry having the highest priority as a 
+replacement candidate.</font></p>
+<h3>UDP Drop Outs</h3>
+<p><font color="#FF00FF">A related problem is that because Kademlia uses UDP, 
+valid contacts will sometimes fail to respond when network packets are dropped. 
+Since packet loss often indicates network congestion, Kademlia locks 
+unresponsive contacts and avoids sending them any further RPCs for an 
+exponentially increasing backoff interval. Because at most stages Kademlia’s 
+lookup only needs to hear from one of k nodes, the system typically does not 
+retransmit dropped RPCs to the same node.</font></p>
+<p>&nbsp;</p>
+<font When a contact fails to respond to 5 RPCs in a row, it 
+is considered stale. If a fe-bucket is not full or its replacement cache is 
+empty, Kademlia merely flags stale contacts rather than remove them. This 
+ensures, among other things, that if a node’s own network connection goes down 
+temporarily, the node won’t completely void all of its k-buckets.</font>
+<h3>Accelerated Lookups</h3>
+</font><font color="#FF00FF"When a contact fails to respond to 5 RPCs in a row, it 
+is considered stale. If a fe-bucket is not full or its replacement cache is 
+empty, Kademlia merely flags stale contacts rather than remove them. This 
+ensures, among other things, that if a node’s own network connection goes down 
+temporarily, the node won’t completely void all of its k-buckets.</font>
+<p><font color="#FF00FF">Another optimization in the implementation is to 
+achieve fewer hops per lookup by increasing the routing table size. 
+Conceptually, this is done by considering IDs 6 bits at a time instead of just 
+one bit at a time. As previously described, the expected number of hops per 
+lookup is log2 n. By increasing the routing table’s size to an expected 2b log2t 
+n k-buckets, we can reduce the number of expected hops to log2&amp; n.</font></p>
+</font>
+<font When a contact fails to respond to 5 RPCs in a row, it 
+is considered stale. If a fe-bucket is not full or its replacement cache is 
+empty, Kademlia merely flags stale contacts rather than remove them. This 
+ensures, among other things, that if a node’s own network connection goes down 
+temporarily, the node won’t completely void all of its k-buckets.</font>
+<h3>Key-Value Expiration Times</h3>
+</font><font color="#FF00FF"When a contact fails to respond to 5 RPCs in a row, it 
+is considered stale. If a fe-bucket is not full or its replacement cache is 
+empty, Kademlia merely flags stale contacts rather than remove them. This 
+ensures, among other things, that if a node’s own network connection goes down 
+temporarily, the node won’t completely void all of its k-buckets.</font>
+<p><font color="#FF00FF">Because of the unidirectionality of the topology, 
+future searches for the same key are likely to hit cached entries before 
+querying the closest node. During times of high popularity for a certain key, 
+the system might end up caching it at many nodes. To avoid “over-caching,” we 
+make the expiration time of a (key,value) pair in any node’s database 
+exponentially inversely proportional to the number of nodes between the current 
+node and the node whose ID is closest to the key ID.</font></p>
+</font>
+<font When a contact fails to respond to 5 RPCs in a row, it 
+is considered stale. If a fe-bucket is not full or its replacement cache is 
+empty, Kademlia merely flags stale contacts rather than remove them. This 
+ensures, among other things, that if a node’s own network connection goes down 
+temporarily, the node won’t completely void all of its k-buckets.</font>
+<h3>Key Re-Publishing</h3>
+</font><font color="#FF00FF"When a contact fails to respond to 5 RPCs in a row, it 
+is considered stale. If a fe-bucket is not full or its replacement cache is 
+empty, Kademlia merely flags stale contacts rather than remove them. This 
+ensures, among other things, that if a node’s own network connection goes down 
+temporarily, the node won’t completely void all of its k-buckets.</font>
+<p><font color="#FF00FF">To ensure the persistence of key-value pairs, nodes 
+must periodically republish keys. Otherwise, two phenomena may cause lookups for 
+valid keys to fail. First, some of the k nodes that initially get a key-value 
+pair when it is published may leave the network. Second, new nodes may join the 
+network with IDs closer to some published key than the nodes on which the 
+key-value pair was originally published. In both cases, the nodes with a 
+key-value pair must republish it so as once again to ensure it is available on 
+the k nodes closest to the key.</font></p>
+</font>
+<font When a contact fails to respond to 5 RPCs in a row, it 
+is considered stale. If a fe-bucket is not full or its replacement cache is 
+empty, Kademlia merely flags stale contacts rather than remove them. This 
+ensures, among other things, that if a node’s own network connection goes down 
+temporarily, the node won’t completely void all of its k-buckets.</font>
+<h4>Optimization</h4>
+</font><font color="#FF00FF"When a contact fails to respond to 5 RPCs in a row, it 
+is considered stale. If a fe-bucket is not full or its replacement cache is 
+empty, Kademlia merely flags stale contacts rather than remove them. This 
+ensures, among other things, that if a node’s own network connection goes down 
+temporarily, the node won’t completely void all of its k-buckets.</font>
+<p><font color="#FF00FF">To compensate for nodes leaving the network, Kademlia 
+republishes each key-value pair once an hour. A naive implementation of this 
+strategy would require many messages—each of up to k nodes storing a key-value 
+pair would perform a node lookup followed by k — 1 STORE RPCs every hour.&nbsp; 
+First, when a node receives a STORE RPC for a given key-value pair, it assumes 
+the RPC was also issued to the other k — 1 closest nodes, and thus the recipient 
+will not republish the key-value pair in the next hour. This ensures that as 
+long as republieation intervals are not exactly synchronized, only one node will 
+republish a given key-value pair every hour.</font></p>
+<p><font color="#FF00FF">A second optimization avoids performing node lookups 
+before republishing keys. As described in Section 2.4, to handle unbalanced 
+trees, nodes split k- buckots as required to ensure they have complete knowledge 
+of a surrounding subtree with at least k nodes. If, before republishing 
+key-value pairs, a node u refreshes all fc-buckots in this subtree of k nodes, 
+it will automatically be able to figure out the k closest nodes to a given key. 
+These bucket refreshes can be amortized over the republication of many keys.<br>
+To see why a node lookup is unnecessary after u refreshes buckets in the 
+sub¬tree of size &gt; k, it is necessary to consider two cases. If the key being 
+republished falls in the ID range of the subtree, then since the subtree is of 
+size at least k and u has complete knowledge of the subtree, clearly u must know 
+the k closest nodes to the key. If, on the other hand, the key lies outside the 
+subtree, yet u was one of the k closest nodes to the key, it must follow that 
+M’S fc-buckots for intervals closer to the key than the subtree all have fewer 
+than k entries. Hence, u will know all nodes in these fc-buckets, which together 
+with knowledge of the subtree will include the k closest nodes to the key.</font></p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <h2>&nbsp;</h2>
-<h2>References</h2>
-<p><sup>1</sup> -
+<h2>Referencess</h2>
+<p>[1] -
 <a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
 http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>
 </p>
-<p><sup>2</sup> -
+<p>[2] -
 <a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia">
 https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia</a></p>
-<p><sup>3</sup> -
+<p>[3] -
 <a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE">
 http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html</a></p>
-<p><sup>4</sup> -
+<p>[4] -
 <a href="https://github.com/bmuller/kademlia">
 https://github.com/bmuller/kademlia</a></p>
 
-<p><sup>5</sup> - <a href="https://en.wikipedia.org/wiki/Smart_contract">
+<p>[5] - <a href="https://en.wikipedia.org/wiki/Smart_contract">
 https://en.wikipedia.org/wiki/Smart_contract</a></p>
-<p><sup>6</sup> -
+<p>[6] -
 <a href="http://sandhill.com/article/is-data-decentralization-the-new-trend/">
 http://sandhill.com/article/is-data-decentralization-the-new-trend/</a></p>
-<p><sup>7</sup> - <a href="https://arxiv.org/pdf/1506.03471.pdf">
+<p>[7] - <a href="https://arxiv.org/pdf/1506.03471.pdf">
 https://arxiv.org/pdf/1506.03471.pdf</a></p>
-<p><sup>8</sup> - <a href="https://en.wikipedia.org/wiki/BitTorrent">
+<p>[8] - <a href="https://en.wikipedia.org/wiki/BitTorrent">
 https://en.wikipedia.org/wiki/BitTorrent</a></p>
-<p><sup>9</sup> - <a href="https://en.wikipedia.org/wiki/Kad_network">
+<p>[9] - <a href="https://en.wikipedia.org/wiki/Kad_network">
 https://en.wikipedia.org/wiki/Kad_network</a></p>
-<p><sup>10</sup> - <a href="https://en.wikipedia.org/wiki/Chord_(peer-to-peer)">https://en.wikipedia.org/wiki/Chord_(peer-to-peer)</a> </p>
-<p><sup>11</sup> - <a href="https://en.wikipedia.org/wiki/Pastry_(DHT)">https://en.wikipedia.org/wiki/Pastry_(DHT)</a> </p>
-<p><sup>12</sup> -
+<p>[10] - <a href="https://en.wikipedia.org/wiki/Chord_(peer-to-peer)">https://en.wikipedia.org/wiki/Chord_(peer-to-peer)</a> </p>
+<p>[11] - <a href="https://en.wikipedia.org/wiki/Pastry_(DHT)">https://en.wikipedia.org/wiki/Pastry_(DHT)</a> </p>
+<p>[12] -
 <a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html">
 https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html</a> </p>
 
-<p>13 -
+<p>[13] -
 <a href="https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table">
 https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table</a></p>
-<p>14 -
+<p>[14] -
 <a href="https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170">
 https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170</a></p>
 <p>&nbsp;</p>

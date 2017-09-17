@@ -186,19 +186,6 @@ namespace UnitTests2
             Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, "Expected 1 contact in bucket 0.");
             Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, "Expected 20 contacts in bucket 1.");
 
-            // This next contact should not split the bucket as depth == 5 and therefore adding the contact will fail.
-            // Any unique ID >= 2^159 will do.
-            byte[] id = new byte[20];
-            id[19] = 0x80;
-            Contact newContact = new Contact(dummyContact.Protocol, new ID(id));
-            bucketList.AddContact(newContact);
-
-            Assert.IsTrue(bucketList.Buckets.Count == 2, "Bucket split should not have occurred.");
-            Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, "Expected 1 contact in bucket 0.");
-            Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, "Expected 20 contacts in bucket 1.");
-
-            Assert.IsFalse(bucketList.Buckets[1].Contacts.Contains(newContact), "Expected new contact NOT to replace an older contact.");
-
             // The bucket is now full.  Pick the first contact, as it is last seen (they are added in chronological order.)
             Contact nonRespondingContact = bucketList.Buckets[1].Contacts[0];
 
@@ -206,12 +193,11 @@ namespace UnitTests2
             VirtualProtocol vpUnresponding = new VirtualProtocol(((VirtualProtocol)nonRespondingContact.Protocol).Node, false);
             nonRespondingContact.Protocol = vpUnresponding;
 
-            // Adding another contact should evict the contact that isn't responding.
-            // This contact needs a specific prefix the ensure that it doesn't trigger the depth %5 = 0 case.
-            // |----| shared range
-            // 1000 1xxx ...
-            Contact nextNewContact = new Contact(dummyContact.Protocol, ID.Zero.RandomizeBeyond(155).SetBit(159).SetBit(155));
+            // Setup the next new contact (it can respond.)
+            Contact nextNewContact = new Contact(dummyContact.Protocol, ID.Zero.SetBit(159));
+
             bucketList.AddContact(nextNewContact);
+
             Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, "Expected 20 contacts in bucket 1.");
 
             // Verify CanSplit -> Evict happened.
