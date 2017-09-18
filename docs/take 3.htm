@@ -2972,9 +2972,12 @@ pair if it’s own ID is closer to the key than are the IDs of other nodes.</font>
 	XOR'd the ID's of other nodes.</li>
 </ol>
 <h4>Ambiguity #12</h4>
-<p>What does &quot;ID's of other nodes&quot; mean?&nbsp; Are these the ID's of all other 
+<p>What does &quot;other nodes&quot; mean?&nbsp; Are these all other 
 contacts the bootstrapping node knows about, or just the <i>k</i> closest 
-contacts in the joining node's bucket, or some other determination?&nbsp; It 
+contacts in the joining node's bucket, or some other determination?&nbsp; We 
+have to understand what &quot;exploiting complete knowledge of their surrounding 
+subtrees&quot; means.&nbsp; First, this indicates that it isn't just the joining 
+node's bucket.&nbsp; It 
 would make sense to say &quot;store the values onto the joining node for any 
 key-value where the joining node will be closer to that key, because the joining 
 node now becomes the closer node to those key-values.</p>
@@ -3066,6 +3069,26 @@ network with IDs closer to some published key than the nodes on which the
 key-value pair was originally published. In both cases, the nodes with a 
 key-value pair must republish it so as once again to ensure it is available on 
 the k nodes closest to the key.</font> </p>
+<p>
+<font color="#FF00FF" When a contact fails to respond 5 RPCs in row, it is considered stale. If fe-bucket not full or its replacement cache empty, Kademlia merely flags stale contacts rather than remove them. This ensures, among other things, that node’s own network connection goes down temporarily, the node won’t completely void all of k-buckets.</font>To compensate for nodes leaving the network, Kademlia 
+republishes each key-value pair once an hour. A naive implementation of this 
+strategy would require many messages—each of up to k nodes storing a key-value 
+pair would perform a node lookup followed by k — 1 STORE RPCs every hour.&nbsp; 
+</font></p>
+<h4>Optimizations</h4>
+<p><font color="#FF00FF">Fortunately, the republishing process can be heavily 
+optimized. First, when a node receives a STORE RPC for a given key-value pair, 
+it assumes the RPC was also issued to the other k — 1 closest nodes, and thus 
+the recipient will not republish the key-value pair in the next hour. This 
+ensures that as long as republication intervals are not exactly synchronized, 
+only one node will republish a given key-value pair every hour.&nbsp; A second 
+optimization avoids performing node lookups before republishing keys. As 
+described in Section 2.4, to handle unbalanced trees, nodes split k-buckets as 
+required to ensure they have complete knowledge of a surrounding subtree with at 
+least k nodes. If, before republishing key-value pairs, a node <i>u</i> 
+refreshes all k-buckets in this subtree of k nodes, it will automatically be 
+able to figure out the k closest nodes to a given key. These bucket refreshes 
+can be amortized over the republication of many keys.</font></p>
 <p>From wikipedia:</p>
 <p>&quot;Periodically, a node that stores a value will explore the network to find 
 the k nodes that are close to the key value and replicate the value onto them. 
@@ -3078,9 +3101,9 @@ the nodes having the file go offline, nobody will be refreshing its values
 network.&quot;</p>
 <p>The wikipedia write-up clarifies what is meant by &quot;on the k nodes closest to 
 the key&quot; - in other words, for each key, a FindNode is called to find closer 
-nodes and the value is republished.&nbsp; Again, this can be a time consuming 
-process if there's a lot of key-values in a node's store, which is addressed in 
-an optimization later.</p>
+nodes and the value is republished.&nbsp; Without the optimizations, this can be 
+a time consuming process if there's a lot of key-values in a node's store, which 
+is addressed in an optimization later.</p>
 <h3>Key Republishing - Implementation</h3>
 <p>&nbsp;</p>
 <h3>Caching Popular Key-Values</h3>
@@ -3171,43 +3194,6 @@ empty, Kademlia merely flags stale contacts rather than remove them. This
 ensures, among other things, that if a node’s own network connection goes down 
 temporarily, the node won’t completely void all of its k-buckets.</font>
 <p>&nbsp;</p>
-</font>
-<font When a contact fails to respond to 5 RPCs in a row, it 
-is considered stale. If a fe-bucket is not full or its replacement cache is 
-empty, Kademlia merely flags stale contacts rather than remove them. This 
-ensures, among other things, that if a node’s own network connection goes down 
-temporarily, the node won’t completely void all of its k-buckets.</font>
-<h4>Optimization</h4>
-</font><font color="#FF00FF"When a contact fails to respond to 5 RPCs in a row, it 
-is considered stale. If a fe-bucket is not full or its replacement cache is 
-empty, Kademlia merely flags stale contacts rather than remove them. This 
-ensures, among other things, that if a node’s own network connection goes down 
-temporarily, the node won’t completely void all of its k-buckets.</font>
-<p><font color="#FF00FF">To compensate for nodes leaving the network, Kademlia 
-republishes each key-value pair once an hour. A naive implementation of this 
-strategy would require many messages—each of up to k nodes storing a key-value 
-pair would perform a node lookup followed by k — 1 STORE RPCs every hour.&nbsp; 
-First, when a node receives a STORE RPC for a given key-value pair, it assumes 
-the RPC was also issued to the other k — 1 closest nodes, and thus the recipient 
-will not republish the key-value pair in the next hour. This ensures that as 
-long as republieation intervals are not exactly synchronized, only one node will 
-republish a given key-value pair every hour.</font></p>
-<p><font color="#FF00FF">A second optimization avoids performing node lookups 
-before republishing keys. As described in Section 2.4, to handle unbalanced 
-trees, nodes split k- buckots as required to ensure they have complete knowledge 
-of a surrounding subtree with at least k nodes. If, before republishing 
-key-value pairs, a node u refreshes all fc-buckots in this subtree of k nodes, 
-it will automatically be able to figure out the k closest nodes to a given key. 
-These bucket refreshes can be amortized over the republication of many keys.<br>
-To see why a node lookup is unnecessary after u refreshes buckets in the 
-sub¬tree of size &gt; k, it is necessary to consider two cases. If the key being 
-republished falls in the ID range of the subtree, then since the subtree is of 
-size at least k and u has complete knowledge of the subtree, clearly u must know 
-the k closest nodes to the key. If, on the other hand, the key lies outside the 
-subtree, yet u was one of the k closest nodes to the key, it must follow that 
-M’S fc-buckots for intervals closer to the key than the subtree all have fewer 
-than k entries. Hence, u will know all nodes in these fc-buckets, which together 
-with knowledge of the subtree will include the k closest nodes to the key.</font></p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
@@ -3253,6 +3239,8 @@ https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-k
 <a href="https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170">
 https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170</a></p>
 <p>&nbsp;</p>
+
+</font>
 
 </body>
 
