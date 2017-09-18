@@ -13,6 +13,7 @@ namespace Clifton.Kademlia
 
     public interface IStorage : IEnumerable<BigInteger>
     {
+        bool HasValues { get; }
         bool Contains(ID key);
         bool TryGetValue(ID key, out string val);
         string Get(ID key);

@@ -98,9 +98,20 @@ namespace Clifton.Kademlia
             if (!bucketList.ContactExists(sender))
             {
                 // and our distance to the key < any other contact's distance to the key...
-                storage.
-                    Where(k => (k ^ ourContact.ID.Value) < bucketList.Buckets.SelectMany(b => b.Contacts).Min(c => k ^ c.ID.Value)).
-                    ForEach(k => sender.Protocol.Store(ourContact, new ID(k), storage.Get(k)));   // send it to the new contact.
+                storage.ForEach(k =>
+                {
+                    var contacts = bucketList.Buckets.SelectMany(b => b.Contacts);
+
+                    if (contacts.Count() > 0)
+                    {
+                        var distance = contacts.Min(c => k ^ c.ID.Value);
+
+                        if ((k ^ ourContact.ID.Value) < distance)
+                        {
+                            sender.Protocol.Store(ourContact, new ID(k), storage.Get(k));   // send it to the new contact.
+                        }
+                    }
+                });
             }
         }
     }

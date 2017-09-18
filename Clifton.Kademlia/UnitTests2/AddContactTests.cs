@@ -20,7 +20,7 @@ namespace UnitTests2
 		public void UniqueIDAddTest()
 		{
             Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
-            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, null);
+            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
             BucketList bucketList = new BucketList(ID.RandomIDInKeySpace, dummyContact);
 			Constants.K.ForEach(() => bucketList.AddContact(new Contact(null, ID.RandomIDInKeySpace)));
 			Assert.IsTrue(bucketList.Buckets.Count == 1, "No split should have taken place.");
@@ -31,7 +31,7 @@ namespace UnitTests2
 		public void DuplicateIDTest()
 		{
             Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
-            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, null);
+            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
             BucketList bucketList = new BucketList(ID.RandomIDInKeySpace, dummyContact);
 			ID id = ID.RandomIDInKeySpace;
 			bucketList.AddContact(new Contact(null, id));
@@ -44,7 +44,7 @@ namespace UnitTests2
 		public void BucketSplitTest()
 		{
             Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
-            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, null);
+            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
             BucketList bucketList = new BucketList(ID.RandomIDInKeySpace, dummyContact);
 			Constants.K.ForEach(() => bucketList.AddContact(new Contact(null, ID.RandomIDInKeySpace)));
 			bucketList.AddContact(new Contact(null, ID.RandomIDInKeySpace));
@@ -58,7 +58,7 @@ namespace UnitTests2
         public void ForceFailedAddTest()
         {
             Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
-            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, null);
+            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
 
             BucketList bucketList = SetupSplitFailure();
 
@@ -85,7 +85,7 @@ namespace UnitTests2
 		public void RandomIDDistributionTest()
 		{
             Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
-            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, null);
+            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
             Random rnd = new Random();
 			byte[] buffer = new byte[20];
 			List<int> contactsAdded = new List<int>();
@@ -113,7 +113,7 @@ namespace UnitTests2
 		public void RandomPrefixDistributionTest()
 		{
             Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
-            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, null);
+            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
             List<int> contactsAdded = new List<int>();
 
 			100.ForEach(() =>
@@ -134,7 +134,7 @@ namespace UnitTests2
 		public void DistributionTestForEachPrefix()
 		{
             Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
-            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, null);
+            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
             Random rnd = new Random();
 			StringBuilder sb = new StringBuilder();
 			byte[] buffer = new byte[20];
@@ -160,7 +160,7 @@ namespace UnitTests2
 		public void DistributionTestForEachPrefixWithRandomPrefixDistributedContacts()
 		{
             Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
-            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, null);
+            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
             StringBuilder sb = new StringBuilder();
 
 			160.ForEach((i) =>
@@ -178,7 +178,7 @@ namespace UnitTests2
         public void NonRespondingContactTest()
         {
             Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
-            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, null);
+            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
 
             BucketList bucketList = SetupSplitFailure();
 
@@ -259,27 +259,28 @@ namespace UnitTests2
 
         protected BucketList SetupSplitFailure()
         {
-            Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
-            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, null);
-
             // force host node ID to < 2^159 so the node ID is not in the 2^159 ... 2^160 range
-            byte[] hostID = new byte[20];
-            hostID[19] = 0x7F;
-            BucketList bucketList = new BucketList(new ID(hostID), dummyContact);
+            byte[] bhostID = new byte[20];
+            bhostID[19] = 0x7F;
+            ID hostID = new ID(bhostID);
+
+            Contact dummyContact = new Contact(new VirtualProtocol(), hostID);
+            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
+            BucketList bucketList = new BucketList(hostID, dummyContact);
 
             // Also add a contact in this 0 - 2^159 range, arbitrarily something not our host ID.
             // This ensures that only one bucket split will occur after 20 nodes with ID >= 2^159 are added,
             // otherwise, buckets will in the 2^159 ... 2^160 space.
-            byte[] id = new byte[20];
-            id[0] = 1;
-            bucketList.AddContact(new Contact(dummyContact.Protocol, new ID(id)));
+            dummyContact = new Contact(new VirtualProtocol(), ID.One);
+            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
+            bucketList.AddContact(new Contact(dummyContact.Protocol, ID.One));
 
             Assert.IsTrue(bucketList.Buckets.Count == 1, "Bucket split should not have occurred.");
             Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, "Expected 1 contact in bucket 0.");
 
             // make sure contact ID's all have the same 5 bit prefix and are in the 2^159 ... 2^160 - 1 space
-            byte[] contactID = new byte[20];
-            contactID[19] = 0x80;
+            byte[] bcontactID = new byte[20];
+            bcontactID[19] = 0x80;
             // 1000 xxxx prefix, xxxx starts at 1000 (8)
             // this ensures that all the contacts in a bucket match only the prefix as only the first 5 bits are shared.
             // |----| shared range
@@ -291,8 +292,11 @@ namespace UnitTests2
 
             Constants.K.ForEach(() =>
             {
-                contactID[pos] |= shifter;
-                bucketList.AddContact(new Contact(dummyContact.Protocol, new ID(contactID)));
+                bcontactID[pos] |= shifter;
+                ID contactID = new ID(bcontactID);
+                dummyContact = new Contact(new VirtualProtocol(), ID.One);
+                ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
+                bucketList.AddContact(new Contact(dummyContact.Protocol, contactID));
                 shifter >>= 1;
 
                 if (shifter == 0)

@@ -31,10 +31,10 @@ namespace UnitTests2
         public void NoNodesToQueryTest()
         {
             // Setup
-            router = new Router(new Node(new Contact(null, ID.Mid), null));
+            router = new Router(new Node(new Contact(null, ID.Mid), new VirtualStorage()));
 
             nodes = new List<Node>();
-            20.ForEach((n) => nodes.Add(new Node(new Contact(null, new ID(BigInteger.Pow(new BigInteger(2), n))), null)));
+            20.ForEach((n) => nodes.Add(new Node(new Contact(null, new ID(BigInteger.Pow(new BigInteger(2), n))), new VirtualStorage())));
 
             // Fixup protocols:
             nodes.ForEach(n => n.OurContact.Protocol = new VirtualProtocol(n));
@@ -52,7 +52,7 @@ namespace UnitTests2
 
             closerContacts = new List<Contact>();
             fartherContacts = new List<Contact>();
-            router.GetCloserNodes(key, router.RpcFindNodes, contactsToQuery, closerContacts, fartherContacts, out var _);
+            router.GetCloserNodes(key, router.RpcFindNodes, contactsToQuery, closerContacts, fartherContacts, out var _, out var _);
 
             Assert.IsTrue(closerContacts.Count == 0, "No new nodes expected.");
             Assert.IsTrue(fartherContacts.Count == 0, "No new nodes expected.");
@@ -68,10 +68,10 @@ namespace UnitTests2
         {
             // Setup
             // By selecting our node ID to zero, we ensure that all distances of other nodes are > the distance to our node.
-            router = new Router(new Node(new Contact(null, ID.Max), null));
+            router = new Router(new Node(new Contact(null, ID.Max), new VirtualStorage()));
 
             nodes = new List<Node>();
-            Constants.K.ForEach((n) => nodes.Add(new Node(new Contact(null, new ID(BigInteger.Pow(new BigInteger(2), n))), null)));
+            Constants.K.ForEach((n) => nodes.Add(new Node(new Contact(null, new ID(BigInteger.Pow(new BigInteger(2), n))), new VirtualStorage())));
 
             // Fixup protocols:
             nodes.ForEach(n => n.OurContact.Protocol = new VirtualProtocol(n));
@@ -104,10 +104,10 @@ namespace UnitTests2
         {
             // Setup
             // By selecting our node ID to zero, we ensure that all distances of other nodes are > the distance to our node.
-            router = new Router(new Node(new Contact(null, ID.Zero), null));
+            router = new Router(new Node(new Contact(null, ID.Zero), new VirtualStorage()));
 
             nodes = new List<Node>();
-            Constants.K.ForEach((n) => nodes.Add(new Node(new Contact(null, new ID(BigInteger.Pow(new BigInteger(2), n))), null)));
+            Constants.K.ForEach((n) => nodes.Add(new Node(new Contact(null, new ID(BigInteger.Pow(new BigInteger(2), n))), new VirtualStorage())));
 
             // Fixup protocols:
             nodes.ForEach(n => n.OurContact.Protocol = new VirtualProtocol(n));
@@ -139,7 +139,7 @@ namespace UnitTests2
                 ID.rnd = new Random(seed);
                 Setup();
 
-                router.GetCloserNodes(key, router.RpcFindNodes, contactsToQuery, closerContacts, fartherContacts, out var _);
+                router.GetCloserNodes(key, router.RpcFindNodes, contactsToQuery, closerContacts, fartherContacts, out var _, out var _);
 
                 // Test whether the results are correct:  
 
@@ -181,10 +181,10 @@ namespace UnitTests2
         protected void Setup()
         {
             // Setup
-            router = new Router(new Node(new Contact(null, ID.RandomID), null));
+            router = new Router(new Node(new Contact(null, ID.RandomID), new VirtualStorage()));
 
             nodes = new List<Node>();
-            100.ForEach(() => nodes.Add(new Node(new Contact(null, ID.RandomID), null)));
+            100.ForEach(() => nodes.Add(new Node(new Contact(null, ID.RandomID), new VirtualStorage())));
 
             // Fixup protocols:
             nodes.ForEach(n => n.OurContact.Protocol = new VirtualProtocol(n));

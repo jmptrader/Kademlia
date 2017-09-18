@@ -9,6 +9,8 @@ namespace UnitTests2
 {
     public class VirtualStorage : IStorage
     {
+        public bool HasValues { get { return store.Count > 0; } }
+
         protected Dictionary<BigInteger, string> store;
 
         public VirtualStorage()

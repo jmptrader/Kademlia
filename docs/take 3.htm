@@ -2215,9 +2215,18 @@ observed to the key that did not return the value.</font></p>
 operations are implemented in terms of the above lookup procedure.</font>&quot;&nbsp; 
 When we're performing a lookup, the initiator will be using the lookup call for 
 both finding nodes and finding values.&nbsp; If it's finding values, it needs to 
-stop if/when the value is found.&nbsp; We need to some refactoring to pass in 
-the RPC call that we want to make, and how we handle a found value for the 
-FindValue RPC call.</p>
+stop if/when the value is found.&nbsp; </p>
+<h3>Ambiguity #12</h3>
+<p>&nbsp;This statement: <font color="#FF00FF">For caching purposes, once a 
+lookup succeeds, the requesting node stores the (key,value) pair at the closest node it 
+observed to the key that did not return the value.</font> can be ambiguous -- 
+what does &quot;requesting node&quot; mean?&nbsp; Is it the requesting performing the 
+lookup, or the node that made the GetValue request?&nbsp; It would seem to be 
+the former, because &quot;it observed to the key that did not return the value&quot; would 
+otherwise not make any sense.</p>
+<h3>Refactorings</h3>
+<p>We need to some refactoring to pass in 
+the RPC call that we want to make, and how we handle a found value for the FindValue RPC call.</p>
 <h4>Refactoring the Router.Lookup Method</h4>
 <p>We have some major refactoring to do to how lookups are performed.&nbsp; The 
 signature of the Lookup method changes so that:</p>
@@ -2257,46 +2266,52 @@ List&lt;Contact&gt; peersNodes = contacts.ExceptBy(node.OurContact, c =&gt; c.ID
 ...
 return val != null;</pre>
 <h4>Refactoring the RpcFindNodes Method</h4>
-<p>A slight change here, in that we know we're finding only nodes, but we need a 
+<p>A minor change here (also handling something we haven't talked about yet), in that we know we're finding only nodes, but we need a 
 unified return with <code>RpcFindValue</code>.&nbsp; Notice the method is now 
 public so that the Dht (discussed later) and our unit tests can specify the 
 appropriate RPC call.</p>
-<pre>public (List&lt;Contact&gt; contacts, string val) RpcFindNodes(ID key, List&lt;Contact&gt; contacts)
+<pre>public (List&lt;Contact&gt; contacts, Contact foundBy, string val) RpcFindNodes(ID key, List&lt;Contact&gt; contacts)
 {
-List&lt;Contact&gt; nodes = new List&lt;Contact&gt;();
-contacts.ForEach(c =&gt; nodes.AddRange(c.Protocol.FindNode(Node.OurContact, key)));
+  List&lt;Contact&gt; nodes = new List&lt;Contact&gt;();
+  contacts.ForEach(c =&gt; nodes.AddRange(c.Protocol.FindNode(node.OurContact, key)));
 
-return (nodes, null);
+  return (nodes, null, null);
 }
 </pre>
-<h4>Adding the RpcFindValue Method</h4>
+<h3>Adding the RpcFindValue Method</h3>
+<p>The <code>foundBy</code> tuple field will be illustrated later when we talk about the Dht 
+class.</p>
 <pre> /// &lt;summary&gt;
 /// For each contact, call the FindNode and return all the nodes whose contacts responded
 /// within a &quot;reasonable&quot; period of time, unless a value is returned, at which point we stop.
 /// &lt;/summary&gt;
-public (List&lt;Contact&gt; contacts, string val) RpcFindValue(ID key, List&lt;Contact&gt; contacts)
+public (List&lt;Contact&gt; contacts, Contact foundBy, string val) RpcFindValue(ID key, List&lt;Contact&gt; contacts)
 {
   List&lt;Contact&gt; nodes = new List&lt;Contact&gt;();
   string retval = null;
+  Contact foundBy = null;
 
   foreach(Contact c in contacts)
   {
-   (var otherContacts, var val) = c.Protocol.FindValue(Node.OurContact, key);
+    (var otherContacts, var val) = c.Protocol.FindValue(node.OurContact, key);
 
-   if (otherContacts != null)
-   {
-     nodes.AddRange(otherContacts);
-   }
-   else
-   {
-     Validate.IsTrue&lt;ValueCannotBeNullException&gt;(val != null, &quot;Null values are not supported nor expected.&quot;);
-     retval = val;
-     break;
+    if (otherContacts != null)
+    {
+      nodes.AddRange(otherContacts);
+    }
+    else
+    {
+      Validate.IsTrue&lt;ValueCannotBeNullException&gt;(val != null, &quot;Null values are not supported nor expected.&quot;);
+      nodes.Add(c); // The node we just contacted found the value.
+      foundBy = c;
+      retval = val;
+      break;
     }
   }
 
-  return (nodes, retval);
-}</pre>
+  return (nodes, foundBy, retval);
+}
+</pre>
 <p>After making these structural changes and refactoring the unit tests, they 
 still pass (well, that should be expected, as these changes were really only 
 structural.)&nbsp; </p>
@@ -2404,46 +2419,37 @@ the lookup algorithm to find other closer nodes that might have the value.</li>
     contacts.ForEach(c =&gt; c.Protocol.Store(node.OurContact, key, val));
   }
 
-  public (bool found, List&lt;Contact&gt; contacts, string val) FindValue(ID key)
+public (bool found, List&lt;Contact&gt; contacts, string val) FindValue(ID key)
+{
+  TouchBucketWithKey(key);
+
+  string ourVal;
+  List&lt;Contact&gt; contactsQueried = new List&lt;Contact&gt;();
+  (bool found, List&lt;Contact&gt; contacts, string val) ret = (false, null, null);
+
+  // If we have it, return with our value.
+  if (storage.TryGetValue(key, out ourVal))
   {
-    string ourVal;
-    List&lt;Contact&gt; contactsQueried = new List&lt;Contact&gt;();
-    (bool found, List&lt;Contact&gt; contacts, string val) ret = (false, null, null);
+    ret = (true, null, ourVal);
+  }
+  else
+  {
+    var lookup = router.Lookup(key, router.RpcFindValue);
 
-    // If we have it, return with our value.
-    if (storage.TryGetValue(key, out ourVal))
+    if (lookup.found)
     {
-      ret = (true, null, ourVal);
-    }
-    else
-    {
-      ret = LookupValue(key);
+      ret = (true, null, lookup.val);
+      // Find the first close contact (other than the one the value was found by) in which to also store the key-value.
+      var storeTo = lookup.contacts.Where(c =&gt; c != lookup.foundBy).OrderBy(c =&gt; c.ID.Value ^ key.Value).FirstOrDefault();
 
-      if (ret.found)
+      if (storeTo != null)
       {
-<b><font color="#FF0000">        // Also store this value in the closest node that didn't have the value.
-        // FIX THE UNIT TESTS!
-</font></b>        // This implements the line in the spec:
-        // For caching purposes, once a lookup succeeds, the requesting node stores the (key,value) pair 
-        // at the closest node it observed to the key that did not return the value.
-        node.Cache(key, ret.val);
+        storeTo.Protocol.Store(node.OurContact, key, lookup.val);
       }
     }
-
-    return ret;
   }
 
-#if DEBUG // For unit testing
-  public (bool found, List&lt;Contact&gt; contacts, string val) LookupValue(ID key)
-#else
-  protected (bool found, List&lt;Contact&gt; contacts, string val) LookupValue(ID key)
-#endif
-  {
-    var (contacts, val) = router.Lookup(key, router.RpcFindValue);
-    var found = contacts == null;
-
-    return (found, contacts, val);
-  }
+  return ret;
 }</pre>
 <h2>The Dht Class - Unit Tests</h2>
 <h3>LocalStoreFoundValueTest</h3>
@@ -2576,6 +2582,58 @@ public void ValueStoredGetsPropagatedTest()
 
   Assert.IsTrue(store1.Contains(key), &quot;Expected our peer to have stored the key-value.&quot;);
   Assert.IsTrue(store2.Contains(key), &quot;Expected the other peer to have stored the key-value.&quot;);
+}</pre>
+<h3>GetValuePropagatesToCloserNodeTest</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> This test verifies 
+that, given three nodes (the first of which is us), where node 2 has the value, 
+a get value also propagates to node 3 because a lookup was performed.</p>
+<pre>[TestMethod]
+public void GetValuePropagatesToCloserNodeTest()
+{
+  VirtualProtocol vp1 = new VirtualProtocol();
+  VirtualProtocol vp2 = new VirtualProtocol();
+  VirtualProtocol vp3 = new VirtualProtocol();
+  VirtualStorage store1 = new VirtualStorage();
+  VirtualStorage store2 = new VirtualStorage();
+  VirtualStorage store3 = new VirtualStorage();
+
+  // Ensures that all nodes are closer, because ID.Max ^ n &lt; ID.Max when n &gt; 0.
+  Dht dht = new Dht(ID.Max, vp1, store1);
+  vp1.Node = dht.Router.Node;
+
+  // Setup node 2:
+
+  ID contactID2 = ID.Mid; // a closer contact.
+  Contact otherContact2 = new Contact(vp2, contactID2);
+  Node otherNode2 = new Node(otherContact2, store2);
+  vp2.Node = otherNode2;
+
+  // Add the second contact to our peer list.
+  dht.Router.Node.BucketList.AddContact(otherContact2);
+
+  // Node 2 has the value.
+  // We want an integer distance, not an XOR distance.
+  ID key = ID.Zero;
+  string val = &quot;Test&quot;;
+  otherNode2.Storage.Set(key, val);
+
+  // Setup node 3:
+
+  ID contactID3 = ID.Zero.SetBit(158); // 01000.... -- a farther contact.
+  Contact otherContact3 = new Contact(vp3, contactID3);
+  Node otherNode3 = new Node(otherContact3, store3);
+  vp3.Node = otherNode3;
+
+  // Add the third contact to our peer list.
+  dht.Router.Node.BucketList.AddContact(otherContact3);
+
+  Assert.IsFalse(store1.Contains(key), &quot;Obviously we don't have the key-value yet.&quot;);
+  Assert.IsFalse(store3.Contains(key), &quot;And equally obvious, the third peer doesn't have the key-value yet either.&quot;);
+
+  var ret = dht.FindValue(key);
+
+  Assert.IsTrue(ret.found, &quot;Expected value to be found.&quot;);
+  Assert.IsTrue(store3.Contains(key), &quot;Expected the third peer to have stored the key-value.&quot;);
 }</pre>
 <h2>The Dht - Bootstrapping Discussion</h2>
 <p>From the spec: <font color="#FF00FF">To join the network, a node <i>u</i> 
@@ -2976,7 +3034,7 @@ pair if it’s own ID is closer to the key than are the IDs of other nodes.</font>
 	<li>the key XOR'd with the bootstrapping node's ID &lt; (closer than) the key 
 	XOR'd the ID's of other nodes.</li>
 </ol>
-<h4>Ambiguity #12</h4>
+<h4>Ambiguity #13</h4>
 <p>What does &quot;other nodes&quot; mean?&nbsp; Are these all other 
 contacts the bootstrapping node knows about, or just the <i>k</i> closest 
 contacts in the joining node's bucket, or some other determination?&nbsp; We 
@@ -3001,9 +3059,20 @@ Implementation</h3>
   if (!bucketList.ContactExists(sender))
   {
     // and our distance to the key &lt; any other contact's distance to the key...
-    storage.
-      Where(k =&gt; (k ^ ourContact.ID.Value) &lt; bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Min(c =&gt; k ^ c.ID.Value)).
-      ForEach(k =&gt; sender.Protocol.Store(ourContact, new ID(k), storage.Get(k))); // send it to the new contact.
+    storage.ForEach(k =&gt;
+    {
+      var contacts = bucketList.Buckets.SelectMany(b =&gt; b.Contacts);
+
+      if (contacts.Count() &gt; 0)
+      {
+        var distance = contacts.Min(c =&gt; k ^ c.ID.Value);
+
+        if ((k ^ ourContact.ID.Value) &lt; distance)
+        {
+          sender.Protocol.Store(ourContact, new ID(k), storage.Get(k)); // send it to the new contact.
+        }
+      }
+    });
   }
 }</pre>
 <p><img border="0" src="todo.png" width="82" height="32"> Annoyingly, for every 

@@ -76,27 +76,22 @@ namespace Clifton.Kademlia
             }
             else
             {
-                ret = LookupValue(key);
+                var lookup = router.Lookup(key, router.RpcFindValue);
 
-                if (ret.found)
+                if (lookup.found)
                 {
-                    node.Cache(key, ret.val);
+                    ret = (true, null, lookup.val);
+                    // Find the first close contact (other than the one the value was found by) in which to also store the key-value.
+                    var storeTo = lookup.contacts.Where(c => c != lookup.foundBy).OrderBy(c => c.ID.Value ^ key.Value).FirstOrDefault();
+
+                    if (storeTo != null)
+                    {
+                        storeTo.Protocol.Store(node.OurContact, key, lookup.val);
+                    }
                 }
             }
 
             return ret;
-        }
-
-#if DEBUG       // For unit testing
-        public (bool found, List<Contact> contacts, string val) LookupValue(ID key)
-#else
-        protected (bool found, List<Contact> contacts, string val) LookupValue(ID key)
-#endif
-        {
-            var (contacts, val) = router.Lookup(key, router.RpcFindValue);
-            var found = contacts == null;
-
-            return (found, contacts, val);
         }
 
         protected void TouchBucketWithKey(ID key)

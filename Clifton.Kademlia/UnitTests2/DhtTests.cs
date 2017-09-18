@@ -21,6 +21,9 @@ namespace UnitTests2
             Assert.IsTrue(retval == val, "Expected to get back what we stored");
         }
 
+        // This test creates a single contact and stores the value in that contact.  
+        // We set up the ID's so that the contact's ID is less (XOR metric) than our peer's ID, 
+        // and we use a key of ID.Zero to prevent further complexities when computing the distance.  
         [TestMethod]
         public void ValueStoredInCloserNodeTest()
         {
@@ -49,14 +52,17 @@ namespace UnitTests2
             otherNode.Cache(key, val);
 
             Assert.IsFalse(store1.Contains(key), "Expected our peer to NOT have cached the key-value.");
+            Assert.IsTrue(store2.Contains(key), "Expected other node to HAVE cached the key-value.");
 
             // Try and find the value, given our Dht knows about the other contact.
             string retval = dht.FindValue(key).val;
 
             Assert.IsTrue(retval == val, "Expected to get back what we stored");
-            Assert.IsTrue(store1.Contains(key), "Expected our peer to have cached the key-value.");
         }
 
+        /// <summary>
+        /// As compared to the test above, we can change the setup of the ID's and verify that the we find the value in a farther node.
+        /// </summary>
         [TestMethod]
         public void ValueStoredInFartherNodeTest()
         {
@@ -69,7 +75,7 @@ namespace UnitTests2
             Dht dht = new Dht(ID.Zero, vp1, store1);
             vp1.Node = dht.Router.Node;
 
-            ID contactID = ID.Max;      // a closer contact.
+            ID contactID = ID.Max;      // a farther contact.
             Contact otherContact = new Contact(vp2, contactID);
             Node otherNode = new Node(otherContact, store2);
             vp2.Node = otherNode;
@@ -85,14 +91,17 @@ namespace UnitTests2
             otherNode.Cache(key, val);
 
             Assert.IsFalse(store1.Contains(key), "Expected our peer to NOT have cached the key-value.");
+            Assert.IsTrue(store2.Contains(key), "Expected other node to HAVE cached the key-value.");
 
             // Try and find the value, given our Dht knows about the other contact.
             string retval = dht.FindValue(key).val;
 
             Assert.IsTrue(retval == val, "Expected to get back what we stored");
-            Assert.IsTrue(store1.Contains(key), "Expected our peer to have cached the key-value.");
         }
 
+        /// <summary>
+        /// Here we test that when we store a value to our peer, it also gets propagated to another peer that our peer knows about.
+        /// </summary>
         [TestMethod]
         public void ValueStoredGetsPropagatedTest()
         {
@@ -126,6 +135,60 @@ namespace UnitTests2
             Assert.IsTrue(store2.Contains(key), "Expected the other peer to have stored the key-value.");
         }
 
+        /// <summary>
+        /// Verify that, given three nodes (the first of which is us), where node 2 has the value, 
+        /// a get value also propagates to node 3.
+        /// </summary>
+        [TestMethod]
+        public void GetValuePropagatesToCloserNodeTest()
+        {
+            VirtualProtocol vp1 = new VirtualProtocol();
+            VirtualProtocol vp2 = new VirtualProtocol();
+            VirtualProtocol vp3 = new VirtualProtocol();
+            VirtualStorage store1 = new VirtualStorage();
+            VirtualStorage store2 = new VirtualStorage();
+            VirtualStorage store3 = new VirtualStorage();
+
+            // Ensures that all nodes are closer, because ID.Max ^ n < ID.Max when n > 0.
+            Dht dht = new Dht(ID.Max, vp1, store1);
+            vp1.Node = dht.Router.Node;
+
+            // Setup node 2:
+
+            ID contactID2 = ID.Mid;      // a closer contact.
+            Contact otherContact2 = new Contact(vp2, contactID2);
+            Node otherNode2 = new Node(otherContact2, store2);
+            vp2.Node = otherNode2;
+
+            // Add the second contact to our peer list.
+            dht.Router.Node.BucketList.AddContact(otherContact2);
+
+            // Node 2 has the value.
+            // We want an integer distance, not an XOR distance.
+            ID key = ID.Zero;
+            string val = "Test";
+            otherNode2.Storage.Set(key, val);
+
+            // Setup node 3:
+
+            ID contactID3 = ID.Zero.SetBit(158);      // 01000.... -- a farther contact.
+            Contact otherContact3 = new Contact(vp3, contactID3);
+            Node otherNode3 = new Node(otherContact3, store3);
+            vp3.Node = otherNode3;
+
+            // Add the third contact to our peer list.
+            dht.Router.Node.BucketList.AddContact(otherContact3);
+
+            Assert.IsFalse(store1.Contains(key), "Obviously we don't have the key-value yet.");
+            Assert.IsFalse(store3.Contains(key), "And equally obvious, the third peer doesn't have the key-value yet either.");
+
+            var ret = dht.FindValue(key);
+
+            Assert.IsTrue(ret.found, "Expected value to be found.");
+
+            Assert.IsTrue(store3.Contains(key), "Expected the third peer to have stored the key-value.");
+        }
+
         [TestMethod]
         public void BootstrapWithinBootstrappingBucketTest()
         {
@@ -136,11 +199,11 @@ namespace UnitTests2
             22.ForEach((i) => vp[i] = new VirtualProtocol());
 
             // Us
-            Dht dhtUs = new Dht(ID.RandomID, vp[0], null);
+            Dht dhtUs = new Dht(ID.RandomID, vp[0], new VirtualStorage());
             vp[0].Node = dhtUs.Router.Node;
 
             // Our bootstrap peer
-            Dht dhtBootstrap = new Dht(ID.RandomID, vp[1], null);
+            Dht dhtBootstrap = new Dht(ID.RandomID, vp[1], new VirtualStorage());
             vp[1].Node = dhtBootstrap.Router.Node;
             Node n = null;
 
@@ -148,7 +211,7 @@ namespace UnitTests2
             10.ForEach((i) =>
             {
                 Contact c = new Contact(vp[i + 2], ID.RandomID);
-                n = new Node(c, null);
+                n = new Node(c, new VirtualStorage());
                 vp[i + 2].Node = n;
                 dhtBootstrap.Router.Node.BucketList.AddContact(c);
             });
@@ -158,7 +221,7 @@ namespace UnitTests2
             10.ForEach((i) =>
             {
                 Contact c = new Contact(vp[i + 12], ID.RandomID);
-                Node n2 = new Node(c, null);
+                Node n2 = new Node(c, new VirtualStorage());
                 vp[i + 12].Node = n;
                 n.BucketList.AddContact(c);     // Note we're adding these contacts to the 10th node.
             });
@@ -178,12 +241,12 @@ namespace UnitTests2
             32.ForEach((i) => vp[i] = new VirtualProtocol());
 
             // Us, ID doesn't matter.
-            Dht dhtUs = new Dht(ID.RandomID, vp[0], null);
+            Dht dhtUs = new Dht(ID.RandomID, vp[0], new VirtualStorage());
             vp[0].Node = dhtUs.Router.Node;
 
             // Our bootstrap peer
             // All ID's are < 2^159
-            Dht dhtBootstrap = new Dht(ID.Zero.RandomizeBeyond(Constants.ID_LENGTH_BITS - 1), vp[1], null);
+            Dht dhtBootstrap = new Dht(ID.Zero.RandomizeBeyond(Constants.ID_LENGTH_BITS - 1), vp[1], new VirtualStorage());
             vp[1].Node = dhtBootstrap.Router.Node;
             Node n = null;
 
@@ -204,7 +267,7 @@ namespace UnitTests2
                 }
 
                 Contact c = new Contact(vp[i + 2], id);
-                n = new Node(c, null);
+                n = new Node(c, new VirtualStorage());
                 vp[i + 2].Node = n;
                 dhtBootstrap.Router.Node.BucketList.AddContact(c);
             });
@@ -215,7 +278,7 @@ namespace UnitTests2
             10.ForEach((i) =>
             {
                 Contact c = new Contact(vp[i + 22], ID.RandomID);
-                Node n2 = new Node(c, null);
+                Node n2 = new Node(c, new VirtualStorage());
                 vp[i + 22].Node = n;
                 n.BucketList.AddContact(c);     // Note we're adding these contacts to the 10th node.
             });

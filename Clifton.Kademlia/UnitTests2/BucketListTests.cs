@@ -14,7 +14,7 @@ namespace UnitTests2
         public void GetCloseContactsOrderedTest()
         {
             Contact sender = new Contact(null, ID.RandomID);
-            Node node = new Node(new Contact(null, ID.RandomID), null);
+            Node node = new Node(new Contact(null, ID.RandomID), new VirtualStorage());
             List<Contact> contacts = new List<Contact>();
             // Force multiple buckets.
             100.ForEach(() => contacts.Add(new Contact(null, ID.RandomID)));
