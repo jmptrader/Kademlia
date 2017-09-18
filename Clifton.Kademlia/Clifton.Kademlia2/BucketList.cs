@@ -93,6 +93,14 @@ namespace Clifton.Kademlia
             return buckets[GetKBucketIndex(otherID)];
 		}
 
+        /// <summary>
+        /// Returns true if the contact, by ID, exists in our bucket list.
+        /// </summary>
+        public bool ContactExists(Contact sender)
+        {
+            return Buckets.SelectMany(b => b.Contacts).Any(c => c.ID == sender.ID);
+        }
+
 		protected int GetKBucketIndex(ID otherID)
 		{
 			return buckets.FindIndex(b => b.HasInRange(otherID));
@@ -114,36 +122,5 @@ namespace Clifton.Kademlia
 
             return contacts.Select(c => c.contact).ToList();
         }
-
-        /*
-        public int GetKBucketIndex(ID otherID)
-        {
-            return buckets.FindIndex(b => b.HasInRange(otherID));
-        }
-
-        public KBucket GetKBucket(ID otherID)
-        {
-            return buckets[buckets.FindIndex(b => b.HasInRange(otherID))];
-        }
-
-        protected bool CanSplit(KBucket kbucket)
-        {
-            return kbucket.High - kbucket.Low >= 2;
-            // return kbucket.HasInRange(ourID) || ((kbucket.Depth() % 5) != 0);
-        }
-
-        /// <summary>
-        /// For unit testing...
-        /// </summary>
-        /// <returns>A list of tuples representing the bucket index and the count of contacts in each bucket.</returns>
-        public List<(int idx, int count)> GetBucketContactCounts()
-        {
-            List<(int idx, int count)> contactCounts = new List<(int idx, int count)>();
-
-            buckets.Where(b => b.Contacts.Count > 0).ForEachWithIndex((b, n) => contactCounts.Add((n, b.Contacts.Count)));
-
-            return contactCounts;
-        }
-        */
     }
 }

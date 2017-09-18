@@ -205,6 +205,58 @@ namespace UnitTests2
             Assert.IsTrue(bucketList.Buckets.SelectMany(b => b.Contacts).Contains(nextNewContact), "Expected bucket to contain new contact.");
         }
 
+        /// <summary>
+        /// Verify that we get stored values whose keys ^ contact ID are less than stored keys ^ other contacts.
+        /// </summary>
+        [TestMethod]
+        public void TestNewContactGetsStoredContactsTest()
+        {
+            // Set up a node at the midpoint.
+            // The existing node has the ID 10000....
+            Node existing = new Node(new Contact(null, ID.Mid), new VirtualStorage());
+            string val1 = "Value 1";
+            string valMid = "Value Mid";
+
+            // The existing node stores two items, one with an ID "hash" of 1, the other with ID.Max
+            // Simple storage, rather than executing the code for Store.
+            existing.Cache(ID.One, val1);
+            existing.Cache(ID.Mid, valMid);
+
+            Assert.IsTrue(existing.Storage.Count() == 2, "Expected the existing node to have two key-values.");
+
+            // Create a contact in the existing node's bucket list that is closer to one of the values.
+            // This contact has the prefix 010000....
+            Contact otherContact = new Contact(null, ID.Zero.SetBit(158));
+            Node other = new Node(otherContact, new VirtualStorage());
+            existing.BucketList.Buckets[0].Contacts.Add(otherContact);
+
+            // The unseen contact has a prefix 0110000....
+            VirtualProtocol unseenvp = new VirtualProtocol();
+            Contact unseenContact = new Contact(unseenvp, ID.Zero.SetBit(157));
+            Node unseen = new Node(unseenContact, new VirtualStorage());
+            unseenvp.Node = unseen;     // final fixup.
+
+            Assert.IsTrue(unseen.Storage.Count() == 0, "The unseen node shouldn't have any key-values!");
+
+            // An unseen node pings, and we should get back valMin only, as ID.One ^ ID.Mid < ID.Max ^ ID.Mid
+            existing.Ping(unseenContact);
+
+            // Contacts             V1          V2          
+            // 10000000             00...0001   10...0000
+            // 01000000
+
+            // Math:
+            // c1 ^ V1      c1 ^ V2      c2 ^ V1     c2 ^ V2     
+            // 100...001    000...000    010...001   110...000
+
+            // c1 ^ V1 > c1 ^ V2, so v1 doesn't get sent to the unseen node.
+            // c1 ^ V2 < c2 ^ V2, so it does get sent.
+
+            Assert.IsTrue(unseen.Storage.Count() == 1, "Expected 1 value stored in our new node.");
+            Assert.IsTrue(unseen.Storage.Contains(ID.Mid), "Expected valMid to be stored.");
+            Assert.IsTrue(unseen.Storage.Get(ID.Mid) == valMid, "Expected valMid value to match.");
+        }
+
         protected BucketList SetupSplitFailure()
         {
             Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);

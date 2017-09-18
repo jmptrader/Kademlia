@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Numerics;
 
 using Clifton.Kademlia;
@@ -29,9 +31,24 @@ namespace UnitTests2
             return store[key.Value];
         }
 
+        public string Get(BigInteger key)
+        {
+            return store[key];
+        }
+
         public void Set(ID key, string val)
         {
             store[key.Value] = val;
+        }
+
+        public IEnumerator<BigInteger> GetEnumerator()
+        {
+            return store.Keys.GetEnumerator();
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return store.Keys.GetEnumerator();
         }
     }
 }

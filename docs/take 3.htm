@@ -2604,6 +2604,10 @@ closer.</p>
 here is that when a peer network is small or in the throws of being born, other 
 contacts that nodes have will not be discovered until the bootstrapping bucket 
 splits.&nbsp; We'll see how the network self-corrects later on.</p>
+<p><img border="0" src="note.png" width="24" height="32"> It's also interesting 
+to realize that &quot;joining&quot; actually means contacting another node with any one of 
+the four RPC calls.&nbsp; A new peer could join an existing network with its 
+first RPC being FindValue!</p>
 <h2>The Dht - Bootstrapping Implementation</h2>
 <h3>RandomIDWithinBucket</h3>
 <p>Getting a random ID within a bucket range is interesting and based on knowing 
@@ -2648,7 +2652,7 @@ public void Bootstrap(Contact knownPeer)
   node.BucketList.AddContact(knownPeer);
   List&lt;Contact&gt; contacts = knownPeer.Protocol.FindNode(ourContact, ourId);
   contacts.ForEach(c =&gt; node.BucketList.AddContact(c));
-  KBucket knownPeerBucket = node.BucketList.Buckets.Single(b =&gt; b.HasInRange(knownPeer.ID));
+  KBucket knownPeerBucket = node.BucketList.GetKBucket(knownPeer.ID);
   // Resolve the list now, so we don't include additional contacts as we add to our bucket additional contacts.
   var otherBuckets = node.BucketList.Buckets.Where(b =&gt; b != knownPeerBucket);
   otherBuckets.ForEach(b =&gt; RefreshBucket(b));
@@ -2881,7 +2885,7 @@ public void NonRespondingContactTest()
   Assert.IsFalse(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nonRespondingContact), &quot;Expected bucket to NOT contain non-responding contact.&quot;);
   Assert.IsTrue(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nextNewContact), &quot;Expected bucket to contain new contact.&quot;);
 }</pre>
-<h3>Bucket Refresh</h3>
+<h3>Bucket Refresh - Discussion</h3>
 <p>From the spec: <font color="#FF00FF">Buckets are generally kept fresh by the 
 traffic of requests traveling through nodes. To handle pathological cases in 
 which there are no lookups for a particular ID range, each node refreshes any 
@@ -2898,8 +2902,11 @@ during the lookup process.&nbsp; This second approach might seem more correct
 because&nbsp;the original alpha contacts is determined from the list of closest 
 contacts across all buckets, but it then becomes arbitrary as to whether to also touch 
 the buckets containing the contacts returned by the FindNodes query that are 
-then queried further.&nbsp; Therefore, I am choosing the first interpretation, which 
-means that the bucket gets touched based on the Store and FindValue key:</p>
+then queried further.&nbsp; </p>
+<h3>Bucket Refresh - Implementation</h3>
+<p>I am choosing the first interpretation, which 
+means that the bucket containing the key gets touched in the Store and FindValue 
+methods:</p>
 <pre>public void Store(ID key, string val)
 {
   TouchBucketWithKey(key);
@@ -2948,6 +2955,7 @@ timestamp:</p>
   TimeStamp = DateTime.Now;
 }</pre>
 <h2>Key-Value Management</h2>
+<h3>Storing Key-Values Onto the new Node When a new Node Registers - Discussion</h3>
 <p><font color="#FF00FF">When a new node joins the system, it must store any 
 key-value pair to which it is one of the k closest. Existing nodes, by similarly 
 exploiting complete knowledge of their surrounding subtrees, will know which 
@@ -2955,28 +2963,126 @@ key-value pairs the new node should store. Any node learning of a new node
 therefore issues STORE RPCs to transfer relevant key-value pairs to the new 
 node. To avoid redundant STORE RPCs, however, a node only transfers a key-value 
 pair if it’s own ID is closer to the key than are the IDs of other nodes.</font></p>
+<h4>Interpretation</h4>
+<ol>
+	<li>a new node (contact) will be instructed to store key-values that exist 
+	on the bootstrapping node (the one it's boostrapping with) for key-values 
+	that meet the following condition:</li>
+	<li>the key XOR'd with the bootstrapping node's ID &lt; (closer than) the key 
+	XOR'd the ID's of other nodes.</li>
+</ol>
+<h4>Ambiguity #12</h4>
+<p>What does &quot;ID's of other nodes&quot; mean?&nbsp; Are these the ID's of all other 
+contacts the bootstrapping node knows about, or just the <i>k</i> closest 
+contacts in the joining node's bucket, or some other determination?&nbsp; It 
+would make sense to say &quot;store the values onto the joining node for any 
+key-value where the joining node will be closer to that key, because the joining 
+node now becomes the closer node to those key-values.</p>
+<p><img border="0" src="note.png" width="24" height="32"> It's interesting to 
+note that this algorithm executes regardless of whether the bootstrapping node 
+actually added the the joining node to a k-bucket.&nbsp; Remember also that 
+&quot;joining&quot; actually means contacting another node with any one of the four RPC 
+calls.</p>
+<h3>Storing Key-Values Onto the new Node When a new Node Registers - 
+Implementation</h3>
+<pre>protected void SendKeyValuesToNewContact(Contact sender)
+{
+  // If we have a new contact...
+  if (!bucketList.ContactExists(sender))
+  {
+    // and our distance to the key &lt; any other contact's distance to the key...
+    storage.
+      Where(k =&gt; (k ^ ourContact.ID.Value) &lt; bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Min(c =&gt; k ^ c.ID.Value)).
+      ForEach(k =&gt; sender.Protocol.Store(ourContact, new ID(k), storage.Get(k))); // send it to the new contact.
+  }
+}</pre>
+<p><img border="0" src="todo.png" width="82" height="32"> Annoyingly, for every 
+stored value, there just isn't any way to not perform the XOR computation on 
+every contact.&nbsp; This could get expensive and should probably be done 
+asynchronously.</p>
+<h3>Storing Key-Values Onto the new Node When a new Node Registers - Unit Test</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> There's a lot of 
+setup here to for creating two existing contacts and two key-values and their 
+ID's have been specifically set.&nbsp; See the comments for the XOR distance 
+&quot;math.&quot;</p>
+<pre>/// &lt;summary&gt;
+/// Verify that we get stored values whose keys ^ contact ID are less than stored keys ^ other contacts.
+/// &lt;/summary&gt;
+[TestMethod]
+public void TestNewContactGetsStoredContactsTest()
+{
+  // Set up a node at the midpoint.
+  // The existing node has the ID 10000....
+  Node existing = new Node(new Contact(null, ID.Mid), new VirtualStorage());
+  string val1 = &quot;Value 1&quot;;
+  string valMid = &quot;Value Mid&quot;;
+
+  // The existing node stores two items, one with an ID &quot;hash&quot; of 1, the other with ID.Max
+  // Simple storage, rather than executing the code for Store.
+  existing.Cache(ID.One, val1);
+  existing.Cache(ID.Mid, valMid);
+
+  Assert.IsTrue(existing.Storage.Count() == 2, &quot;Expected the existing node to have two key-values.&quot;);
+
+  // Create a contact in the existing node's bucket list that is closer to one of the values.
+  // This contact has the prefix 010000....
+  Contact otherContact = new Contact(null, ID.Zero.SetBit(158));
+  Node other = new Node(otherContact, new VirtualStorage());
+  existing.BucketList.Buckets[0].Contacts.Add(otherContact);
+
+  // The unseen contact has a prefix 0110000....
+  VirtualProtocol unseenvp = new VirtualProtocol();
+  Contact unseenContact = new Contact(unseenvp, ID.Zero.SetBit(157));
+  Node unseen = new Node(unseenContact, new VirtualStorage());
+  unseenvp.Node = unseen; // final fixup.
+
+  Assert.IsTrue(unseen.Storage.Count() == 0, &quot;The unseen node shouldn't have any key-values!&quot;);
+
+  // An unseen node pings, and we should get back valMin only, as ID.One ^ ID.Mid &lt; ID.Max ^ ID.Mid
+  existing.Ping(unseenContact);
+
+  // Contacts     V1          V2 
+  // 10000000     00...0001   10...0000
+  // 01000000
+  
+  // Math:
+  // c1 ^ V1     c1 ^ V2     c2 ^ V1     c2 ^ V2 
+  // 100...001   000...000   010...001   110...000
+
+  // c1 ^ V1 &gt; c2 ^ V1, so V1 doesn't get sent to the unseen node.
+  // c1 ^ V2 &lt; c2 ^ V2, so V2 does get sent.
+
+  Assert.IsTrue(unseen.Storage.Count() == 1, &quot;Expected 1 value stored in our new node.&quot;);
+  Assert.IsTrue(unseen.Storage.Contains(ID.Mid), &quot;Expected valMid to be stored.&quot;);
+  Assert.IsTrue(unseen.Storage.Get(ID.Mid) == valMid, &quot;Expected valMid value to match.&quot;);
+}</pre>
+<h3>Periodic Key-Value Store Update</h3>
 <p>From wikipedia:</p>
 <p>&quot;Periodically, a node that stores a value will explore the network to find 
 the k nodes that are close to the key value and replicate the value onto them. 
 This compensates for disappeared nodes.&quot;</p>
-<p>and...</p>
-<p>&quot;Also, for popular values that might have many requests, the load in the 
-storer nodes is diminished by having a retriever store this value in some node 
-near, but outside of, the k closest ones.&nbsp; This allows popular searches to 
-find a storer more quickly. Because the value is returned from nodes farther 
-away from the key, this alleviates possible &quot;hot spots&quot;. Caching nodes will drop 
-the value after a certain time depending on their distance from the key.&quot;</p>
 <p>and...</p>
 <p>&quot;The node that is providing the file [value] will periodically refresh the 
 information onto the network (perform FIND_NODE and STORE messages). When all of 
 the nodes having the file go offline, nobody will be refreshing its values 
 (sources and keywords) and the information will eventually disappear from the 
 network.&quot;</p>
+<h3>Caching Popular Key-Values</h3>
+<p>&quot;Also, for popular values that might have many requests, the load in the 
+storer nodes is diminished by having a retriever store this value in some node 
+near, but outside of, the k closest ones.&nbsp; This allows popular searches to 
+find a storer more quickly. Because the value is returned from nodes farther 
+away from the key, this alleviates possible &quot;hot spots&quot;. Caching nodes will drop 
+the value after a certain time depending on their distance from the key.&quot;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
-<p>&nbsp;</p>
+<h2>Ping</h2>
+<p>Ping is simply a &quot;respond back with the random ID&quot; that was sent.&nbsp; 
+Internally the buckets are potentially updated and if the contact is new, it is 
+sent any values that it should store, as discussed above when a new node 
+registers.</p>
 <h2>Thread Safety</h2>
 <h2>Some Enhancements</h2>
 <h3>Operator Overloading of the ID Class</h3>

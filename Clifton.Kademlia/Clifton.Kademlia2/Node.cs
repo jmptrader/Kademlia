@@ -29,7 +29,9 @@ namespace Clifton.Kademlia
         /// </summary>
         public Contact Ping(Contact sender)
         {
-            // TODO...
+            Validate.IsFalse<SendingQueryToSelfException>(sender.ID.Value == ourContact.ID.Value, "Sender should not be ourself!");
+            SendKeyValuesToNewContact(sender);
+            bucketList.AddContact(sender);
 
             return ourContact;
         }
@@ -40,6 +42,7 @@ namespace Clifton.Kademlia
         public void Store(Contact sender, ID key, string val)
         {
             Validate.IsFalse<SendingQueryToSelfException>(sender.ID.Value == ourContact.ID.Value, "Sender should not be ourself!");
+            SendKeyValuesToNewContact(sender);
             bucketList.AddContact(sender);
 
             storage.Set(key, val);
@@ -55,6 +58,7 @@ namespace Clifton.Kademlia
         public (List<Contact> contacts, string val) FindNode(Contact sender, ID key)
         {
             Validate.IsFalse<SendingQueryToSelfException>(sender.ID.Value == ourContact.ID.Value, "Sender should not be ourself!");
+            SendKeyValuesToNewContact(sender);
             bucketList.AddContact(sender);
 
             // Exclude sender.
@@ -69,6 +73,7 @@ namespace Clifton.Kademlia
         public (List<Contact> contacts, string val) FindValue(Contact sender, ID key)
         {
             Validate.IsFalse<SendingQueryToSelfException>(sender.ID.Value == ourContact.ID.Value, "Sender should not be ourself!");
+            SendKeyValuesToNewContact(sender);
             bucketList.AddContact(sender);
 
             if (storage.Contains(key))
@@ -85,6 +90,18 @@ namespace Clifton.Kademlia
         public void Cache(ID key, string val)
         {
             storage.Set(key, val);
+        }
+
+        protected void SendKeyValuesToNewContact(Contact sender)
+        {
+            // If we have a new contact...
+            if (!bucketList.ContactExists(sender))
+            {
+                // and our distance to the key < any other contact's distance to the key...
+                storage.
+                    Where(k => (k ^ ourContact.ID.Value) < bucketList.Buckets.SelectMany(b => b.Contacts).Min(c => k ^ c.ID.Value)).
+                    ForEach(k => sender.Protocol.Store(ourContact, new ID(k), storage.Get(k)));   // send it to the new contact.
+            }
         }
     }
 }

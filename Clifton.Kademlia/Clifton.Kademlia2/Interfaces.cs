@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Numerics;
 
 namespace Clifton.Kademlia
 {
@@ -10,11 +11,12 @@ namespace Clifton.Kademlia
         void Store(Contact sender, ID key, string val);
     }
 
-    public interface IStorage
+    public interface IStorage : IEnumerable<BigInteger>
     {
         bool Contains(ID key);
         bool TryGetValue(ID key, out string val);
         string Get(ID key);
+        string Get(BigInteger key);
         void Set(ID key, string value);
     }
 }
