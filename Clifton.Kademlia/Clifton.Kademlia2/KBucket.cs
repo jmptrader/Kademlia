@@ -56,10 +56,15 @@ namespace Clifton.Kademlia
 			return Low <= id.Value && id.Value < High;
 		}
 
-		/// <summary>
-		/// True if a contact matches this ID.
-		/// </summary>
-		public bool Contains(ID id)
+        public bool HasInRange(BigInteger id)
+        {
+            return Low <= id && id < High;
+        }
+
+        /// <summary>
+        /// True if a contact matches this ID.
+        /// </summary>
+        public bool Contains(ID id)
 		{
 			return contacts.Any(c => c.ID == id);
 		}

@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Numerics;
 
 namespace Clifton.Kademlia
@@ -18,6 +19,8 @@ namespace Clifton.Kademlia
         bool TryGetValue(ID key, out string val);
         string Get(ID key);
         string Get(BigInteger key);
+        DateTime GetTimeStamp(BigInteger key);
         void Set(ID key, string value);
+        void Touch(BigInteger key);
     }
 }

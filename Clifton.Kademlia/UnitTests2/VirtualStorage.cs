@@ -12,10 +12,12 @@ namespace UnitTests2
         public bool HasValues { get { return store.Count > 0; } }
 
         protected Dictionary<BigInteger, string> store;
+        protected Dictionary<BigInteger, DateTime> timestamps;
 
         public VirtualStorage()
         {
             store = new Dictionary<BigInteger, string>();
+            timestamps = new Dictionary<BigInteger, DateTime>();
         }
 
         public bool TryGetValue(ID key, out string val)
@@ -38,9 +40,20 @@ namespace UnitTests2
             return store[key];
         }
 
+        public DateTime GetTimeStamp(BigInteger key)
+        {
+            return timestamps[key];
+        }
+
+        public void Touch(BigInteger key)
+        {
+            timestamps[key] = DateTime.Now;
+        }
+
         public void Set(ID key, string val)
         {
             store[key.Value] = val;
+            Touch(key.Value);
         }
 
         public IEnumerator<BigInteger> GetEnumerator()

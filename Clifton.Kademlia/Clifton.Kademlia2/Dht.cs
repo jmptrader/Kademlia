@@ -115,15 +115,32 @@ namespace Clifton.Kademlia
             keyValueRepublishTimer.Start();
         }
 
-        private void BucketRefreshTimerElapsed(object sender, ElapsedEventArgs e)
+        protected void BucketRefreshTimerElapsed(object sender, ElapsedEventArgs e)
         {
+            DateTime now = DateTime.Now;
+
             node.BucketList.Buckets.
-                Where(b => (DateTime.Now - b.TimeStamp).TotalMilliseconds >= Constants.BUCKET_REFRESH_INTERVAL).
+                Where(b => (now - b.TimeStamp).TotalMilliseconds >= Constants.BUCKET_REFRESH_INTERVAL).
                 ForEach(b => RefreshBucket(b));
         }
 
-        private void KeyValueRepublishElapsed(object sender, ElapsedEventArgs e)
+        /// <summary>
+        /// Replicate key values if the key-value hasn't been touched within the republish interval.
+        /// Also don't do a FindNode lookup if the bucket containing the key has been refreshed within the refresh interval.
+        /// </summary>
+        protected void KeyValueRepublishElapsed(object sender, ElapsedEventArgs e)
         {
+            DateTime now = DateTime.Now;
+
+            node.Storage.Where(
+                k => (now - storage.GetTimeStamp(k)).TotalMilliseconds >= Constants.KEY_VALUE_REPUBLISH_INTERVAL &&
+                    (now - node.BucketList.GetKBucket(k).TimeStamp).TotalMilliseconds >= Constants.BUCKET_REFRESH_INTERVAL).
+            ForEach(k =>
+            {
+                ID kid = new ID(k);
+                router.Lookup(kid, router.RpcFindNodes).contacts.ForEach(c => c.Protocol.Store(node.OurContact, kid, storage.Get(k)));
+                storage.Touch(k);
+            });
         }
 
         protected void RefreshBucket(KBucket bucket)

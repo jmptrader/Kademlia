@@ -2244,11 +2244,13 @@ signature of the Lookup method changes so that:</p>
 <p>We also need to pass the RPC call into <code>GetCloserNodes</code> (which meant 
 refactoring the unit tests!) and test whether it found a value (which will only 
 be true for when the RPC call is for finding values):</p>
-<pre>if (GetCloserNodes(key, rpcCall, nodesToQuery, closerContacts, fartherContacts, out val))
+<pre>if (GetCloserNodes(key, rpcCall, nodesToQuery, closerContacts, fartherContacts, out val, out foundBy))
 {
-  return (null, val);
+  return (true, closerContacts, foundBy, val);
 }</pre>
-<p>This stops the lookup immediately when a value is found.</p>
+<p>This stops the lookup immediately when a value is found.&nbsp; There are 
+other refactoring's in the router's <code>Lookup</code> method (for example the method 
+signature) that I'm omitting.</p>
 <h4>Refactoring the GetCloserNodes Method</h4>
 <p>The signature changes:</p>
 <pre>public bool GetCloserNodes(
@@ -3191,11 +3193,33 @@ least k nodes. If, before republishing key-value pairs, a node <i>u</i>
 refreshes all k-buckets in this subtree of k nodes, it will automatically be 
 able to figure out the k closest nodes to a given key. These bucket refreshes 
 can be amortized over the republication of many keys.</font></p>
-<p>This optimization is also straight forward -- if we've done a bucket refresh 
-within the last hour, we can avoid calling FindNode.</p>
+<p>This second optimization is sort of straight forward -- if we've done a bucket refresh 
+within the last hour, we can avoid calling FindNode (the node lookup algorithm.)&nbsp; 
+The problem is, how do we determine the bucket to test if it's been refreshed?&nbsp; 
+The bucket for which the key is in range should contain the closest contacts 
+we've seen for that key, so we'll test whether that bucket has been refreshed.&nbsp; </p>
 <h3>Key Republishing - Implementation</h3>
 <p>One refactoring that has to occur is that the storage mechanism needs to 
-associate a timestamp with the key-value.</p>
+associate a timestamp with the key-value, which you'll see used in the following 
+code.</p>
+<pre>/// &lt;summary&gt;
+/// Replicate key values if the key-value hasn't been touched within the republish interval.
+/// Also don't do a FindNode lookup if the bucket containing the key has been refreshed within the refresh interval.
+/// &lt;/summary&gt;
+private void KeyValueRepublishElapsed(object sender, ElapsedEventArgs e)
+{
+  DateTime now = DateTime.Now;
+
+  node.Storage.Where(
+  k =&gt; (now - storage.GetTimeStamp(k)).TotalMilliseconds &gt;= Constants.KEY_VALUE_REPUBLISH_INTERVAL &amp;&amp;
+    (now - node.BucketList.GetKBucket(k).TimeStamp).TotalMilliseconds &gt;= Constants.BUCKET_REFRESH_INTERVAL).
+  ForEach(k =&gt;
+  {
+    ID kid = new ID(k);
+    router.Lookup(kid, router.RpcFindNodes).contacts.ForEach(c =&gt; c.Protocol.Store(node.OurContact, kid, storage.Get(k)));
+    storage.Touch(k);
+  });
+}</pre>
 <p>&nbsp;</p>
 <h3>Over-Caching</h3>
 <p><font color="#FF00FF">To avoid “over-caching,” we make the expiration time of 
