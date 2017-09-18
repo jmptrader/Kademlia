@@ -18,6 +18,7 @@ namespace Clifton.Kademlia
         protected Contact ourContact;
         protected ID ourId;
         protected Timer bucketRefreshTimer;
+        protected Timer keyValueRepublishTimer;
 
         public Dht(ID id, IProtocol protocol, IStorage storage)
         {
@@ -26,6 +27,8 @@ namespace Clifton.Kademlia
             ourContact = new Contact(protocol, id);
             node = new Node(ourContact, storage);
             router = new Router(node);
+            SetupBucketRefreshTimer();
+            SetupKeyValueRepublishTimer();
         }
 
 /// <summary>
@@ -109,11 +112,23 @@ namespace Clifton.Kademlia
             bucketRefreshTimer.Start();
         }
 
+        protected void SetupKeyValueRepublishTimer()
+        {
+            keyValueRepublishTimer = new Timer(Constants.KEY_VALUE_REPUBLISH_INTERVAL);
+            keyValueRepublishTimer.AutoReset = true;
+            keyValueRepublishTimer.Elapsed += KeyValueRepublishElapsed;
+            keyValueRepublishTimer.Start();
+        }
+
         private void BucketRefreshTimerElapsed(object sender, ElapsedEventArgs e)
         {
             node.BucketList.Buckets.
                 Where(b => (DateTime.Now - b.TimeStamp).TotalMilliseconds >= Constants.BUCKET_REFRESH_INTERVAL).
                 ForEach(b => RefreshBucket(b));
+        }
+
+        private void KeyValueRepublishElapsed(object sender, ElapsedEventArgs e)
+        {
         }
 
         protected void RefreshBucket(KBucket bucket)

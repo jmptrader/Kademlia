@@ -3056,7 +3056,16 @@ public void TestNewContactGetsStoredContactsTest()
   Assert.IsTrue(unseen.Storage.Contains(ID.Mid), &quot;Expected valMid to be stored.&quot;);
   Assert.IsTrue(unseen.Storage.Get(ID.Mid) == valMid, &quot;Expected valMid value to match.&quot;);
 }</pre>
-<h3>Periodic Key-Value Store Update</h3>
+<h3>Key Republishing - Discussion</h3>
+<p>
+<font color="#FF00FF" When a contact fails to respond 5 RPCs in row, it is considered stale. If fe-bucket not full or its replacement cache empty, Kademlia merely flags stale contacts rather than remove them. This ensures, among other things, that node’s own network connection goes down temporarily, the node won’t completely void all of k-buckets.</font>To ensure the persistence of key-value pairs, nodes 
+must periodically republish keys. Otherwise, two phenomena may cause lookups for 
+valid keys to fail. First, some of the k nodes that initially get a key-value 
+pair when it is published may leave the network. Second, new nodes may join the 
+network with IDs closer to some published key than the nodes on which the 
+key-value pair was originally published. In both cases, the nodes with a 
+key-value pair must republish it so as once again to ensure it is available on 
+the k nodes closest to the key.</font> </p>
 <p>From wikipedia:</p>
 <p>&quot;Periodically, a node that stores a value will explore the network to find 
 the k nodes that are close to the key value and replicate the value onto them. 
@@ -3067,6 +3076,13 @@ information onto the network (perform FIND_NODE and STORE messages). When all of
 the nodes having the file go offline, nobody will be refreshing its values 
 (sources and keywords) and the information will eventually disappear from the 
 network.&quot;</p>
+<p>The wikipedia write-up clarifies what is meant by &quot;on the k nodes closest to 
+the key&quot; - in other words, for each key, a FindNode is called to find closer 
+nodes and the value is republished.&nbsp; Again, this can be a time consuming 
+process if there's a lot of key-values in a node's store, which is addressed in 
+an optimization later.</p>
+<h3>Key Republishing - Implementation</h3>
+<p>&nbsp;</p>
 <h3>Caching Popular Key-Values</h3>
 <p>&quot;Also, for popular values that might have many requests, the load in the 
 storer nodes is diminished by having a retriever store this value in some node 
@@ -3154,14 +3170,7 @@ is considered stale. If a fe-bucket is not full or its replacement cache is
 empty, Kademlia merely flags stale contacts rather than remove them. This 
 ensures, among other things, that if a node’s own network connection goes down 
 temporarily, the node won’t completely void all of its k-buckets.</font>
-<p><font color="#FF00FF">To ensure the persistence of key-value pairs, nodes 
-must periodically republish keys. Otherwise, two phenomena may cause lookups for 
-valid keys to fail. First, some of the k nodes that initially get a key-value 
-pair when it is published may leave the network. Second, new nodes may join the 
-network with IDs closer to some published key than the nodes on which the 
-key-value pair was originally published. In both cases, the nodes with a 
-key-value pair must republish it so as once again to ensure it is available on 
-the k nodes closest to the key.</font></p>
+<p>&nbsp;</p>
 </font>
 <font When a contact fails to respond to 5 RPCs in a row, it 
 is considered stale. If a fe-bucket is not full or its replacement cache is 
