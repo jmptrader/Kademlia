@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 
 namespace Clifton.Kademlia
 {
@@ -93,6 +94,11 @@ namespace Clifton.Kademlia
             return buckets[GetKBucketIndex(otherID)];
 		}
 
+        public KBucket GetKBucket(BigInteger otherID)
+        {
+            return buckets[GetKBucketIndex(otherID)];
+        }
+
         /// <summary>
         /// Returns true if the contact, by ID, exists in our bucket list.
         /// </summary>
@@ -105,6 +111,11 @@ namespace Clifton.Kademlia
 		{
 			return buckets.FindIndex(b => b.HasInRange(otherID));
 		}
+
+        protected int GetKBucketIndex(BigInteger otherID)
+        {
+            return buckets.FindIndex(b => b.HasInRange(otherID));
+        }
 
         /// <summary>
         /// Brute force distance lookup of all known contacts, sorted by distance, then we take at most k (20) of the closest.

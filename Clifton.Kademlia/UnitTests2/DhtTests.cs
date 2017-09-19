@@ -185,7 +185,6 @@ namespace UnitTests2
             var ret = dht.FindValue(key);
 
             Assert.IsTrue(ret.found, "Expected value to be found.");
-
             Assert.IsTrue(store3.Contains(key), "Expected the third peer to have stored the key-value.");
         }
 

@@ -87,10 +87,12 @@ namespace Clifton.Kademlia
             }
         }
 
-        public void Cache(ID key, string val)
+#if DEBUG           // For unit testing
+        public void SimpleStore(ID key, string val)
         {
             storage.Set(key, val);
         }
+#endif
 
         protected void SendKeyValuesToNewContact(Contact sender)
         {

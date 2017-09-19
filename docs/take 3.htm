@@ -1591,7 +1591,7 @@ first query, which will be a maximum of <i>k</i>-<i>a</i> contacts.</p>
 <p>The spec says this: &quot;<font color="#FF00FF">Most operations are implemented in 
 terms of the above lookup procedure.</font>&quot;&nbsp; What operations, and when?&nbsp; 
 We'll have to address this later.</p>
-<h3>The Concept of Closeness and Issues</h3>
+<h3>The Concept of Closeness</h3>
 <p><font color="#FF00FF">Many of Kademlia’s benefits result from its use of a 
 novel XOR metric for distance between points in the key space. XOR is symmetric, 
 allowing Kademlia participants to receive lookup queries from precisely the same 
@@ -1620,8 +1620,8 @@ Stack Overflow<sup>13 </sup>:</p>
 	I.e. a full-table-scan is just easy to implement.&quot;</p>
 </blockquote>
 <p>The author of that post provides an implementation<sup>14</sup> that doesn't 
-require a full table scan, but in my implementation, we'll just do the full 
-table scan.</p>
+require a full table scan, but in my implementation, we'll just do a full scan 
+of the bucket list contacts.</p>
 <h2>Node Lookup - Implementation</h2>
 <p>Let's start with a baseline implementation that for the moment:</p>
 <ol>
@@ -2473,8 +2473,7 @@ public void LocalStoreFoundValueTest()
 <p><img border="0" src="unittest.png" width="14" height="32"> This test creates a single contact and stores the value in that contact.&nbsp; 
 We set up the ID's so that the contact's ID is less (XOR metric) than our peer's 
 ID, and we use a key of ID.Zero to prevent further complexities when computing 
-the distance.&nbsp; Note that we also verify that the value is cached in our 
-local store after finding it in another node.&nbsp; Most of the code here is to 
+the distance.&nbsp; Most of the code here is to 
 set up the conditions to make this test!</p>
 <pre>[TestMethod]
 public void ValueStoredInCloserNodeTest()
@@ -2501,7 +2500,7 @@ public void ValueStoredInCloserNodeTest()
 
   // Set the value in the other node, to be discovered by the lookup process.
   string val = &quot;Test&quot;;
-  otherNode.Cache(key, val);
+  otherNode.SimpleStore(key, val);
 
   Assert.IsFalse(store1.Contains(key), &quot;Expected our peer to NOT have cached the key-value.&quot;);
 
@@ -2511,6 +2510,15 @@ public void ValueStoredInCloserNodeTest()
   Assert.IsTrue(retval == val, &quot;Expected to get back what we stored&quot;);
   Assert.IsTrue(store1.Contains(key), &quot;Expected our peer to have cached the key-value.&quot;);
 }</pre>
+<p>The method SimpleStore simply stores the value in the node's storage -- this 
+method is available only in DEBUG mode for unit testing:</p>
+<pre>#if DEBUG // For unit testing
+public void SimpleStore(ID key, string val)
+{
+  storage.Set(key, val);
+}
+#endif
+</pre>
 <h3>ValueFoundInFartherNodeTest</h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> We can change the setup of the ID's and verify that the we find the value in 
 a farther node.</p>
@@ -2539,7 +2547,7 @@ public void ValueStoredInFartherNodeTest()
 
   // Set the value in the other node, to be discovered by the lookup process.
   string val = &quot;Test&quot;;
-  otherNode.Cache(key, val);
+  otherNode.SimpleStore(key, val);
 
   Assert.IsFalse(store1.Contains(key), &quot;Expected our peer to NOT have cached the key-value.&quot;);
 
@@ -3100,8 +3108,8 @@ public void TestNewContactGetsStoredContactsTest()
 
   // The existing node stores two items, one with an ID &quot;hash&quot; of 1, the other with ID.Max
   // Simple storage, rather than executing the code for Store.
-  existing.Cache(ID.One, val1);
-  existing.Cache(ID.Mid, valMid);
+  existing.SimpleStore(ID.One, val1);
+  existing.SimpleStore(ID.Mid, valMid);
 
   Assert.IsTrue(existing.Storage.Count() == 2, &quot;Expected the existing node to have two key-values.&quot;);
 
@@ -3139,21 +3147,21 @@ public void TestNewContactGetsStoredContactsTest()
 }</pre>
 <h3>Key Republishing - Discussion</h3>
 <p>
-<font color="#FF00FF" When a contact fails to respond 5 RPCs in row, it is considered stale. If fe-bucket not full or its replacement cache empty, Kademlia merely flags stale contacts rather than remove them. This ensures, among other things, that node’s own network connection goes down temporarily, the node won’t completely void all of k-buckets.</font>To ensure the persistence of key-value pairs, nodes 
+<font color="#FF00FF">To ensure the persistence of key-value pairs, nodes 
 must periodically republish keys. Otherwise, two phenomena may cause lookups for 
 valid keys to fail. First, some of the k nodes that initially get a key-value 
 pair when it is published may leave the network. Second, new nodes may join the 
 network with IDs closer to some published key than the nodes on which the 
 key-value pair was originally published. In both cases, the nodes with a 
 key-value pair must republish it so as once again to ensure it is available on 
-the k nodes closest to the key.</font> </p>
+the k nodes closest to the key.</font></font> </p>
 <p>
-<font color="#FF00FF" When a contact fails to respond 5 RPCs in row, it is considered stale. If fe-bucket not full or its replacement cache empty, Kademlia merely flags stale contacts rather than remove them. This ensures, among other things, that node’s own network connection goes down temporarily, the node won’t completely void all of k-buckets.</font>To compensate for nodes leaving the network, Kademlia 
+<font color="#FF00FF"> To compensate for nodes leaving the network, Kademlia 
 republishes each key-value pair once an hour. A naive implementation of this 
 strategy would require many messages—each of up to k nodes storing a key-value 
 pair would perform a node lookup followed by k - 1 STORE RPCs every hour.&nbsp; 
-</font></p>
-<p>From wikipedia, which can be helpful for understanding the spec with 
+</font></font></p>
+<p>From wikipedia<sup>15</sup>, which can be helpful for understanding the spec with 
 different phrasing:</p>
 <p>&quot;Periodically, a node that stores a value will explore the network to find 
 the k nodes that are close to the key value and replicate the value onto them. 
@@ -3196,8 +3204,38 @@ can be amortized over the republication of many keys.</font></p>
 <p>This second optimization is sort of straight forward -- if we've done a bucket refresh 
 within the last hour, we can avoid calling FindNode (the node lookup algorithm.)&nbsp; 
 The problem is, how do we determine the bucket to test if it's been refreshed?&nbsp; 
-The bucket for which the key is in range should contain the closest contacts 
-we've seen for that key, so we'll test whether that bucket has been refreshed.&nbsp; </p>
+The bucket for which the key is in range should contain some closer contacts 
+we've seen for that key, so we'll test whether that bucket has been refreshed.</p>
+<p><img border="0" src="note.png" width="24" height="32"> Buckets in the bucket 
+list are maintained in range order rather than in a tree, which naturally orders 
+them by their prefix:</p>
+<table border="1" width="100%">
+	<tr>
+		<td>State</td>
+		<td>Bucket Range(s)</td>
+		<td>Prefix(es)</td>
+	</tr>
+	<tr>
+		<td>Initial Bucket</td>
+		<td>0 .. 2<sup>160</sup></td>
+		<td>1</td>
+	</tr>
+	<tr>
+		<td>Two Buckets</td>
+		<td>0 .. 2<sup>159 |</sup> 2<sup>159</sup> .. 2<sup>160</sup></td>
+		<td>01, 1</td>
+	</tr>
+	<tr>
+		<td>Four Buckets</td>
+		<td>0 .. 2<sup>158</sup> | 2<sup>158</sup> .. 2<sup>159</sup> | 2<sup>159</sup> 
+		- 2<sup>159 </sup>+ 2<sup>158 </sup>| 2<sup>159</sup> - 2<sup>159</sup>+2<sup>158</sup> 
+		.. 2<sup>160</sup></td>
+		<td>001, 01, 10, 1</td>
+	</tr>
+</table>
+<p>&nbsp;</p>
+<p>&nbsp; This means that given a bucket at index <i>n</i>, all buckets at index 
+&lt; <i>n</i> will a</p>
 <h3>Key Republishing - Implementation</h3>
 <p>One refactoring that has to occur is that the storage mechanism needs to 
 associate a timestamp with the key-value, which you'll see used in the following 
@@ -3206,7 +3244,7 @@ code.</p>
 /// Replicate key values if the key-value hasn't been touched within the republish interval.
 /// Also don't do a FindNode lookup if the bucket containing the key has been refreshed within the refresh interval.
 /// &lt;/summary&gt;
-private void KeyValueRepublishElapsed(object sender, ElapsedEventArgs e)
+protected void KeyValueRepublishElapsed(object sender, ElapsedEventArgs e)
 {
   DateTime now = DateTime.Now;
 
@@ -3220,7 +3258,6 @@ private void KeyValueRepublishElapsed(object sender, ElapsedEventArgs e)
     storage.Touch(k);
   });
 }</pre>
-<p>&nbsp;</p>
 <h3>Over-Caching</h3>
 <p><font color="#FF00FF">To avoid “over-caching,” we make the expiration time of 
 a (key,value) pair in any node’s database exponentially inversely proportional 
@@ -3256,13 +3293,13 @@ unresponsive contacts and avoids sending them any further RPCs for an
 exponentially increasing backoff interval. Because at most stages Kademlia’s 
 lookup only needs to hear from one of k nodes, the system typically does not 
 retransmit dropped RPCs to the same node.</font></p>
-<font When a contact fails to respond to 5 RPCs in a row, it 
+<font color="#FF00FF"> When a contact fails to respond to 5 RPCs in a row, it 
 is considered stale. If a fe-bucket is not full or its replacement cache is 
 empty, Kademlia merely flags stale contacts rather than remove them. This 
 ensures, among other things, that if a node’s own network connection goes down 
 temporarily, the node won’t completely void all of its k-buckets.</font>
 <h3>Accelerated Lookups</h3>
-</font><font color="#FF00FF"When a contact fails to respond to 5 RPCs in a row, it 
+<font color="#FF00FF">When a contact fails to respond to 5 RPCs in a row, it 
 is considered stale. If a fe-bucket is not full or its replacement cache is 
 empty, Kademlia merely flags stale contacts rather than remove them. This 
 ensures, among other things, that if a node’s own network connection goes down 
@@ -3316,7 +3353,8 @@ https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-k
 <p>[14] -
 <a href="https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170">
 https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170</a></p>
-<p>&nbsp;</p>
+<p>[15] - <a href="https://en.wikipedia.org/wiki/Kademlia">
+https://en.wikipedia.org/wiki/Kademlia</a> </p>
 
 </font>
 
