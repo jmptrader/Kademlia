@@ -3367,6 +3367,20 @@ spec's recommended value for that optimization. </p>
 Internally the buckets are potentially updated and if the contact is new, it is 
 sent any values that it should store, as discussed above when a new node 
 registers.</p>
+<h3>Piggy-Backed Ping</h3>
+<p>From: <a href="http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf">
+http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf</a> </p>
+<p><font color="#FF0000">&nbsp;The situation is different when the first message 
+a node received is a request<br>
+message. In this case, the receiver cannot be sure whether the sender’s contact 
+informations are<br>
+correct. It could be that the request was faked. To determine this, the 
+piggy-backed ping is used.<br>
+The effect of the piggy-backed ping is that the original sender of the request 
+must send a ping reply<br>
+upon receiving the reply message. Thus, the receiver of the request message is 
+able to determine<br>
+the correctness of the sender as well.</font></p>
 <h2>Persisting the Dht</h2>
 <p>The bucket lists and contacts in each bucket need to be persisted so that in 
 case of a server restart, the last known state of the Dht can be restored.&nbsp; 
