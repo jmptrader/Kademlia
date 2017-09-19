@@ -134,6 +134,10 @@ http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NOD
 <p>Jim Dixon's description of Section 2.4 of the specification:
 <a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html">
 https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html</a> </p>
+<p>Implementation of Kademlia Distributed Hash Table, Semester Thesis Writen by 
+Bruno Spori, Swiss Federal Institute of Technology Zurich:
+<a href="http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf">
+http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf</a> </p>
 <h3>Other Resources To Further This Work</h3>
 <p>IPFS - Content Addressed, Versions, P2P File System (Draft 3):
 <a href="https://ipfs.io/ipfs/QmR7GSQM93Cx5eAg6a6yRzNde1FQv7uL6X1o4k7zrJa3LX/ipfs.draft3.pdf">
@@ -3203,39 +3207,73 @@ able to figure out the k closest nodes to a given key. These bucket refreshes
 can be amortized over the republication of many keys.</font></p>
 <p>This second optimization is sort of straight forward -- if we've done a bucket refresh 
 within the last hour, we can avoid calling FindNode (the node lookup algorithm.)&nbsp; 
-The problem is, how do we determine the bucket to test if it's been refreshed?&nbsp; 
-The bucket for which the key is in range should contain some closer contacts 
-we've seen for that key, so we'll test whether that bucket has been refreshed.</p>
+How do we determine the bucket to test if it's been refreshed?&nbsp; The bucket 
+for which the key is in range should contain some closer contacts we've seen for 
+that key.&nbsp; While the answer might be obvious, it's worthwhile to discuss 
+the reasoning here.&nbsp; 
+</p>
 <p><img border="0" src="note.png" width="24" height="32"> Buckets in the bucket 
 list are maintained in range order rather than in a tree, which naturally orders 
 them by their prefix:</p>
-<table border="1" width="100%">
+<table border="1" width="66%">
 	<tr>
 		<td>State</td>
 		<td>Bucket Range(s)</td>
-		<td>Prefix(es)</td>
+		<td width="142">Prefix(es)</td>
 	</tr>
 	<tr>
 		<td>Initial Bucket</td>
 		<td>0 .. 2<sup>160</sup></td>
-		<td>1</td>
+		<td width="142">1</td>
 	</tr>
 	<tr>
 		<td>Two Buckets</td>
 		<td>0 .. 2<sup>159 |</sup> 2<sup>159</sup> .. 2<sup>160</sup></td>
-		<td>01, 1</td>
+		<td width="142">01, 1</td>
 	</tr>
 	<tr>
 		<td>Four Buckets</td>
 		<td>0 .. 2<sup>158</sup> | 2<sup>158</sup> .. 2<sup>159</sup> | 2<sup>159</sup> 
 		- 2<sup>159 </sup>+ 2<sup>158 </sup>| 2<sup>159</sup> - 2<sup>159</sup>+2<sup>158</sup> 
 		.. 2<sup>160</sup></td>
-		<td>001, 01, 10, 1</td>
+		<td width="142">001, 01, 10, 1</td>
 	</tr>
 </table>
-<p>&nbsp;</p>
-<p>&nbsp; This means that given a bucket at index <i>n</i>, all buckets at index 
-&lt; <i>n</i> will a</p>
+<p>When we identify a bucket a given key, the contacts in that bucket are 
+closest, as per the XOR computation on the prefix.&nbsp; For example, looking at 
+the four buckets with prefixes 001, 01, 10, and 1, we see that the contacts in 
+the key's bucket range are closest (closest bucket contacts are in green, 
+farther bucket contacts are in red):</p>
+<table border="1" width="65%">
+	<tr>
+		<td>Key Prefix</td>
+		<td>Key Prefix ^ Bucket Prefixes</td>
+		<td>Explanation</td>
+	</tr>
+	<tr>
+		<td>1</td>
+		<td><b><font color="#FF0000">101, 11, 01</font>, <font color="#00FF00">0</font></b></td>
+		<td>Bucket with prefix 1 always has contacts that are closer</td>
+	</tr>
+	<tr>
+		<td>01</td>
+		<td><b><font color="#FF0000">011</font>, <font color="#00FF00">00</font>,
+		<font color="#FF0000">11, 11</font></b></td>
+		<td>Bucket with prefix 01 always has contacts that are closer</td>
+	</tr>
+	<tr>
+		<td>001</td>
+		<td><b><font color="#00FF00">000</font>,<font color="#FF0000"> 011, 101, 
+		101</font></b></td>
+		<td>Bucket with prefix 001 always has contacts that are closer</td>
+	</tr>
+	<tr>
+		<td>0001</td>
+		<td><b><font color="#00FF00">0011</font>, <font color="#FF0000">0101, 
+		1001, 1001</font></b></td>
+		<td>Bucket with prefix 001 always has contacts that are closer</td>
+	</tr>
+</table>
 <h3>Key Republishing - Implementation</h3>
 <p>One refactoring that has to occur is that the storage mechanism needs to 
 associate a timestamp with the key-value, which you'll see used in the following 
@@ -3258,11 +3296,64 @@ protected void KeyValueRepublishElapsed(object sender, ElapsedEventArgs e)
     storage.Touch(k);
   });
 }</pre>
-<h3>Over-Caching</h3>
+<h3>Over-Caching - Discussion</h3>
 <p><font color="#FF00FF">To avoid “over-caching,” we make the expiration time of 
 a (key,value) pair in any node’s database exponentially inversely proportional 
 to the number of nodes between the current node and the node whose ID is closest 
-to the key ID</font></p>
+to the key ID.</font></p>
+<h4>Ambiguity #14</h4>
+<p>The specification provides no guidance for what the calculation for 
+&quot;exponentially inversely proportional&quot; should actually be.&nbsp; It's also 
+undefined as to what the time constants are -- what is a baseline time for which 
+a key-value should persist?&nbsp; Some digging around found a useful post on the 
+emule-project forum<sup>16</sup> section 3.2.4 
+(the whole forum post and responses are worth reading):</p>
+<blockquote>
+	<p>&quot;Gleaned from their implementation and according to the M&amp;M paper, key 
+	space=160, k=20, m=60, r=24, alpha=3, b=5, p=1*m, c=0.5*m, 
+	o=1/(2^(b*gap/(2^b-1)))...<br>
+	<br>
+	key space is defined as the system-wide size, in bits, of any key or ID.<br>
+	k is defined as the system-wide replication parameter.<br>
+	m is defined as the system-wide persistence parameter.<br>
+	r is defined as the system-wide expiration parameter.<br>
+	alpha is defined as the system-wide concurrency parameter.<br>
+	<br>
+	b is defined as the node-specific search accelerator parameter, specifying 
+	the number of bits to hop per iteration during node lookups.<br>
+	p is defined as the node-dependent pathological parameter.<br>
+	c is defined as the node-dependent consistency parameter.<br>
+	o is defined as the node-specific over-caching parameter.<br>
+	...<br>
+	Determine distance delta relative to me keyRme : d(key, Me ID) = Delta<br>
+	....<br>
+	all expiration timers that are associated with the values to a key are 
+	re-adjusted to prevent over-caching. Initially, the expiration timer is 
+	m*r*o, with o at 1. On adjustment the expiration is shortened by the o 
+	factor. This factor is determined from the absolute gap in k-buckets between 
+	distances keyRme and newRkey: o = 1/(2^(b*gap/(2^b-1))).&quot;</p>
+</blockquote>
+<p>The computation for <i>o</i> isn't in the spec, so it must have been gleaned 
+from eMule's implementation.&nbsp; The above computation looks at the distance 
+between buckets rather than the spec's &quot;number of nodes&quot; metric.&nbsp;&nbsp; The 
+baseline expiration time of 1400 minutes (24 hours) comes from the spec:</p>
+<p><font color="#FF00FF">For Kademlia’s current application (file sharing), we 
+also require the original publisher of a (key,value) pair to republish it every 
+24 hours. Otherwise, (key,value) pairs expire 24 hours after publication, so as 
+to limit stale index information in the system. For other applications, such as 
+digital certificates or cryptographic hash to value mappings, longer expiration 
+times may be appropriate.</font></p>
+<p>We therefore need to distinguish between key-values for which we are the 
+original publisher and key-values in the store that are republications from 
+other nodes.&nbsp; We also need to track an expiration time that is separate 
+from the key-value republish timestamp.&nbsp; Furthermore, up to this point, I 
+haven't implemented the concept of accelerated lookup optimization, which is 
+where the value of <i>b </i>comes from.&nbsp; In this implementation, where we 
+have bucket ranges, rather than a bucket per bit in the key space, the 
+accelerated lookup optimization is irrelevant, so we'll use b==5 which is the 
+spec's recommended value for that optimization. </p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
@@ -3271,11 +3362,18 @@ to the key ID</font></p>
 Internally the buckets are potentially updated and if the contact is new, it is 
 sent any values that it should store, as discussed above when a new node 
 registers.</p>
+<h2>Persisting the Dht</h2>
+<p>The bucket lists and contacts in each bucket need to be persisted so that in 
+case of a server restart, the last known state of the Dht can be restored.&nbsp; 
+This is baked into the Dht implementation, serializing the data in a JSON file.&nbsp; 
+The persistence of key-values is handled separately and is defined by the 
+specific implementation needs.</p>
+<p>&nbsp;</p>
 <h2>Thread Safety</h2>
 <h2>Some Enhancements</h2>
 <h3>Operator Overloading of the ID Class</h3>
 <h2>Not Implemented</h2>
-<h3>Delayed Eviction (Optimized Contact Accounting)</h3>
+<h3>Delayed Eviction (Optimized Contact Accounting) - Discussion</h3>
 <p><font color="#FF00FF">To reduce traffic, Kademlia delays probing contacts 
 until it has useful messages to send them. When a Kademlia node receives an RPC 
 from an unknown contact and the k-bucket for that contact is already full with 
@@ -3285,7 +3383,7 @@ contacts in the k-bucket, any unresponsive ones can be evicted and replaced with
 entries in the replacement cache. The replacement cache is kept sorted by time 
 last seen, with the most recently seen entry having the highest priority as a 
 replacement candidate.</font></p>
-<h3>UDP Drop Outs</h3>
+<h3>UDP Drop Outs - Discussion</h3>
 <p><font color="#FF00FF">A related problem is that because Kademlia uses UDP, 
 valid contacts will sometimes fail to respond when network packets are dropped. 
 Since packet loss often indicates network congestion, Kademlia locks 
@@ -3298,7 +3396,12 @@ is considered stale. If a fe-bucket is not full or its replacement cache is
 empty, Kademlia merely flags stale contacts rather than remove them. This 
 ensures, among other things, that if a node’s own network connection goes down 
 temporarily, the node won’t completely void all of its k-buckets.</font>
-<h3>Accelerated Lookups</h3>
+<p>This is true not just for UDP packets but any connection -- it may go down 
+for a while.&nbsp; This algorithm is somewhat entangled with delayed eviction.&nbsp; 
+In delayed eviction, the spec state &quot;any unresponsive ones can be evicted.&quot;&nbsp; 
+It is the spec's description of UDP drop outs that actually defines what 
+&quot;unresponsive&quot; actually means.</p>
+<h3>Accelerated Lookups - Discussion</h3>
 <font color="#FF00FF">When a contact fails to respond to 5 RPCs in a row, it 
 is considered stale. If a fe-bucket is not full or its replacement cache is 
 empty, Kademlia merely flags stale contacts rather than remove them. This 
@@ -3310,6 +3413,9 @@ Conceptually, this is done by considering IDs 6 bits at a time instead of just
 one bit at a time. As previously described, the expected number of hops per 
 lookup is log2 n. By increasing the routing table’s size to an expected 2b log2t 
 n k-buckets, we can reduce the number of expected hops to log2&amp; n.</font></p>
+<p>In this implementation, where we have bucket ranges rather than a bucket per 
+bit in the key space, therefore the accelerated lookup optimization is 
+irrelevant because the bucket ranges typically span many prefix bits.</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
@@ -3356,7 +3462,14 @@ https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/s
 <p>[15] - <a href="https://en.wikipedia.org/wiki/Kademlia">
 https://en.wikipedia.org/wiki/Kademlia</a> </p>
 
+[16] - <a href="https://forum.emule-project.net/index.php?showtopic=32335">
+https://forum.emule-project.net/index.php?showtopic=32335</a>
+
 </font>
+
+<p>[17] - <a href="http://www.emule-project.net/home/perl/general.cgi?l=1">
+http://www.emule-project.net/home/perl/general.cgi?l=1</a> </p>
+<p>&nbsp;</p>
 
 </body>
 
