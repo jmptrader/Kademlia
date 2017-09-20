@@ -49,7 +49,7 @@ namespace UnitTests2
 
             // Set the value in the other node, to be discovered by the lookup process.
             string val = "Test";
-            otherNode.Cache(key, val);
+            otherNode.SimpleStore(key, val);
 
             Assert.IsFalse(store1.Contains(key), "Expected our peer to NOT have cached the key-value.");
             Assert.IsTrue(store2.Contains(key), "Expected other node to HAVE cached the key-value.");
@@ -88,7 +88,7 @@ namespace UnitTests2
 
             // Set the value in the other node, to be discovered by the lookup process.
             string val = "Test";
-            otherNode.Cache(key, val);
+            otherNode.SimpleStore(key, val);
 
             Assert.IsFalse(store1.Contains(key), "Expected our peer to NOT have cached the key-value.");
             Assert.IsTrue(store2.Contains(key), "Expected other node to HAVE cached the key-value.");

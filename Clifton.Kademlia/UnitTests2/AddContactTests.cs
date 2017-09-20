@@ -219,8 +219,8 @@ namespace UnitTests2
 
             // The existing node stores two items, one with an ID "hash" of 1, the other with ID.Max
             // Simple storage, rather than executing the code for Store.
-            existing.Cache(ID.One, val1);
-            existing.Cache(ID.Mid, valMid);
+            existing.SimpleStore(ID.One, val1);
+            existing.SimpleStore(ID.Mid, valMid);
 
             Assert.IsTrue(existing.Storage.Count() == 2, "Expected the existing node to have two key-values.");
 
