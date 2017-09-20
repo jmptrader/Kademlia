@@ -57,8 +57,7 @@ namespace Clifton.Kademlia
 
             // We're storing to ourselves as well as k closer contacts.
             storage.Set(key, val);
-            List<Contact> contacts = router.Lookup(key, router.RpcFindNodes).contacts;
-            contacts.ForEach(c => c.Protocol.Store(node.OurContact, key, val));
+			StoreOnCloserContacts(key, val);
         }
 
         public (bool found, List<Contact> contacts, string val) FindValue(ID key)
@@ -132,18 +131,40 @@ namespace Clifton.Kademlia
         {
             DateTime now = DateTime.Now;
 
-            node.Storage.Where(
-                k => (now - storage.GetTimeStamp(k)).TotalMilliseconds >= Constants.KEY_VALUE_REPUBLISH_INTERVAL &&
-                    (now - node.BucketList.GetKBucket(k).TimeStamp).TotalMilliseconds >= Constants.BUCKET_REFRESH_INTERVAL).
-            ForEach(k =>
-            {
-                ID kid = new ID(k);
-                router.Lookup(kid, router.RpcFindNodes).contacts.ForEach(c => c.Protocol.Store(node.OurContact, kid, storage.Get(k)));
-                storage.Touch(k);
-            });
+			node.Storage.Where(k => (now - storage.GetTimeStamp(k)).TotalMilliseconds >= Constants.KEY_VALUE_REPUBLISH_INTERVAL).ForEach(k=>
+			{
+                ID key = new ID(k);
+				StoreOnCloserContacts(key, storage.Get(key));
+				storage.Touch(k);			
+			});
         }
 
-        protected void RefreshBucket(KBucket bucket)
+		/// <summary>
+		/// Perform a lookup if the bucket containing the key has not been refreshed, otherwise, just get the contacts the k closest contacts we know about.
+		/// </summary>
+		protected void StoreOnCloserContacts(ID key, string val)
+		{
+			DateTime now = DateTime.Now;
+
+			KBucket kbucket = node.BucketList.GetKBucket(key);
+			List<Contact> contacts;
+
+			if ((now - kbucket.TimeStamp).TotalMilliseconds < Constants.BUCKET_REFRESH_INTERVAL)
+			{
+				// Bucket has been refreshed recently, so don't do a lookup as we have the k closes contacts.
+				contacts = node.BucketList.GetCloseContacts(key, node.OurContact.ID);
+			}
+			else
+			{
+				// Do a lookup and touch the bucket since we just did a lookup.
+				contacts = router.Lookup(key, router.RpcFindNodes).contacts;
+				TouchBucketWithKey(key);
+			}
+
+			contacts.ForEach(c => c.Protocol.Store(node.OurContact, key, val));
+		}
+
+		protected void RefreshBucket(KBucket bucket)
         {
             bucket.Touch();
             ID rndId = ID.RandomIDWithinBucket(bucket);

@@ -21,6 +21,10 @@ namespace Clifton.Kademlia
         string Get(BigInteger key);
         DateTime GetTimeStamp(BigInteger key);
         void Set(ID key, string value);
+
+		/// <summary>
+		/// Updates the republish timestamp.
+		/// </summary>
         void Touch(BigInteger key);
     }
 }

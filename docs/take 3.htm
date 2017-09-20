@@ -356,9 +356,9 @@ hours. Otherwise, (key,value) pairs expire 24 hours after publication, so as to
 limit stale index information in the system. For other applications, such as 
 digital certificates or cryptographic hash to value mappings, longer expiration 
 times may be appropriate.</font></p>
-<p>If we want to consider using Kademlia in a distributed blockchain 
+<p>If we want to consider using Kademlia in a distributed ledger 
 implementation, it would seem necessary that key-values never expire, otherwise 
-this would result in an integrity loss of the blockchain data.</p>
+this would result in an integrity loss of the ledger data.</p>
 <h4>Over-caching</h4>
 <p><font color="#FF00FF">Because of the uni-directionality of the topology, 
 future searches for the same key are likely to hit cached entries before 
@@ -3225,7 +3225,7 @@ for which the key is in range should contain some closer contacts we've seen for
 that key.&nbsp; While the answer might be obvious, it's worthwhile to discuss 
 the reasoning here.&nbsp; 
 </p>
-<p><img border="0" src="note.png" width="24" height="32"> Buckets in the bucket 
+<p>Buckets in the bucket 
 list are maintained in range order rather than in a tree, which naturally orders 
 them by their prefix:</p>
 <table border="1" width="66%">
@@ -3287,6 +3287,7 @@ farther bucket contacts are in red):</p>
 		<td>Bucket with prefix 001 always has contacts that are closer</td>
 	</tr>
 </table>
+<p>So for this reason, we use the bucket for which the key is in range.</p>
 <h3>Key Republishing - Implementation</h3>
 <p>One refactoring that has to occur is that the storage mechanism needs to 
 associate a timestamp with the key-value, which you'll see used in the following 
@@ -3299,21 +3300,37 @@ protected void KeyValueRepublishElapsed(object sender, ElapsedEventArgs e)
 {
   DateTime now = DateTime.Now;
 
-  node.Storage.Where(
-  k =&gt; (now - storage.GetTimeStamp(k)).TotalMilliseconds &gt;= Constants.KEY_VALUE_REPUBLISH_INTERVAL &amp;&amp;
-    (now - node.BucketList.GetKBucket(k).TimeStamp).TotalMilliseconds &gt;= Constants.BUCKET_REFRESH_INTERVAL).
-  ForEach(k =&gt;
+  node.Storage.Where(k =&gt; (now - storage.GetTimeStamp(k)).TotalMilliseconds &gt;= Constants.KEY_VALUE_REPUBLISH_INTERVAL).ForEach(k=&gt;
   {
     ID kid = new ID(k);
-    router.Lookup(kid, router.RpcFindNodes).contacts.ForEach(c =&gt; c.Protocol.Store(node.OurContact, kid, storage.Get(k)));
+    KBucket kbucket = node.BucketList.GetKBucket(k);
+    List&lt;Contact&gt; contacts;
+
+    if ((now - kbucket.TimeStamp).TotalMilliseconds &lt; Constants.BUCKET_REFRESH_INTERVAL)
+    {
+      // Bucket has been refreshed recently, so don't do a lookup as we have the k closes contacts.
+      contacts = kbucket.Contacts;
+    }
+    else
+    {
+      // Do a lookup and touch the bucket, since we just did a lookup.
+      contacts = router.Lookup(kid, router.RpcFindNodes).contacts;
+      TouchBucketWithKey(kid);
+    }
+
+    contacts.ForEach(c =&gt; c.Protocol.Store(node.OurContact, kid, storage.Get(k)));
     storage.Touch(k);
   });
 }</pre>
 <h3>Over-Caching - Discussion</h3>
-<p><font color="#FF00FF">To avoid “over-caching,” we make the expiration time of 
+<p><font color="#FF00FF">To avoid &quot;over-caching,&quot; we make the expiration time of 
 a (key,value) pair in any node’s database exponentially inversely proportional 
 to the number of nodes between the current node and the node whose ID is closest 
 to the key ID.</font></p>
+<p>&quot;Inversely proportional&quot; - meaning that the expiration time is shorter the 
+more nodes that are between the current node and the closest node.</p>
+<p>&quot;Exponentially proportional&quot; - meaning the expiration time is <i>a lot 
+shorter</i> the more nodes that are between the current node and closest node.</p>
 <h4>Ambiguity #14</h4>
 <p>The specification provides no guidance for what the calculation for 
 &quot;exponentially inversely proportional&quot; should actually be.&nbsp; It's also 
@@ -3356,15 +3373,90 @@ also require the original publisher of a (key,value) pair to republish it every
 to limit stale index information in the system. For other applications, such as 
 digital certificates or cryptographic hash to value mappings, longer expiration 
 times may be appropriate.</font></p>
-<p>We therefore need to distinguish between key-values for which we are the 
-original publisher and key-values in the store that are republications from 
-other nodes.&nbsp; We also need to track an expiration time that is separate 
+<p>We need to track an expiration time that is separate 
 from the key-value republish timestamp.&nbsp; Furthermore, up to this point, I 
 haven't implemented the concept of accelerated lookup optimization, which is 
 where the value of <i>b </i>comes from.&nbsp; In this implementation, where we 
 have bucket ranges, rather than a bucket per bit in the key space, the 
 accelerated lookup optimization is irrelevant, so we'll use b==5 which is the 
 spec's recommended value for that optimization. </p>
+<h4>Ambiguity #15</h4>
+<p>Who does the computation &quot;between the current node and the node whose ID is 
+closest to the key ID?&quot;&nbsp; Is the &quot;current node:&quot;</p>
+<ol>
+	<li>The sender that is caching the key-value on another code, and counts the 
+	number of nodes between itself and receiving node?</li>
+	<li>The receiver that is handling the store request, and counts the number 
+	of nodes between itself and the sender node?</li>
+</ol>
+<p>Keep in mind:</p>
+<ol>
+	<li>Cached key-values are republished every hour.</li>
+	<li>The originating node republishes its key-values every 24 hours.</li>
+	<li>Expiration times are &lt;= 24 hours.</li>
+	<li>It is entirely possible that a more distant node performs a re-publish 
+	to the node closest to the originator, particularly when the network is 
+	small and we're using farther nodes to fill the <i>k</i> contacts 
+	requirement.</li>
+</ol>
+<h4>Ambiguity #16</h4>
+<p><img border="0" src="important.png" width="38" height="32"> The reader may be 
+wondering why the originating node republishes its key-values every 24 hours 
+when key-values are being republished every hour anyways?&nbsp; There's a 
+subtlety here:&nbsp; the originator doesn't use its own node's store -- this is 
+just for the peer network.&nbsp; That may be obvious, but on the other hand it 
+is an easy mistake to assume that we can use our own node's storage system for 
+persisting our own node's data.&nbsp; This is <i>not</i> the case!&nbsp; The 
+storage <i>does not </i>distinguish between key-values for which we are from the 
+original publishing node and key-values in the store that are republications 
+from other nodes.&nbsp; It may even be possible that the originator ends up 
+getting a store request for its own data, but this will be for key-values that 
+have an expiration time.</p>
+<h4>Considerations</h4>
+<p>My take on the matter is as follows:</p>
+<ol>
+	<li>If the &quot;current node&quot; is the sender, then the packet being transmitted 
+	must include the expiration factor <i>o (not </i>the expiration date/time -- 
+	the receiving peer needs to calculate that), which I dislike because it 
+	makes the packet bigger.</li>
+	<li>However, in the case where &quot;current node&quot; is the originating node, it <i>
+	is</i> the closest node, so the expiration time is 24 hours.&nbsp; Every 
+	other node is farther away, and we don't want those nodes to necessarily 
+	expire the data sooner if the &quot;other&quot; node determines the expiration time, 
+	rather than the sender node.&nbsp; In other words, if we don't want the 
+	key-value to expire on the closest peers to the <i>originator </i>before the 
+	24 hour republish time (from the originator)<i> </i>then the sender must 
+	provide the expiration factor rather than it being computed by the receiver.</li>
+	<li>Even though originator A might have a closest node B, it is not true 
+	that when B receives A's store request, that B views A as the closest node.&nbsp; 
+	B may have peers that are in-between itself and A. </li>
+	<li>The rest of the description in section 3.2.4 of that forum post 
+	continues to describe how the expiration time is further adjusted using what 
+	seems to be a completely arbitrary algorithm implemented in emule.&nbsp; 
+	However, what do we do when a closer node (<i>o</i> would be larger) or a 
+	farther node (<i>o</i> would be smaller) republishes the key-value?&nbsp; 
+	</li>
+	<li>The whole point of this is to allow cached key-values to expire, and 
+	cached key-values on farther away nodes should expire faster.&nbsp; 
+	Eventually, if the originator goes away permanently, all its key-values will 
+	disappear from the network.&nbsp; In order for this to happen, we can't just 
+	reset the expiration time to &quot;now + 24 hours * <i>o</i>&quot; as the hourly 
+	republishing of key-values would continually reset this value.&nbsp; So 
+	instead, we can ambiguously say &quot;if the new <i>o</i> is &gt; old <i>o</i>, use 
+	the new <i>o</i>&quot; such that if a closer node is re-publishing the key-value 
+	with an expiration factor that is larger then we use the larger factor so 
+	the key persists longer.</li>
+</ol>
+<p>But does this whole expiration process really work?&nbsp; Given that the 
+expiration time is never reset, only the expiration factor is updated, 
+eventually keys will be removed within one of the intervals of re-publishing, so 
+those keys would not republish onto other nodes from the node on which it 
+expired.&nbsp; But what happens when one of </p>
+<p>What if we never want a cached value to disappear, even if the originator 
+peer leaves the network?&nbsp; This is particularly important when considering 
+using Kademlia for a distributed ledger -- </p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
@@ -3395,8 +3487,11 @@ case of a server restart, the last known state of the Dht can be restored.&nbsp;
 This is baked into the Dht implementation, serializing the data in a JSON file.&nbsp; 
 The persistence of key-values is handled separately and is defined by the 
 specific implementation needs.</p>
-<p>&nbsp;</p>
-<h2>Thread Safety</h2>
+<h2>Considerations for an Asynchronous Implementation</h2>
+<h3>Parallel Queries</h3>
+<p><font color="#FF0000">Kademlia uses parallel, asynchronous queries to avoid 
+timeout delays from failed nodes. </font></p>
+<h3>Thread Safety</h3>
 <h2>Some Enhancements</h2>
 <h3>Operator Overloading of the ID Class</h3>
 <h2>Not Implemented</h2>

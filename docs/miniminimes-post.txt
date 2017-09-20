@@ -1,0 +1,149 @@
+Posted 02 November 2003 - 02:37 AM
+For the sake of understanding Kademlia better by its enthusiasts, I am describing my interpretation of the Kademlia paper and presentation by Maymounkov and Mazières (M&M). Others' inputs, elaborations, and corrections are welcome. Only at their pleasure and convenience, I would also appreciate comments from the developers of "Kamulia" on how their implementation differs in either diminution or augmentation from this interpretation of Kademlia.
+
+1.0 My Understanding of XOR Measurements
+
+The distance delta = d(x,z) = d(z,x) = x xor z = d(x,y) xor d(y,z) <= d(x,y) + d(y,z). The direction from x to some nonzero delta is exactly z, no many how many intervening y's there are. Whereas in physical space, one must know not only a point x and a distance but also a specific direction (cartesian slope or polar angles) in order to locate point z; in XOR space, one doesn't need direction from any point to any point, just the distance. For any x and a specific delta, there is one and only point delta distance away, which is z, and vice versa; and this specific delta applies for every other pairs of points not x and z.
+
+2.0 My Understanding of Kademlia's Parameters
+
+key space is defined as the system-wide size, in bits, of any key or ID.
+k is defined as the system-wide replication parameter.
+m is defined as the system-wide persistence parameter.
+r is defined as the system-wide expiration parameter.
+alpha is defined as the system-wide concurrency parameter.
+
+b is defined as the node-specific search accelerator parameter, specifying the number of bits to hop per iteration during node lookups.
+p is defined as the node-dependent pathological parameter.
+c is defined as the node-dependent consistency parameter.
+o is defined as the node-specific over-caching parameter.
+
+Gleaned from their implementation and according to the M&M paper, key space=160, k=20, m=60, r=24, alpha=3, b=5, p=1*m, c=0.5*m, o=1/(2^(b*gap/(2^b-1)))
+
+How big a system is is determined by the key space. For test purposes, the key space could be limited to as small as 8 bits, yielding a theoretical limit of 256 unique node IDs.
+
+The value chosen as k is supposed to ensure that any randomly picked k nodes in the system are very unlikely to fail all within some duration of m minutes of each other.
+
+Peer-to-peer storage information is transmitted within the system inside units called <key,value> pairs. A node publishes into the system all of its <key,value> pairs, and it searches (looks up) keys that are cached distributively in the system to retrieve the stored values. So, a node is also a storer in the distributed system. A storer of published <key,value> pairs stores them in the cache (also known as database) in the form of <key,((value,timestamp),(value,timestamp),...)> pairs, where the timestamp is the expiration timer of the <key,value> pair if it isn't refreshed.
+
+In order to limit stale information in the system, after every r durations, all original publishers republish every <key,value> pair. Otherwise, all <key,value> pairs expire r*m minutes after the original publishing.
+
+3.0 My Visualization of a Node
+
+Every node when first joining the system gets a randomly generated node ID. For the purpose of discussion, it is called the Me ID. While Kademlia identifies a node simply and virtually with just a node ID, for routing and configuration purposes, a node triple (consisting of IP address, UDP port, node ID) uniquely identifies a physical component of a node. Theoretically, multiple nodes can exist on a machine using one IP address and many different UDP ports; interestingly, multiple different nodes can also exist on a machine using one IP address and one UDP port. Conversely, one node can distributively exist on many machines with different IP addresses.
+
+Every node in the system maintains an ordered list of k-buckets and an active database. Also, when a node performs its primary function -- the key lookup -- it uses a temporary node lookup table. These three structures are described next.
+
+3.1 The list is called the k-buckets. The k-buckets keep and store systemic configuration information, which spreads automatically as a side-effect of key lookups. Each k-bucket has the responsibility of holding up to k node triples (IP address, UDP port, Node ID) whose Node IDs are within some distance-range relative to Me ID. The triples are kept in the bucket on the basis of the least-recently seen eviction policy. A timestamp is also kept in the bucket but is only for use in the no-traffic pathological case. The distance-range is determined by 'key space' and b, where b is the number of bits to hop per search iteration. 
+
+For example, suppose b=1 and key space=128, then there are ((2^b )-1)*ks/b or 128 potential k-buckets, with each bucket providing room for k potential node triples, where the 127th k-bucket holds node triples in the distance-range relative to Me ID from 2^127 up to 2^128, and where the 0th k-bucket holds the rare triples in the distance-range relative to Me ID between 2^0 and under 2^1. This means that for every iteration in a search or lookup, the distance gap is shorten by half. If, on the other hand, b=4 and key space=128, then there are 480 potential k-buckets (i=31 to 0; j=15 to 1), where the 31st hop's 15th k-bucket holds node triples in the distance-range relative to Me ID from 15*2^124 up to 2^128, and where the 4th hop's 12th k-bucket is responsible for triples in distance-range between 12*2^16 and under 2^20. This means that the distance is shortened in a more accelerated pace, by one sixteenth, or about 6.25% from a previous distance, for every lookup iteration.
+
+3.1.1 K-Bucket Activities. Whenever a k-bucket considers a node triple in its distance-range, if the triple is not already there, it adds the triple to the "tail" end. If the triple is already there, it moves the triple to the tail end. If the bucket is already full with k node triples, it pings the node triple at the "head" end; if the ping is successful, it discards the triple in consideration while moving the pinged triple from the head end to the tail end; but if the ping is unsuccessful, it removes the head triple to make room for the new triple at the tail. Whenever there's change activity to a k-bucket, it resets its timestamp timer to p minutes. If a k-bucket's timer expires, it keeps on pinging to the node triple at the head and either moves it to the end if successfully pinged or discards it and pings again another head triple, unless the bucket becomes empty.
+
+3.1.2 K-Bucket Lookup (for key): 
+1. Determine distance delta relative to me keyRme : d(key, Me ID) = Delta
+2. Go to the k-buckets and locate the bucket whose k nodes are also of the same distance-range relative to me.
+3. If bucket is empty or not full, look iteratively for the next bucket whose nodes are closer in distance-range relative to me.
+If this effort doesn't yield a total of k node triples, reversde direction in farther in distance-range relative to me.
+4. Return either k node triples or all node triples if the entire list of k-buckets yields less than k node triples.
+
+3.2 The cache in each node is a database. It is an interactive database, capable of initiating policy-driven activities. Its primary function is to store <key,value> pairs given to it from other nodes in the system. A cache can be of any storage size provided that it implements a least-recently used (LRU) policy at its base: When the cache runs out of space, the least accessed (requested or updated) <key,value> pair is removed to make room for new or updated ones. 
+
+3.2.1 Beyond this base policy, each value for a key, on creation, gets an expiration timestamp-timer. The timer is set for m*r*o minutes, with o initially set at 1. If the timer expires before being reset (with another store/update), the value is removed from the key. When all values are removed, the whole <key,value> pair is removed from the cache. For example, suppose there are exactly three nodes in the network which wish to share a source file, then the cache in the lucky node with the responsibility to store the key will have a structure of <key,((value1,timer1),(value2,timer2),(value3,timer3))>.
+
+3.2.2 Furthermore, the key itself has a "persistence" timestamp-timer that is set to go off every m minutes. This policy activates an optimized node lookup algorithm to search for nodes even closer to the key than the current Me ID. (See M&M's footnote 2.) That is, whenever the distance of a key relative to Me ID, or keyRme, is found to be larger than a distance keyRnew, then the <key,value> pair is republished at the new node.
+
+3.2.3.1 Most importantly, all keys in the cache are also sorted and cross-referenced to point to the appropriate indices (i,j) of k-buckets. At any time when a new node or contact is added to the k-buckets(i,j) whose distance-range matches the <key,value> pairs in the cache, it means there is a new node that is even closer to the keys than the current Me ID (meRkey > newRkey); and in which case, the policy triggers an immediate request to store these keys to the new node. This policy ensures "consistency" in the system -- meaning the closest nodes to a key do indeed have the <key,value> pair.
+
+3.2.3.2 Alternatively, a node can obey the consistency requirement by setting a periodic timer of c minutes that is less than m such that when it goes off, the node goes through the entire cache and k-buckets to find out if a new node is closer to a cached key; and if so, publish the keys to the closer nodes.
+
+3.2.4 Finally, to avoid "over-caching" of <key,value> pairs that are farther away from the key (which can obviously happen, as in sections 3.2.2 and 3.2.3), the expiration of a <key,value> pair in any node's database is adjusted "exponentially inversely proportional to the number of nodes between the current node and the node closest to the key ID," which "can be inferred from the bucket structure of the current node." That is, all expiration timers that are associated with the values to a key are re-adjusted to prevent over-caching. Initially, the expiration timer is m*r*o, with o at 1. On adjustment the expiration is shortened by the o factor. This factor is determined from the absolute gap in k-buckets between distances keyRme and newRkey: o = 1/(2^(b*gap/(2^b-1))).
+
+For example, suppose b=3 and key space=192 and m*r=1440minutes, then there are ((2^b )-1)*ks/b or 448 potential k-buckets. Now suppose a <key,value> pair in the current cache has a distance relative to Me ID of meRkey=keyRme and is cross-referenced to k-bucket(i,j), where i is the 59th hop and j is 3. Then suddenly, somehow, a new node is discovered in this same k-bucket(59,3) and whose distance newRkey is smaller than meRkey, and whose theoretical distance newRkey would be at, say k-bucket(58,7) relative to key. (In other words, had the key been a theoretical node in itself, it would place Me ID in k-bucket(59,3) and it would place new ID at k-bucket(58,7) in its theoretical list of k-buckets.) The absolute gap would be |(59*(2^b-1)+3) - (58*(2^b-1)+7)| = 3. So, o = 1/(2^(b*gap)/(2^b-1))) = 1/(2^(b*3/(2^b-1))) = 0.4102. Thus, if there is in the current cache the object <key,((value1,720minutes),(value2,1300minutes))>; then after having stored this whole object to the node closer to the key (or more probably, the pair is already stored there), the timers are adjusted to yield in the current cache <key,((value1,295minutes),(value2,533minutes))>. This absolute gap value is kept around in each key. If, say 50 minutes later, another node comes along closer to the key but whose absolute gap is less than 3, then it publishes to the new node as before but does not adjust the timer with another o factor; they simply wind down 50 minutes to <key,((value1,245),(value2,483))>. But if, say 40 minutes more later, another node comes even closer to the key and whose RELATIVE gap is two k-buckets greater than the present gap, then after ensuring storage of the <key,value> pair in the new node, the current one's expiration timers are adjusted by another o factor of (timer-40)*0.5520 to <key,((value1,113),(value2,245))>. The entire <key,value> pair would therefore expire in about four hours.
+
+3.3 The node-lookup table is a hypothetical construct--a small, local, temporary table used for finding the nearest nodes possible relative to a key. This is a table with enough room for a maximum of alpha*k unique node triples. It is sorted on the basis of the closest distance relative to "key." The closest in distance relative to "Key" is put in the first position in the table. When more new node triples are sorted and saved in a full table, the furthest item in the table is dropped in order to make room for closer triples.
+
+4.0 My Rough Approximation of the Protocol
+
+There are four basic remote procedure calls (RPCs): PING, STORE, FIND_NODE, FIND_VALUE.
+
+4.1 PING RPC. The request takes as arguments (RPC ID, target node triple) and returns the same in the reply if successful. The RPC ID is a random number that is used as an additional security feature to resist address forgery. The node triple is the target to ping to. This RPC can be used in piggback fashion on replies to other RPC requests as a way to ensure the latter senders' node triples. PING is also used in the pathological cases: when any of the non-empty k-buckets in the list hasn't had a refresh activity after p minutes from the last lookup's bucket-timestamp, the node sends a PING request using one of the node triples in that bucket to resuscitate that distance-range.
+
+4.2 STORE RPC. The request takes as arguments (RPC ID, target node triple, and <key,value> pair for later retrieval) and returns in the reply RPC ID and target node triple when successful. Two cases of failure may be contemplated: The target node may have dropped out of the system since the node triple was last queried; the target node's cache may be temporarily full. The first case may happen if the node has high latency. The second case can also happen when the node's physical resources is limited.
+
+4.3 FIND_NODE RPC. The request takes as arguments (RPC ID, target triple, key) and returns the same in the reply plus the target's k node triples closest to key. When a node receives such a request, it simply performs a k-bucket lookup for the key and returns in the reply the k node triples.
+
+4.4 FIND_VALUE RPC. The request and reply are identical to FIND_NODE RPC in the case 1 (of 2) that the target node is not (or not yet anyway) a STOREr of the key. In the second case, when the target node indeed has the <key,value> pair stored in its cache-database, the reply does not return k node triples but simply the found <key,value> pair.
+
+5.0 My Understanding of Kademlia's Most Important Functions
+
+5.1 Node Lookup Algorithm - to find the nearest nodes for some key.
+1. Perform a k-bucket lookup for key. (See 3.1.2.)
+2. From the k results, choose randomly among them alpha nodes (or more intelligently choose alpha nodes of low latency -- see footnote 1).
+3. Replicate these alpha node triples and save and sort them into a temporary node-lookup table. (See 3.3.)
+4. Send the appropriate (alpha) number of FIND_NODE RPCs.
+5. Set the status of these node triples in the node-lookup table as having been queried. (At the initial stage, they are the alpha triples.)
+6. When the RPCs return with replies, sort and save the incoming alpha*k node tripes into the node-lookup table. Inevitably there will be duplicate triples; discard them.
+7. Look only at the first k node triples in the node-lookup table. From among them, choose new node triples, alpha in number, which have not yet been queried (using the same criteria as in step 2).
+8. Recurse to step 4, jumping out only when the incoming alpha*k triples don't alter the rankings of the first k triples currently in the node-lookup table AND the first k node triples have all been queried AND have responded.
+9. The result of this algorithm: k node triples representing the nearest nodes relative to "key" within the past m minutes.
+
+5.2 Publish Algorithm - to store a <key,value> pair into the system.
+1. Perform the node lookup algorithm.
+2. Send STORE RPCs to the k node triples returned.
+3. The result: The entire system now has knowledge of the <key,value> pair in k places (the replication parameter), at least for the next m minutes.
+
+5.2.1 Publishing File IDs. An example: Suppose one wants to publish/release the file "Logic Tutor"; then its key is a hashed ID of the file (in key space) and its value is the IP:port value of the machine in which the file resides; e.g., <abc2345,((123.234.024.099, 4673, Me ID))>.
+
+5.2.2 Publishing Keywords for File Searches. There are many ways to publish the keywords: "logic", "tutor", "logic tutor", "tutor logic", "logical", "tutors", "tutorials", "tutor*", etc. Each one is a separate publishing task, and the key for each is the hashing of the word phrase itself.
+
+Presumably, the decision for eMule "Kamulia" to break away from Overnet is partly due to the differences in publishing keywords.
+
+5.3 Value Retrieval Algorithm - to retrieve a <key,value> pair from the system.
+1. Perform a k-bucket lookup for key. (See 3.1.2.)
+2. From the k results, copy them to a temporary node-lookup table (See 3.3.)
+3. Choose alpha nodes from the table, using whatever method.
+4. And issue FIND_VALUE RPCs.
+5. Set the status of these nodes as having been queried.
+6. When the RPCs return with replies that are alpha*k node triples, sort and save to table.
+7. Choose alpha nodes from the first k entries in the table.
+8. Recurse to step 4 until either 
+8a. the first k entries in the sorted table have been queried and responded, or 
+8b. the very first time a node actually returns with a <key,value> pair.
+9. In the case of 8a, the algorithm returns nothing -- the value is not in the system.
+10. In the case of 8b, it now begins its caching of the just found <key,value> pair for the benefit of subsequent lookups by other nodes:
+11. Of the first (k-alpha) to (k-1) entries in the sorted node-lookup table that did not return the <key,value> pair, it now sends STORE RPCs (alpha at a time) to them to "cache" the <key,value> pair. (See 3.2.4.)
+
+5.4 Joining the system - bootstrapping into the system with the help of a known node triple.
+1. The known node triple is "known" to be a participating node in the system.
+2. Put this node triple into the k-buckets based on distance relative to Me ID.
+3. Now request a node lookup for Me ID in the system.
+4. Update the k-buckets as the results are returned.
+5. "Finally, [the node] refreshes all k-buckets further away than its closest neighbor." [How? This is not a very revealing sentence.]
+
+6.0 My Respect for and Appreciation of Kademlia's Parameters
+
+Separately, there is a private spreadsheet that sketches some of the measurements and benchmarks specified in the paper. Hopefully, it can become the basis for comparison with some of the statistics that "Kamulia" nodes can collect. It is available here: ed2k://|file|Kademlia Parameters (Minisketch 1.0)|17920|9F0309DA9F973BD0D12BE35C5BB658D0|/ .
+
+6.1 k and m. Of the many parameters that one can tweak, k and m, as system-wide parameters, seem to have the most far-reaching effect in the way a system can accommodate storage of information. These parameters, when optimized, exploit fully a well-known fact that nodes in a peer-to-peer system are quite finicky--they pop in and out of the system at the whim of their owners. Therefore, a corollary that the longer a node stays in the system, the more likely that it will continue to stay. In other words, "node failures are inversely related to uptime." With these facts, we can conclude that k and m can only be established empirically. That is, no amount of mathematics or proofs can yield optimal values for these parameters. They can only be determined through experiments, tests, and extrapolations. Fortunately, k and m are positively correlative. The smaller the m, the smaller the k; and the greater the m, the greater k has to be; and vice versa. This means in effect that for any specific m, there is a specific k that optimizes a Kademlia system.
+
+The problem of optimization to retain and facilitate information retrieval involves studying the uptime of the "average node." This can be done by cataloging and sampling a bell-curve frequency distribution of nodes and their uptimes, and from which the mean uptime and the standard deviation can be computed. From this sample, we can calculate the optimal k value such that when k number of nodes store some <key,value> pair, at the end of a period of m minutes, there is a 95% statistical confidence that the value is still retained in the system.
+
+For example, if suppose m is set for 60 minutes, let a single node called the tester initiate a publish algorithm at time 0 of a <key,value> pair that is guaranteed to be absolutely unique. At time m-1 (or 59 minutes later, and thus avoiding the over-caching effect), the tester now initiates a value-retrieval algorithm on the same key. The success or failure of this activity constitutes one iteration. The next iteration uses another, different, absolutely unique <key,value> pair. When all the successes from a large number of iterations, say during a period of 7 to 14 days, yield a value between 95% and 98%, then we have an "optimized" k for when m is 60. If the yield is under 95% confidence, k is too small relative to m. If above the range, k is not optimized to m.
+
+This test is but one consideration. Another is the identity of the "average node." Does it rely on a T-3 connection or does it run by phone-modem? Does it stay on all the time, or does it disconnect after work hours, after dark, after the weekend, the weekday? How often does it come back on again? Immediately, daily, weekly, intermittently? All these and many other considerations (how big the eventual size of the system, the typical owner/user profile in relation to other p2p systems, the informational contents shared in the system, etc.), need to be addressed and included to determine how often a node lookup fails during a time m.
+
+The rate of node failure affects not only information retrieval but also information caching. If a published key happens to be extremely popular all of a sudden, the caching of the key becomes important in alleviating congestion in a unidirectional topology. The wrong size of k for period m will either disable the nodes in the worst case, or choke and slow traffic to and from the nodes. The right size of k will immediately enable a shared distribution of traffic load; and with exponentially inversed expiration time for published keys, the overall connectivity traffic will in the long run be significantly miniminimized.
+
+6.2 k and alpha. Unlike the relation between k and m, the relation of k and alpha is only mildly correlated. The more significant and determining factor in tweaking alpha seems to be the economic wealth of the system in the aggregate. If the system is populated, for example, with poor, "third-world" nodes, then failure rate is high, and so the global concurrency parameter needs to be set high, as is also k. On the other hand, if the system is populated with richly developed nodes (and "fast" connections), then node failure rate and dropped/lost packets will likely to be low, and so the concurrency rate can be set low, since latency will definitely be low.
+
+6.3 m and r. The period of republication depends in large part on the richness of the system's informational contents, because it places a major constraint in the size of the cache in each node. Besides, M&M acknowledge that the size of the cache database cannot be specified arbitrarily in advanced. However, the period of republication does depend partially on the size of k; after all, k and m are tightly related. So, to strike a balance between the fear of losing truly available information and the fear of keeping falsely available information, r has to be empirically determined after k and m have been set, such that at least half of the database's contents (excluding over-caching activities) is truly accurate at m*r/2 before expiration with a confidence of 95%.
+
+For example, if a tester node has been requested to store an item per m period (i0,i1, ...), and the r to be tested is 24; then at m*12, tester pings original-publisher node i0; at m*13, tester pings publisher node i1, etc. The tally of the test for a period, say of 7 to 14 days, constitutes one single iteration. When a large number of these iterations are done and the tallies indicate at least 50% accuracy in 95% of the iterations, then we can say that we have approximated an optimal m*r republication time that is based partially on k.
+
+6.4 k and b. The relation of k to b is a trade-off between speed and storage. Every incremental hop acceleration halves the search speed but doubles the total size of k-buckets. Fortunately, this trade-off needs not be addressed globally. Each node can determine its desired preferential threshold for b (and the consequence of size increase). Nevertheless, there are some guidelines; b may be set so that the system as a whole can be optimal. This can be done based on the size of the system. More accurately, b is correlated logarithmically to the number of nodes in the system. The more populated a system is, the bigger the hops should be. At the upper end, b should never be set exhorbitantly high, like above half of key space, and probably should not exceed log(key space,2). For example, if key space is 128, then storage should be conserved with a b not exceeding 7 as an upper limit.
+
+7. Summary
+
+As an exercise in interpretive and critical reading, I recommend Kademlia enthusiasts to read the original M&M paper. Personally, I started out with little understanding of how it works, and as I began to read, I had to take notes to keep track of the rich insights presented. The above constitutes my reading notes. The blind spot in my reading is that I haven't yet looked at the source code of "Kamulia" despite its ready availability. So, my "take" on Kademlia is purely from a nontechnical point of view. (Besides, I doubt I know how to read the code, much less know how to compile it.) Nevertheless, this paper is one of those rare, seminal papers that advance from time to time the technological progress of nearly everyone in a fundamental way. And I am glad to see the beginning of it all, starting with Overnet and "Kamulia." 
+This post has been edited by miniminime: 02 November 2003 - 03:01 AM

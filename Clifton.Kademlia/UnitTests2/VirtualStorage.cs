@@ -12,12 +12,12 @@ namespace UnitTests2
         public bool HasValues { get { return store.Count > 0; } }
 
         protected Dictionary<BigInteger, string> store;
-        protected Dictionary<BigInteger, DateTime> timestamps;
+        protected Dictionary<BigInteger, DateTime> republishTimestamps;
 
         public VirtualStorage()
         {
             store = new Dictionary<BigInteger, string>();
-            timestamps = new Dictionary<BigInteger, DateTime>();
+            republishTimestamps = new Dictionary<BigInteger, DateTime>();
         }
 
         public bool TryGetValue(ID key, out string val)
@@ -42,12 +42,15 @@ namespace UnitTests2
 
         public DateTime GetTimeStamp(BigInteger key)
         {
-            return timestamps[key];
+            return republishTimestamps[key];
         }
 
-        public void Touch(BigInteger key)
+		/// <summary>
+		/// Updates the republish timestamp.
+		/// </summary>
+		public void Touch(BigInteger key)
         {
-            timestamps[key] = DateTime.Now;
+            republishTimestamps[key] = DateTime.Now;
         }
 
         public void Set(ID key, string val)
