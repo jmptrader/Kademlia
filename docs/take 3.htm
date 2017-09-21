@@ -138,6 +138,10 @@ https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html</a> </p>
 Bruno Spori, Swiss Federal Institute of Technology Zurich:
 <a href="http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf">
 http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf</a> </p>
+<p>Distributed Hash Tables and Self Organizing Networks, lecture by Jonathan 
+Perry, MIT:&nbsp;
+<a href="http://css.csail.mit.edu/6.824/2014/notes/dht/dht.pdf">
+http://css.csail.mit.edu/6.824/2014/notes/dht/dht.pdf</a> </p>
 <h3>Other Resources To Further This Work</h3>
 <p>IPFS - Content Addressed, Versions, P2P File System (Draft 3):
 <a href="https://ipfs.io/ipfs/QmR7GSQM93Cx5eAg6a6yRzNde1FQv7uL6X1o4k7zrJa3LX/ipfs.draft3.pdf">
@@ -3442,16 +3446,102 @@ have an expiration time.</p>
 	disappear from the network.&nbsp; In order for this to happen, we can't just 
 	reset the expiration time to &quot;now + 24 hours * <i>o</i>&quot; as the hourly 
 	republishing of key-values would continually reset this value.&nbsp; So 
-	instead, we can ambiguously say &quot;if the new <i>o</i> is &gt; old <i>o</i>, use 
-	the new <i>o</i>&quot; such that if a closer node is re-publishing the key-value 
-	with an expiration factor that is larger then we use the larger factor so 
-	the key persists longer.</li>
+	instead, we can arbitrarily say &quot;multiply the old <i>o</i> by the new <i>
+	o</i>&quot; which has the effect of reducing the time to live (TTL) each 
+	time the key-value is republished.</li>
 </ol>
+<h4>But it Really Work?</h4>
 <p>But does this whole expiration process really work?&nbsp; Given that the 
 expiration time is never reset, only the expiration factor is updated, 
 eventually keys will be removed within one of the intervals of re-publishing, so 
-those keys would not republish onto other nodes from the node on which it 
-expired.&nbsp; But what happens when one of </p>
+those keys, when the re-publish event fires, would not republish onto other 
+nodes.&nbsp; It is assumed that the key-value is also removed, when it expires, 
+from the node's store.&nbsp; But what happens when the the republish time 
+remaining and TTL's are set up as follows (all time is in minutes, 1440 = 60 
+minutes / hr * 24 hours):</p>
+<table border="1" width="74%">
+	<tr>
+		<td width="108">Time</td>
+		<td width="126">Event</td>
+		<td width="174" align="center">Node 1 Republish Clock<br>
+		Time Remaining (N<sub>1TR</sub>)</td>
+		<td width="177" align="center">Node 2 Republish Clock<br>
+		Time Remaining (N<sub>2TR</sub>)</td>
+		<td width="119" align="center">Node 1 key-value TTL (N<sub>1TTL</sub>)</td>
+		<td width="123" align="center">Node 2 key-value TTL (N<sub>2TTL</sub>)</td>
+	</tr>
+	<tr>
+		<td width="108">0</td>
+		<td width="126">Starting State</td>
+		<td width="174" align="center">25</td>
+		<td width="177" align="center">30</td>
+		<td width="119" align="center">10</td>
+		<td width="123" align="center">36</td>
+	</tr>
+	<tr>
+		<td width="108">+10 </td>
+		<td width="126">Node 1 TTL Expires</td>
+		<td width="174" align="center">15</td>
+		<td width="177" align="center">20</td>
+		<td width="119" align="center"><font color="#FF0000">0</font></td>
+		<td width="123" align="center">26</td>
+	</tr>
+	<tr>
+		<td width="108">+25 </td>
+		<td width="126">Node 1 Republishes (nothing to do)</td>
+		<td width="174" align="center"><font color="#FF0000">60 (resets)</font></td>
+		<td width="177" align="center">5</td>
+		<td width="119" align="center"><font color="#FF0000">X</font></td>
+		<td width="123" align="center">11</td>
+	</tr>
+	<tr>
+		<td width="108">+30 </td>
+		<td width="126">Node 2 Republishes</td>
+		<td width="174" align="center">55</td>
+		<td width="177" align="center"><font color="#FF0000">60 (resets)</font></td>
+		<td width="119" align="center"><font color="#FF0000"><i>o</i> * 1440</font></td>
+		<td width="123" align="center">6</td>
+	</tr>
+	<tr>
+		<td width="108">+36</td>
+		<td width="126">Node 2 TTL Expires</td>
+		<td width="174" align="center">49</td>
+		<td width="177" align="center">54</td>
+		<td width="119" align="center"><i>o</i> * 1440 - 6</td>
+		<td width="123" align="center"><font color="#FF0000">0</font></td>
+	</tr>
+	<tr>
+		<td width="108">+36 + <i>o</i> * 1440</td>
+		<td width="126">Node 1 TTL Expires</td>
+		<td width="174" align="center">49 - <i>o</i> * 1440</td>
+		<td width="177" align="center">54 - <i>o</i> * 1440</td>
+		<td width="119" align="center"><font color="#FF0000">0</font></td>
+		<td width="123" align="center">X</td>
+	</tr>
+</table>
+<p>As the above table illustrates:</p>
+<ol>
+	<li>at t + 10, node 1's key-value expires and is removed.</li>
+	<li>at t + 30, node 2 republishes its key-value onto node 1, with time &quot;10&quot; 
+	remaining before it expires</li>
+	<li>at t + 36, node 2's key-value expires</li>
+	<li>at t + 36 + <i>o</i> * 1440 (node 1's key-value TTL), node 1's key-value 
+	expires</li>
+</ol>
+<p>In the above scenario, node 1 removes the second occurrence (at t + 30) of the 
+key-value only if <i>o</i> * 1440 &lt;= 49, or more generally:</p>
+<p><code>o * 1440 &lt;= 60 - (N<sub>2TTL</sub> - N<sub>1TR</sub>)</code></p>
+<p>In this case, we know that o * 1440 &lt;= 49.&nbsp; When this republishes back 
+to node 2, the key-value on node 2 will only republish if o<sub>2</sub> * 1440 
+&lt;= 54, where o<sub>2</sub> is node 1's concept of its distance (measured in 
+number of separating nodes) from node 2.&nbsp; We can probably assume that node 
+1 and node 2 have similar concepts of how far apart they are from each other, 
+therefore o * 1440 &lt; o<sub>2</sub> * 1440, and node 2 will expire the key-value 
+before the republish event triggers.</p>
+<p>In the case where node 1's concept of its distance from node 2 is very 
+different (o<sub>2</sub> &gt;&gt; o) </p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
 <p>What if we never want a cached value to disappear, even if the originator 
 peer leaves the network?&nbsp; This is particularly important when considering 
 using Kademlia for a distributed ledger -- </p>
