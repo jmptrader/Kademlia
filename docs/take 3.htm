@@ -3683,6 +3683,87 @@ https://forum.emule-project.net/index.php?showtopic=32335</a>
 http://www.emule-project.net/home/perl/general.cgi?l=1</a> </p>
 <p>&nbsp;</p>
 
+<p>----</p>
+<p>Incidentally, the notion of &quot;republication&quot; as used by M&amp;M in the exact quote 
+that you cited is at best metaphorical and should not be interpreted as &quot;another 
+publication.&quot; (I would say that M&amp;M made an editorial error there.) This is why 
+throughout my original post, I use this word judiciously and instead use the 
+more specific word &quot;store.&quot; The reason is that only the original publisher-node 
+has the source contents and thus can/should/must &quot;republish&quot; the &lt;key,value&gt; 
+pair in order to avoid its expiration. All other &quot;unoriginal&quot; nodes who are 
+storers of the &lt;key,value&gt; pair do not &quot;publish&quot; but instead &quot;store&quot; or 
+&quot;re-store&quot; or &quot;replicate&quot; or &quot;cache&quot; the &lt;key,value&gt; pair in order to maintain 
+the principle of persistency. Afterall, it does not make sense for the latter to 
+insert their own Me ID as another value-element into the &lt;key,value&gt; pair when 
+they don't in fact have the source contents -- for that is the meaning of 
+&quot;publishing&quot; some key of a source. (A source in this context is either a file or 
+a keyword.)<br>
+<br>
+https://forum.emule-project.net/index.php?showtopic=32335<br>
+<br>
+Moreover, to avoid caching a value forever, expiration times must always be 
+counted from the original publication time.<br>
+<br>
+Assume a very popular key. It is initially stored in k nodes. The flood of 
+consults begin, and every consulting node re-publishes the found value to the 
+closest node in his search path who did not return the value (creates a cached 
+value).<br>
+<br>
+When a node sent a &quot;find value&quot; request and receives an answer with values, then 
+she looks at her &quot;node lookup list&quot;, picks up the entry (node) most close to the 
+key, who has not returned the value, and sends a &quot;store value&quot; to him for this 
+key and associated values. This &quot;store value&quot; request includes a cache flag set, 
+so the receiving node knows this key is a cached key.<br>
+The storing node sets an expiration time to every value.<br>
+<br>
+Replication because of new nodes.<br>
+The bootstrap procedure, that every new node will follow, guarantees that the 
+new node will be added to the k-buckets of her close neighbours. <br>
+Every neighbour will be already storing the values the newcomer has to store, 
+so: upon observation of a new node, they will replicate those values sending the 
+appropiate store request to her.<br>
+To do that, the old node will distinguish values stored as a cache and values 
+stored because his proximity to the key: cached values won't be replicated.<br>
+For the non-cached values, he will examine his k-buckets to see if he is the 
+closest node to the corresponding key, not counting the newcomer. If he is the 
+closest one, all the values associated to this key are to be replicated to her, 
+otherwise no action is taken. Every value is sent toghether with its remaining 
+time for expiration.<br>
+<br>
+Next step is performed for every non-cache key: The distance to the key is 
+calculated for every node in the neighbourhood. The closest k nodes are 
+selected.<br>
+If all the k closest nodes are closer to the key than the own ID, then this key 
+is marked, in the database, as a cached one; and no other action is taken for 
+this key.<br>
+A store request is sent to the selected nodes with all the values the sending 
+node has for this key, exceptuating the values who have been republished by 
+another node in the last m time. Toghether with every value, the remaining time 
+for expiration is also sent. <br>
+<br>
+With respect to the information &quot;key&quot; that is stored distributively in the 
+system, a node can assume many roles. For the purpose of discussion, let us 
+reserve the honorifics of:<br>
+1. &quot;Publishers&quot; to owners of source contents, where source contents are either 
+shareable files or keywords. No one publishes or republishes but the publishers.<br>
+2. &quot;Storers&quot; to the first tier of k nodes closest to key of source contents 
+within m minutes that actually have the &lt;key,value&gt; pair in their database.<br>
+3. &quot;Cachers&quot; to the remaining nodes farther out relative to key during m minutes 
+that have the &lt;key,value&gt; pair in their database<br>
+4. &quot;Consultants&quot; to any node requesting the value(s) of a key. The information 
+retrieved is never removed (deleted or &quot;yanked away&quot;) from any node; in fact 
+information is most probably replicated to more cachers in the retrieval 
+process.<br>
+5. &quot;Bystanders&quot; to any node topologically unrelated to the above actors.<br>
+<br>
+if you do see Me ID and it isn't privileged, you pay homage to the blessed node 
+only, by replicating your &lt;key,value&gt; pair to it. (You may also need to reset 
+your key's o factors to 1 if you got ordained from cacher to storer.)<br>
+<br>
+<a href="https://forum.emule-project.net/index.php?showtopic=32335&view=findpost&p=214837">
+https://forum.emule-project.net/index.php?showtopic=32335&amp;view=findpost&amp;p=214837</a></p>
+<p>&nbsp;</p>
+
 </body>
 
 </html>
