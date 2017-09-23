@@ -4,7 +4,7 @@ using System.Numerics;
 
 namespace Clifton.Kademlia
 {
-    public class ID
+    public class ID : IComparable
     {
         public BigInteger Value { get { return id; } }
 
@@ -212,5 +212,146 @@ namespace Clifton.Kademlia
             // for continuations.
             return this;
 		}
-	}
+
+        // IComparable required methods.
+
+        /// <summary>
+        /// (From zencoders implemementation)
+        /// Method used to get the hash code according to the algorithm: 
+        /// http://stackoverflow.com/questions/16340/how-do-i-generate-a-hashcode-from-a-byte-array-in-c/425184#425184
+        /// </summary>
+        /// <returns>Integer representing the hashcode</returns>
+        public override int GetHashCode()
+        {
+            return id.GetHashCode();
+        }
+
+        public override bool Equals(object obj)
+        {
+            Validate.IsTrue<NotAnIDException>(obj is ID, "Cannot compare non-ID objects to an ID");
+
+            return this == (ID)obj;
+        }
+
+        /// <summary>
+        /// Compare one ID with another.
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <returns>-1 if this ID < test ID, 0 if equal, 1 if this ID > test ID.</test></returns>
+        public int CompareTo(object obj)
+        {
+            Validate.IsTrue<NotAnIDException>(obj is ID, "Cannot compare non-ID objects to an ID");
+            ID test = (ID)obj;
+
+            return this == test ? 0 : this < test ? -1 : 1;
+        }
+
+        // Operators:
+
+        public static ID operator ^(ID a, ID b)
+        {
+            return new ID(a.id ^ b.id);
+        }
+
+        public static ID operator ^(BigInteger a, ID b)
+        {
+            return new ID(a ^ b.id);
+        }
+
+        public static bool operator <(ID a, ID b)
+        {
+            return a.id < b.id;
+        }
+
+        public static bool operator >(ID a, ID b)
+        {
+            return a.id > b.id;
+        }
+
+        public static bool operator <=(ID a, ID b)
+        {
+            return a.id <= b.id;
+        }
+
+        public static bool operator >=(ID a, ID b)
+        {
+            return a.id >= b.id;
+        }
+
+        public static bool operator <(BigInteger a, ID b)
+        {
+            return a < b.id;
+        }
+
+        public static bool operator >(BigInteger a, ID b)
+        {
+            return a > b.id;
+        }
+
+        public static bool operator <=(BigInteger a, ID b)
+        {
+            return a <= b.id;
+        }
+
+        public static bool operator >=(BigInteger a, ID b)
+        {
+            return a >= b.id;
+        }
+
+        public static bool operator <(ID a, BigInteger b)
+        {
+            return a.id < b;
+        }
+
+        public static bool operator >(ID a, BigInteger b)
+        {
+            return a.id > b;
+        }
+
+        public static bool operator <=(ID a, BigInteger b)
+        {
+            return a.id <= b;
+        }
+
+        public static bool operator >=(ID a, BigInteger b)
+        {
+            return a.id >= b;
+        }
+
+        public static bool operator ==(ID a, ID b)
+        {
+            Validate.IsFalse<NullIDException>(ReferenceEquals(a, null), "ID a cannot be null.");
+            Validate.IsFalse<NullIDException>(ReferenceEquals(b, null), "ID b cannot be null.");
+
+            return a.id == b.id;
+        }
+
+        public static bool operator ==(ID a, BigInteger b)
+        {
+            Validate.IsFalse<NullIDException>(ReferenceEquals(a, null), "ID a cannot be null.");
+            Validate.IsFalse<NullIDException>(ReferenceEquals(b, null), "ID b cannot be null.");
+
+            return a.id == b;
+        }
+
+        public static bool operator !=(ID a, ID b)
+        {
+            return !(a == b); // Already have that
+        }
+
+        public static bool operator !=(ID a, BigInteger b)
+        {
+            return !(a == b); // Already have that
+        }
+
+        public static ID operator <<(ID idobj, int count)
+        {
+            return new ID(idobj.id << count);
+        }
+
+        public static ID operator >>(ID idobj, int count)
+        {
+            return new ID(idobj.id >> count);
+        }
+    }
 }

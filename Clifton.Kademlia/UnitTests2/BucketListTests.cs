@@ -25,7 +25,7 @@ namespace UnitTests2
             Assert.IsTrue(closest.Count == Constants.K, "Expected K contacts to be returned.");
 
             // The contacts should be in ascending order with respect to the key.
-            var distances = closest.Select(c => c.ID.Value ^ key.Value).ToList();
+            var distances = closest.Select(c => c.ID ^ key).ToList();
             var distance = distances[0];
 
             // Verify distances are in ascending order:
@@ -37,7 +37,7 @@ namespace UnitTests2
 
             // Verify the contacts with the smallest distances were returned from all possible distances.
             var lastDistance = distances[distances.Count - 1];
-            var others = node.BucketList.Buckets.SelectMany(b => b.Contacts.Except(closest)).Where(c => (c.ID.Value ^ key.Value) < lastDistance);
+            var others = node.BucketList.Buckets.SelectMany(b => b.Contacts.Except(closest)).Where(c => (c.ID ^ key) < lastDistance);
             Assert.IsTrue(others.Count() == 0, "Expected no other contacts with a smaller distance than the greatest distance to exist.");
         }
     }

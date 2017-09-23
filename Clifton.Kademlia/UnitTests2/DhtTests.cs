@@ -188,6 +188,7 @@ namespace UnitTests2
             Assert.IsTrue(ret.found, "Expected value to be found.");
             Assert.IsFalse(store3.Contains(key), "Key should not be in the republish store.");
             Assert.IsTrue(cache3.Contains(key), "Key should be in the cache store.");
+            Assert.IsTrue(cache3.GetExpirationTimeSec(key.Value) == Constants.EXPIRATION_TIME_SECONDS / 2, "Expected 12 hour expiration.");
         }
 
         [TestMethod]

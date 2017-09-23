@@ -126,8 +126,8 @@ namespace Clifton.Kademlia
         {
             var contacts = buckets.
                 SelectMany(b => b.Contacts).
-                Where(c => c.ID.Value != exclude.Value).
-                Select(c => new { contact = c, distance = c.ID.Value ^ key.Value }).
+                Where(c => c.ID != exclude).
+                Select(c => new { contact = c, distance = c.ID ^ key }).
                 OrderBy(d => d.distance).
                 Take(Constants.K);
 

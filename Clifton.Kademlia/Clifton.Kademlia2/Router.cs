@@ -54,15 +54,15 @@ namespace Clifton.Kademlia
             // Also not explicitly in spec:
             // Any closer node in the alpha list is immediately added to our closer contact list, and
             // any farther node in the alpha list is immediately added to our farther contact list.
-            closerContacts.AddRange(nodesToQuery.Where(n => (n.ID.Value ^ key.Value) < (node.OurContact.ID.Value ^ key.Value)));
-            fartherContacts.AddRange(nodesToQuery.Where(n => (n.ID.Value ^ key.Value) >= (node.OurContact.ID.Value ^ key.Value)));
+            closerContacts.AddRange(nodesToQuery.Where(n => (n.ID ^ key) < (node.OurContact.ID ^ key)));
+            fartherContacts.AddRange(nodesToQuery.Where(n => (n.ID ^ key) >= (node.OurContact.ID ^ key)));
 
             // The remaining contacts not tested yet can be put here.
             fartherContacts.AddRange(allNodes.Skip(Constants.ALPHA).Take(Constants.K - Constants.ALPHA));
 #endif
 
             // We're about to contact these nodes.
-            contactedNodes.AddRangeDistinctBy(nodesToQuery, (a, b) => a.ID.Value == b.ID.Value);
+            contactedNodes.AddRangeDistinctBy(nodesToQuery, (a, b) => a.ID == b.ID);
 
             // Spec: The initiator then sends parallel, asynchronous FIND_NODE RPCS to the a nodes it has chosen, 
             // a is a system-wide concurrency parameter, such as 3.
@@ -72,7 +72,7 @@ namespace Clifton.Kademlia
             }
 
             // Add any new closer contacts to the list we're going to return.
-            ret.AddRangeDistinctBy(closerContacts, (a, b) => a.ID.Value == b.ID.Value);
+            ret.AddRangeDistinctBy(closerContacts, (a, b) => a.ID == b.ID);
 
             // Spec: The lookup terminates when the initiator has queried and gotten responses from the k closest nodes it has seen.
             while (ret.Count < Constants.K && haveWork)
@@ -88,7 +88,7 @@ namespace Clifton.Kademlia
                 if (haveCloser)
                 {
                     // We're about to contact these nodes.
-                    contactedNodes.AddRangeDistinctBy(closerUncontactedNodes, (a, b) => a.ID.Value == b.ID.Value);
+                    contactedNodes.AddRangeDistinctBy(closerUncontactedNodes, (a, b) => a.ID == b.ID);
 
                     // Spec: ...it picks a that it has not yet queried and resends the FIND_NODE RPC to them. 
                     if (GetCloserNodes(key, rpcCall, closerUncontactedNodes.Take(Constants.ALPHA).ToList(), closerContacts, fartherContacts, out val, out foundBy))
@@ -99,7 +99,7 @@ namespace Clifton.Kademlia
                 else if (haveFarther)
                 {
                     // We're about to contact these nodes.
-                    contactedNodes.AddRangeDistinctBy(fartherUncontactedNodes, (a, b) => a.ID.Value == b.ID.Value);
+                    contactedNodes.AddRangeDistinctBy(fartherUncontactedNodes, (a, b) => a.ID == b.ID);
 
                     if (GetCloserNodes(key, rpcCall, fartherUncontactedNodes, closerContacts, fartherContacts, out val, out foundBy))
                     {
@@ -115,7 +115,7 @@ namespace Clifton.Kademlia
 
             // Spec (sort of): Return max(k) closer nodes, sorted by distance.
             // For unit testing, giveMeAll can be true so that we can match against our alternate way of getting closer contacts.
-            return (false, (giveMeAll ? ret : ret.Take(Constants.K).OrderBy(c => c.ID.Value ^ key.Value).ToList()), null, null);
+            return (false, (giveMeAll ? ret : ret.Take(Constants.K).OrderBy(c => c.ID ^ key).ToList()), null, null);
         }
 
         /// <summary>
@@ -147,20 +147,20 @@ namespace Clifton.Kademlia
             var (contacts, cFoundBy, foundVal) = rpcCall(key, nodesToQuery);
             val = foundVal;
             foundBy = cFoundBy;
-            List<Contact> peersNodes = contacts.ExceptBy(node.OurContact, c => c.ID.Value).ExceptBy(nodesToQuery, c => c.ID.Value).ToList();
+            List<Contact> peersNodes = contacts.ExceptBy(node.OurContact, c => c.ID).ExceptBy(nodesToQuery, c => c.ID).ToList();
 
             // Null continuation is a special case primarily for unit testing when we have no nodes in any buckets.
-            var nearestNodeDistance = nodesToQuery.OrderBy(n => n.ID.Value ^ key.Value).FirstOrDefault()?.ID?.Value ?? -1;
+            var nearestNodeDistance = nodesToQuery.OrderBy(n => n.ID ^ key).FirstOrDefault()?.ID?.Value ?? -1;
 
             closerContacts.
                 AddRangeDistinctBy(peersNodes.
-                    Where(p => (p.ID.Value ^ key.Value) < nearestNodeDistance),
-                    (a, b) => a.ID.Value == b.ID.Value);
+                    Where(p => (p.ID ^ key) < nearestNodeDistance),
+                    (a, b) => a.ID == b.ID);
 
             fartherContacts.
                 AddRangeDistinctBy(peersNodes.
-                    Where(p => (p.ID.Value ^ key.Value) >= nearestNodeDistance),
-                    (a, b) => a.ID.Value == b.ID.Value);
+                    Where(p => (p.ID ^ key) >= nearestNodeDistance),
+                    (a, b) => a.ID == b.ID);
 
             return val != null;
         }
@@ -175,7 +175,7 @@ namespace Clifton.Kademlia
         protected virtual KBucket FindClosestNonEmptyKBucket(ID key)
 #endif
         {
-            KBucket closest = node.BucketList.Buckets.Where(b => b.Contacts.Count > 0).OrderBy(b => b.Key ^ key.Value).FirstOrDefault();
+            KBucket closest = node.BucketList.Buckets.Where(b => b.Contacts.Count > 0).OrderBy(b => b.Key ^ key).FirstOrDefault();
             Validate.IsTrue<NoNonEmptyBucketsException>(closest != null, "No non-empty buckets exist.  You must first register a peer and add that peer to your bucketlist.");
 
             return closest;
@@ -190,7 +190,7 @@ namespace Clifton.Kademlia
         protected List<Contact> GetClosestNodes(ID key, KBucket bucket)
 #endif
         {
-            return bucket.Contacts.OrderBy(c => c.ID.Value ^ key.Value).ToList();
+            return bucket.Contacts.OrderBy(c => c.ID ^ key).ToList();
         }
 
         /// <summary>

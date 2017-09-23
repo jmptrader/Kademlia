@@ -15,7 +15,7 @@ namespace UnitTests2
         {
             byte[] test = new byte[20];
             test[0] = 1;
-            Assert.IsTrue(new ID(test).Value == new BigInteger(1), "Expected value to be 1.");
+            Assert.IsTrue(new ID(test) == new BigInteger(1), "Expected value to be 1.");
         }
 
         [TestMethod]
@@ -23,7 +23,7 @@ namespace UnitTests2
         {
             byte[] test = new byte[20];
             test[19] = 0x80;
-            Assert.IsTrue(new ID(test).Value == BigInteger.Pow(new BigInteger(2), 159), "Expected value to be 1.");
+            Assert.IsTrue(new ID(test) == BigInteger.Pow(new BigInteger(2), 159), "Expected value to be 1.");
         }
 
         [TestMethod, ExpectedException(typeof(IDLengthException))]
@@ -54,7 +54,7 @@ namespace UnitTests2
                 // that figures out which bits to randomize.
                 ID id = ID.RandomIDWithinBucket(bucket, true);  
 
-                Assert.IsTrue(id.Value >= bucket.Low && id.Value < bucket.High, "ID is outside of bucket range.");
+                Assert.IsTrue(id >= bucket.Low && id < bucket.High, "ID is outside of bucket range.");
 
                 // The ID, because we're forcing bits, should always be (high - 1) & ~max(0, low - 1)
                 int bitCheck = (testCase.high - 1) & ~Math.Max(0, testCase.low - 1);

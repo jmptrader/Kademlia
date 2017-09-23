@@ -37,4 +37,16 @@ namespace Clifton.Kademlia
         public ValueCannotBeNullException() { }
         public ValueCannotBeNullException(string msg) : base(msg) { }
     }
+
+    public class NotAnIDException : Exception
+    {
+        public NotAnIDException() { }
+        public NotAnIDException(string msg) : base(msg) { }
+    }
+
+    public class NullIDException : Exception
+    {
+        public NullIDException() { }
+        public NullIDException(string msg) : base(msg) { }
+    }
 }

@@ -53,7 +53,7 @@ namespace Clifton.Kademlia
 		/// </summary>
 		public bool HasInRange(ID id)
 		{
-			return Low <= id.Value && id.Value < High;
+			return Low <= id && id < High;
 		}
 
         public bool HasInRange(BigInteger id)
@@ -105,7 +105,7 @@ namespace Clifton.Kademlia
 			Contacts.ForEach(c =>
 			{
 				// <, because the High value is exclusive in the HasInRange test.
-				KBucket k = c.ID.Value < midpoint ? k1 : k2;
+				KBucket k = c.ID < midpoint ? k1 : k2;
 				k.AddContact(c);
 			});
 

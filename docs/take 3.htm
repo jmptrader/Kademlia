@@ -3149,7 +3149,7 @@ which happens in the <code>Dht</code> class:</p>
 <pre>/// &lt;summary&gt;
 /// Any expired keys in the republish or node's cache are removed.
 /// &lt;/summary&gt;
-protected void ExpireKeysElapsed(object sender, ElapsedEventArgs e)
+protected virtual void ExpireKeysElapsed(object sender, ElapsedEventArgs e)
 {
   RemoveExpiredData(cacheStorage);
   RemoveExpiredData(republishStorage);
@@ -3222,7 +3222,7 @@ actually added the the joining node to a k-bucket.&nbsp; Remember also that
 &quot;joining&quot; actually means contacting another node with any one of the four RPC 
 calls.</p>
 <p>Republished key-values when a new node registers persist for 24 hours.</p>
-<h3>Storing Key-Values Onto the new Node When a new Node Registers - 
+<h3>Storing Key-Values On the New Node When a New Node Registers - 
 Implementation</h3>
 <pre>protected void SendKeyValuesToNewContact(Contact sender)
 {
@@ -3503,49 +3503,95 @@ closest to the key ID?&quot;&nbsp; Is the &quot;current node:&quot;</p>
 (originator, republished, cached) is never discussed in the Kademlia 
 specification.&nbsp; Without understanding these three different stores, trying 
 to understand how caching works is probably impossible.</p>
+<h3>Over-Caching - Implementation</h3>
+<p>Caching occurs in only one place -- when a value being looked up (and 
+successfully found) is stored on a &quot;close&quot; node:</p>
+<pre>...
+var lookup = router.Lookup(key, router.RpcFindValue);
+TouchBucketWithKey(key);
+
+if (lookup.found)
+{
+  ret = (true, null, lookup.val);
+  // Find the first close contact (other than the one the value was found by) in which to *cache* the key-value.
+  var storeTo = lookup.contacts.Where(c =&gt; c != lookup.foundBy).OrderBy(c =&gt; c.ID.Value ^ key.Value).FirstOrDefault();
+
+  if (storeTo != null)
+  {
+    int separatingNodes = GetSeparatingNodesCount(ourContact, storeTo);
+    int expTimeSec = (int)(Constants.EXPIRATION_TIME_SECONDS / Math.Pow(2, separatingNodes));
+    storeTo.Protocol.Store(node.OurContact, key, lookup.val, true, expTimeSec);
+  }
+}
+...</pre>
+<p>In the unit test <code>GetValuePropagatesToCloserNodeTest</code>, we can 
+verify that the key is stored in the close node's<i> cache</i> and that the 
+expiration time is 24 hours / (2<sup>1</sup>) == 12 hours, knowing that the separating node 
+count is 1:</p>
+<pre>Assert.IsTrue(ret.found, &quot;Expected value to be found.&quot;);
+Assert.IsFalse(store3.Contains(key), &quot;Key should not be in the republish store.&quot;);
+Assert.IsTrue(cache3.Contains(key), &quot;Key should be in the cache store.&quot;);
+Assert.IsTrue(cache3.GetExpirationTimeSec(key.Value) == Constants.EXPIRATION_TIME_SECONDS / 2, &quot;Expected 12 hour expiration.&quot;);
+</pre>
 <h3>Never Expiring Republished Key-Values</h3>
 <p>It is reasonable for a cached key-value to expire, but we may never want to 
 expire originator or republished key-values.&nbsp; One good example is a 
 distributed blockchain (or distributed ledger) where data should never 
-disappear, even if the original publisher disappears from the peer network.</p>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
+disappear, even if the original publisher disappears from the peer network.&nbsp; 
+There are a variety of ways to do this, such as overriding:</p>
+<pre>protected virtual void ExpireKeysElapsed(object sender, ElapsedEventArgs e)
+{
+  RemoveExpiredData(cacheStorage);
+  RemoveExpiredData(republishStorage);
+}</pre>
+<p>so that only the cached store expires.</p>
 <h2>Ping</h2>
 <p>Ping is simply a &quot;respond back with the random ID&quot; that was sent.&nbsp; 
-Internally the buckets are potentially updated and if the contact is new, it is 
-sent any values that it should store, as discussed above when a new node 
+Internally the buckets are potentially updated and if the contact is new, Store 
+RPC calls are made to it for any values that it should store, as discussed above when a new node 
 registers.</p>
 <h3>Piggy-Backed Ping</h3>
-<p>From: <a href="http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf">
-http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf</a> </p>
-<p><font color="#FF0000">&nbsp;The situation is different when the first message 
-a node received is a request<br>
+<p>In his paper<sup>19</sup>, Bruno Spori writes: </p>
+<blockquote>
+	<p>&quot;The situation is different when the first message 
+a node received is a request
 message. In this case, the receiver cannot be sure whether the sender’s contact 
-informations are<br>
-correct. It could be that the request was faked. To determine this, the 
-piggy-backed ping is used.<br>
+information [is]
+correct. It could be that the request was faked.&nbsp; To determine this, the 
+piggy-backed ping is used.&nbsp;
 The effect of the piggy-backed ping is that the original sender of the request 
-must send a ping reply<br>
+must send a ping reply
 upon receiving the reply message. Thus, the receiver of the request message is 
-able to determine<br>
-the correctness of the sender as well.</font></p>
+able to determine
+the correctness of the sender as well.&quot;</p>
+</blockquote>
+<p><font color="#FF0000">TODO</font></p>
+<p>&nbsp;</p>
 <h2>Persisting the Dht</h2>
-<p>The bucket lists and contacts in each bucket need to be persisted so that in 
-case of a server restart, the last known state of the Dht can be restored.&nbsp; 
+<p>The bucket lists, contacts in each bucket, and stores need to be persisted so the last known state of the Dht can be restored.&nbsp; 
 This is baked into the Dht implementation, serializing the data in a JSON file.&nbsp; 
 The persistence of key-values is handled separately and is defined by the 
 specific implementation needs.</p>
 <h2>Considerations for an Asynchronous Implementation</h2>
 <h3>Parallel Queries</h3>
-<p><font color="#FF0000">Kademlia uses parallel, asynchronous queries to avoid 
-timeout delays from failed nodes. </font></p>
+<p><font color="#FF00FF">The initiator then sends parallel, asynchronous 
+find_node RPCs to the a nodes it has chosen, a is a system-wide concurrency 
+parameter, such as 3.</font></p>
+<p>In the lookup algorithm, Kademlia uses parallel, asynchronous queries to 
+reduce 
+timeout delays from failed nodes.&nbsp; Waiting for at least some of the nodes 
+to respond in each batch of 3 closest nodes gives the system a chance to get 
+even closer nodes to those first set of close nodes with the hope of acquiring
+<i>k</i> closer contacts without having to explore farther contacts.&nbsp;&nbsp;&nbsp; </p>
+<h4>Ambiguity #17</h4>
+<p>It's not particularly clear why all the <i>k</i> closer contacts aren't 
+queried in parallel to start with.&nbsp; Maybe the idea is that you want to try 
+to get closer contacts from already close contacts.&nbsp; Certainly all the 
+contacts could be queried and from the ones that respond first, we can select <i>
+k</i> closer ones.&nbsp; On the other hand, querying all the contacts 
+simultaneously probably results in unnecessary network traffic as many of the 
+FindNode RPC calls will be ignored. </p>
+<p>&nbsp;</p>
 <h3>Thread Safety</h3>
 <h2>Some Enhancements</h2>
 <h3>Operator Overloading of the ID Class</h3>
@@ -3590,7 +3636,7 @@ Conceptually, this is done by considering IDs 6 bits at a time instead of just
 one bit at a time. As previously described, the expected number of hops per 
 lookup is log2 n. By increasing the routing table’s size to an expected 2b log2t 
 n k-buckets, we can reduce the number of expected hops to log2&amp; n.</font></p>
-<p>In this implementation, where we have bucket ranges rather than a bucket per 
+<p>In this implementation we have bucket ranges rather than a bucket per 
 bit in the key space, therefore the accelerated lookup optimization is 
 irrelevant because the bucket ranges typically span many prefix bits.</p>
 <p>&nbsp;</p>
@@ -3649,7 +3695,8 @@ http://www.emule-project.net/home/perl/general.cgi?l=1</a> </p>
 <p>[18] -
 <a href="https://forum.emule-project.net/index.php?showtopic=32335&view=findpost&p=214837">
 https://forum.emule-project.net/index.php?showtopic=32335&amp;view=findpost&amp;p=214837</a> </p>
-<p>&nbsp;</p>
+<p>[19] - <a href="http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf">
+http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf</a> </p>
 
 <p>----</p>
 <p>Incidentally, the notion of &quot;republication&quot; as used by M&amp;M in the exact quote 

@@ -209,7 +209,7 @@ namespace UnitTests2
 
             closerContactsAltComputation = new List<Contact>();
             fartherContactsAltComputation = new List<Contact>();
-            theNearestContactedNode = contactsToQuery.OrderBy(n => n.ID.Value ^ key.Value).First();
+            theNearestContactedNode = contactsToQuery.OrderBy(n => n.ID ^ key).First();
             distance = theNearestContactedNode.ID.Value;
         }
 
@@ -233,13 +233,13 @@ namespace UnitTests2
                 foreach (Contact closeContactOfContactedNode in closeContactsOfContactedNode)
                 {
                     // Which of these contacts are closer?
-                    if ((closeContactOfContactedNode.ID.Value ^ key.Value) < distance)
+                    if ((closeContactOfContactedNode.ID ^ key) < distance)
                     {
                         closer.AddDistinctBy(closeContactOfContactedNode, c => c.ID.Value);
                     }
 
                     // Which of these contacts are farther?
-                    if ((closeContactOfContactedNode.ID.Value ^ key.Value) >= distance)
+                    if ((closeContactOfContactedNode.ID ^ key) >= distance)
                     {
                         farther.AddDistinctBy(closeContactOfContactedNode, c => c.ID.Value);
                     }

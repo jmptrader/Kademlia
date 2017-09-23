@@ -114,17 +114,33 @@ namespace Clifton.Kademlia
                 {
                     ret = (true, null, lookup.val);
                     // Find the first close contact (other than the one the value was found by) in which to *cache* the key-value.
-                    var storeTo = lookup.contacts.Where(c => c != lookup.foundBy).OrderBy(c => c.ID.Value ^ key.Value).FirstOrDefault();
+                    var storeTo = lookup.contacts.Where(c => c != lookup.foundBy).OrderBy(c => c.ID ^ key).FirstOrDefault();
 
                     if (storeTo != null)
                     {
-                        int expTimeSec = 0;
+                        int separatingNodes = GetSeparatingNodesCount(ourContact, storeTo);
+                        int expTimeSec = (int)(Constants.EXPIRATION_TIME_SECONDS / Math.Pow(2, separatingNodes));
                         storeTo.Protocol.Store(node.OurContact, key, lookup.val, true, expTimeSec);
                     }
                 }
             }
 
             return ret;
+        }
+
+        /// <summary>
+        /// Return the number of nodes between the two contacts, where the contact list is sorted by the integer ID values (not XOR distance.)
+        /// </summary>
+        protected int GetSeparatingNodesCount(Contact a, Contact b)
+        {
+            // Sort of brutish way to do this.
+            // Get all the contacts, ordered by their ID.
+            List<Contact> allContacts = node.BucketList.Buckets.SelectMany(c => c.Contacts).OrderBy(c => c.ID.Value).ToList();
+
+            int idxa = allContacts.IndexOf(a);
+            int idxb = allContacts.IndexOf(b);
+
+            return Math.Abs(idxa - idxb);
         }
 
         protected void FinishInitialization(ID id, IProtocol protocol)
@@ -218,7 +234,7 @@ namespace Clifton.Kademlia
         /// <summary>
         /// Any expired keys in the republish or node's cache are removed.
         /// </summary>
-        protected void ExpireKeysElapsed(object sender, ElapsedEventArgs e)
+        protected virtual void ExpireKeysElapsed(object sender, ElapsedEventArgs e)
         {
             RemoveExpiredData(cacheStorage);
             RemoveExpiredData(republishStorage);

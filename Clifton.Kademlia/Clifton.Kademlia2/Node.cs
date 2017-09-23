@@ -41,7 +41,7 @@ namespace Clifton.Kademlia
         /// </summary>
         public Contact Ping(Contact sender)
         {
-            Validate.IsFalse<SendingQueryToSelfException>(sender.ID.Value == ourContact.ID.Value, "Sender should not be ourself!");
+            Validate.IsFalse<SendingQueryToSelfException>(sender.ID == ourContact.ID, "Sender should not be ourself!");
             SendKeyValuesToNewContact(sender);
             bucketList.AddContact(sender);
 
@@ -53,7 +53,7 @@ namespace Clifton.Kademlia
         /// </summary>
         public void Store(Contact sender, ID key, string val, bool isCached = false, int expirationTimeSec = 0)
         {
-            Validate.IsFalse<SendingQueryToSelfException>(sender.ID.Value == ourContact.ID.Value, "Sender should not be ourself!");
+            Validate.IsFalse<SendingQueryToSelfException>(sender.ID == ourContact.ID, "Sender should not be ourself!");
 
             if (isCached)
             {
@@ -77,7 +77,7 @@ namespace Clifton.Kademlia
         /// <returns></returns>
         public (List<Contact> contacts, string val) FindNode(Contact sender, ID key)
         {
-            Validate.IsFalse<SendingQueryToSelfException>(sender.ID.Value == ourContact.ID.Value, "Sender should not be ourself!");
+            Validate.IsFalse<SendingQueryToSelfException>(sender.ID == ourContact.ID, "Sender should not be ourself!");
             SendKeyValuesToNewContact(sender);
             bucketList.AddContact(sender);
 
@@ -92,7 +92,7 @@ namespace Clifton.Kademlia
         /// </summary>
         public (List<Contact> contacts, string val) FindValue(Contact sender, ID key)
         {
-            Validate.IsFalse<SendingQueryToSelfException>(sender.ID.Value == ourContact.ID.Value, "Sender should not be ourself!");
+            Validate.IsFalse<SendingQueryToSelfException>(sender.ID == ourContact.ID, "Sender should not be ourself!");
             SendKeyValuesToNewContact(sender);
             bucketList.AddContact(sender);
 
@@ -130,9 +130,9 @@ namespace Clifton.Kademlia
 
                     if (contacts.Count() > 0)
                     {
-                        var distance = contacts.Min(c => k ^ c.ID.Value);
+                        var distance = contacts.Min(c => k ^ c.ID);
 
-                        if ((k ^ ourContact.ID.Value) < distance)
+                        if ((k ^ ourContact.ID) < distance)
                         {
                             sender.Protocol.Store(ourContact, new ID(k), storage.Get(k));   // send it to the new contact.
                         }
