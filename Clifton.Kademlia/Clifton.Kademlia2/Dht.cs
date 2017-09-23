@@ -8,7 +8,7 @@ namespace Clifton.Kademlia
     public class Dht
     {
 #if DEBUG       // for unit testing
-        public Router Router { get { return router; } }
+        public BaseRouter Router { get { return router; } }
 #endif
 
         /// <summary>
@@ -16,7 +16,7 @@ namespace Clifton.Kademlia
         /// </summary>
         public IStorage OriginatorStorage { get { return originatorStorage; } }
 
-        protected Router router;
+        protected BaseRouter router;
         protected IStorage originatorStorage;
         protected IStorage republishStorage;
         protected IStorage cacheStorage;
@@ -32,12 +32,12 @@ namespace Clifton.Kademlia
         /// <summary>
         /// Use this constructor to initialize the stores to the same instance.
         /// </summary>
-        public Dht(ID id, IProtocol protocol, Func<IStorage> storageFactory)
+        public Dht(ID id, IProtocol protocol, Func<IStorage> storageFactory, BaseRouter router)
         {
             originatorStorage = storageFactory();
             republishStorage = storageFactory();
             cacheStorage = storageFactory();
-            FinishInitialization(id, protocol);
+            FinishInitialization(id, protocol, router);
         }
 
         /// <summary>
@@ -45,12 +45,12 @@ namespace Clifton.Kademlia
         /// to be an in memory store, the originatorStorage to be a SQL database, and the republish store
         /// to be a key-value database.
         /// </summary>
-        public Dht(ID id, IProtocol protocol, IStorage originatorStorage, IStorage republishStorage, IStorage cacheStorage)
+        public Dht(ID id, IProtocol protocol, BaseRouter router, IStorage originatorStorage, IStorage republishStorage, IStorage cacheStorage)
         {
             this.originatorStorage = originatorStorage;
             this.republishStorage = republishStorage;
             this.cacheStorage = cacheStorage;
-            FinishInitialization(id, protocol);
+            FinishInitialization(id, protocol, router);
         }
 
 /// <summary>
@@ -143,12 +143,13 @@ namespace Clifton.Kademlia
             return Math.Abs(idxa - idxb);
         }
 
-        protected void FinishInitialization(ID id, IProtocol protocol)
+        protected void FinishInitialization(ID id, IProtocol protocol, BaseRouter router)
         {
             ourId = id;
             ourContact = new Contact(protocol, id);
             node = new Node(ourContact, republishStorage, cacheStorage);
-            router = new Router(node);
+            this.router = router;
+            this.router.Node = node;
             SetupBucketRefreshTimer();
             SetupKeyValueRepublishTimer();
             SetupOriginatorRepublishTimer();

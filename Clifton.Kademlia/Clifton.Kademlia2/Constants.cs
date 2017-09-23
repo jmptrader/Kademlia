@@ -7,6 +7,8 @@
 		public const int ID_LENGTH_BYTES = 20;
 		public const int ID_LENGTH_BITS = 160;
 
+        public const int MAX_THREADS = 20;
+
 #if DEBUG       // For unit tests
         public const int ALPHA = 20;
         public const double BUCKET_REFRESH_INTERVAL = 60 * 60 * 1000;       // every hour.

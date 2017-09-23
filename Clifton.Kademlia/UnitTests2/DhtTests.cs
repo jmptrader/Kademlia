@@ -12,7 +12,7 @@ namespace UnitTests2
         public void LocalStoreFoundValueTest()
         {
             VirtualProtocol vp = new VirtualProtocol();
-            Dht dht = new Dht(ID.RandomID, vp, () => new VirtualStorage());
+            Dht dht = new Dht(ID.RandomID, vp, () => new VirtualStorage(), new Router());
             vp.Node = dht.Router.Node;
             ID key = ID.RandomID;
             string val = "Test";
@@ -33,7 +33,7 @@ namespace UnitTests2
             VirtualStorage store2 = new VirtualStorage();
 
             // Ensures that all nodes are closer, because ID.Max ^ n < ID.Max when n > 0.
-            Dht dht = new Dht(ID.Max, vp1, store1, store1, new VirtualStorage());
+            Dht dht = new Dht(ID.Max, vp1, new Router(), store1, store1, new VirtualStorage());
             vp1.Node = dht.Router.Node;
 
             ID contactID = ID.Mid;      // a closer contact.
@@ -72,7 +72,7 @@ namespace UnitTests2
             VirtualStorage store2 = new VirtualStorage();
 
             // Ensures that all nodes are closer, because ID.Max ^ n < ID.Max when n > 0.
-            Dht dht = new Dht(ID.Zero, vp1, store1, store1, new VirtualStorage());
+            Dht dht = new Dht(ID.Zero, vp1, new Router(), store1, store1, new VirtualStorage());
             vp1.Node = dht.Router.Node;
 
             ID contactID = ID.Max;      // a farther contact.
@@ -111,7 +111,7 @@ namespace UnitTests2
             VirtualStorage store2 = new VirtualStorage();
 
             // Ensures that all nodes are closer, because ID.Max ^ n < ID.Max when n > 0.
-            Dht dht = new Dht(ID.Max, vp1, store1, store1, new VirtualStorage());
+            Dht dht = new Dht(ID.Max, vp1, new Router(), store1, store1, new VirtualStorage());
             vp1.Node = dht.Router.Node;
 
             ID contactID = ID.Mid;      // a closer contact.
@@ -151,7 +151,7 @@ namespace UnitTests2
             VirtualStorage cache3 = new VirtualStorage();
 
             // Ensures that all nodes are closer, because ID.Max ^ n < ID.Max when n > 0.
-            Dht dht = new Dht(ID.Max, vp1, store1, store1, new VirtualStorage());
+            Dht dht = new Dht(ID.Max, vp1, new Router(), store1, store1, new VirtualStorage());
             vp1.Node = dht.Router.Node;
 
             // Setup node 2:
@@ -201,11 +201,11 @@ namespace UnitTests2
             22.ForEach((i) => vp[i] = new VirtualProtocol());
 
             // Us
-            Dht dhtUs = new Dht(ID.RandomID, vp[0], () => new VirtualStorage());
+            Dht dhtUs = new Dht(ID.RandomID, vp[0], () => new VirtualStorage(), new Router());
             vp[0].Node = dhtUs.Router.Node;
 
             // Our bootstrap peer
-            Dht dhtBootstrap = new Dht(ID.RandomID, vp[1], () => new VirtualStorage());
+            Dht dhtBootstrap = new Dht(ID.RandomID, vp[1], () => new VirtualStorage(), new Router());
             vp[1].Node = dhtBootstrap.Router.Node;
             Node n = null;
 
@@ -243,12 +243,12 @@ namespace UnitTests2
             32.ForEach((i) => vp[i] = new VirtualProtocol());
 
             // Us, ID doesn't matter.
-            Dht dhtUs = new Dht(ID.RandomID, vp[0], () => new VirtualStorage());
+            Dht dhtUs = new Dht(ID.RandomID, vp[0], () => new VirtualStorage(), new Router());
             vp[0].Node = dhtUs.Router.Node;
 
             // Our bootstrap peer
             // All ID's are < 2^159
-            Dht dhtBootstrap = new Dht(ID.Zero.RandomizeBeyond(Constants.ID_LENGTH_BITS - 1), vp[1], () => new VirtualStorage());
+            Dht dhtBootstrap = new Dht(ID.Zero.RandomizeBeyond(Constants.ID_LENGTH_BITS - 1), vp[1], () => new VirtualStorage(), new Router());
             vp[1].Node = dhtBootstrap.Router.Node;
             Node n = null;
 

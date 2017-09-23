@@ -3573,7 +3573,8 @@ This is baked into the Dht implementation, serializing the data in a JSON file.&
 The persistence of key-values is handled separately and is defined by the 
 specific implementation needs.</p>
 <h2>Considerations for an Asynchronous Implementation</h2>
-<h3>Parallel Queries</h3>
+<h3>Thread Safety</h3>
+<h3>Parallel Queries - Discussion</h3>
 <p><font color="#FF00FF">The initiator then sends parallel, asynchronous 
 find_node RPCs to the a nodes it has chosen, a is a system-wide concurrency 
 parameter, such as 3.</font></p>
@@ -3591,10 +3592,55 @@ contacts could be queried and from the ones that respond first, we can select <i
 k</i> closer ones.&nbsp; On the other hand, querying all the contacts 
 simultaneously probably results in unnecessary network traffic as many of the 
 FindNode RPC calls will be ignored. </p>
+<h3>Parallel Queries - Implementation</h3>
+<p>The lookup algorithm requires some refactoring, as currently we're passing 
+the collection of nodes to query to the method that makes the RPC call.&nbsp; 
+For example:</p>
+<pre>public (List&lt;Contact&gt; contacts, Contact foundBy, string val) RpcFindNodes(ID key, List&lt;Contact&gt; contacts)
+{
+  List&lt;Contact&gt; nodes = new List&lt;Contact&gt;();
+  contacts.ForEach(c =&gt; nodes.AddRange(c.Protocol.FindNode(node.OurContact, key)));
+
+  return (nodes, null, null);
+}</pre>
+<p>We could tweek this with <code>contacts.AsParallel().ForEach(</code>...) and 
+add a lock on nodes so the return results don't call <code>AddRange</code> simultaneously, 
+but this isn't the right place to do this, as we want to start processing 
+results as they come in.&nbsp; This requires:</p>
+<ol>
+	<li>Calling the RPC function one contact at a time.</li>
+	<li>Changing the algorithm at the top level so that processing continues as 
+	soon as the results appear from the RPC call.</li>
+</ol>
 <p>&nbsp;</p>
-<h3>Thread Safety</h3>
+<p>&nbsp;</p>
 <h2>Some Enhancements</h2>
 <h3>Operator Overloading of the ID Class</h3>
+<p>Rather than having to always use id.Value to compare and XOR the BigInteger 
+values, we can add some operators to the ID class itself.&nbsp; Some examples:</p>
+<pre>public class ID : IComparable
+{
+  ...
+  public static bool operator ==(ID a, ID b)
+  {
+    Validate.IsFalse&lt;NullIDException&gt;(ReferenceEquals(a, null), &quot;ID a cannot be null.&quot;);
+    Validate.IsFalse&lt;NullIDException&gt;(ReferenceEquals(b, null), &quot;ID b cannot be null.&quot;);
+
+    return a.id == b.id;
+  }
+
+  public static ID operator ^(ID a, ID b)
+  {
+    return new ID(a.id ^ b.id);
+  }
+
+  public static ID operator ^(BigInteger a, ID b)
+  {
+    return new ID(a ^ b.id);
+  }
+  ...  
+}</pre>
+<p>And so forth.</p>
 <h2>Not Implemented</h2>
 <h3>Delayed Eviction (Optimized Contact Accounting) - Discussion</h3>
 <p><font color="#FF00FF">To reduce traffic, Kademlia delays probing contacts 

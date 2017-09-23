@@ -2,29 +2,29 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Linq;
+using System.Threading;
 
 namespace Clifton.Kademlia
 {
-    public class Router
+    public class Router : BaseRouter
     {
-#if DEBUG       // for unit testing
-        public Node Node { get { return node; } }
-        public List<Contact> CloserContacts { get; protected set; }
-        public List<Contact> FartherContacts { get; protected set; }
+#if DEBUG   // Used for unit testing when creating the DHT.  The DHT sets the node.
+        public Router()
+        {
+        }
 #endif
-
-        protected Node node;
 
         public Router(Node node)
         {
             this.node = node;
         }
 
-        public virtual (bool found, List<Contact> contacts, Contact foundBy, string val) Lookup(
-            ID key, 
-            Func<ID, List<Contact>, (List<Contact> contacts, Contact foundBy, string val)> rpcCall, 
-            bool giveMeAll = false)
+        public override (bool found, List<Contact> contacts, Contact foundBy, string val) Lookup(
+                    ID key,
+                    Func<ID, List<Contact>, (List<Contact> contacts, Contact foundBy, string val)> rpcCall,
+                    bool giveMeAll = false)
         {
             bool haveWork = true;
             List<Contact> ret = new List<Contact>();
@@ -130,16 +130,6 @@ namespace Clifton.Kademlia
             List<Contact> fartherContacts,
             out string val,
             out Contact foundBy)
-#else
-        protected bool GetCloserNodes(
-            ID key, 
-            Func<ID, List<Contact>, (List<Contact> contacts, string val)> rpcCall, 
-            List<Contact> nodesToQuery, 
-            List<Contact> closerContacts, 
-            List<Contact> fartherContacts,
-            out string val,
-            out Contact foundBy)
-#endif
         {
             // As in, peer's nodes:
             // Exclude ourselves and the peers we're contacting to a get unique list of new peers.
@@ -164,40 +154,13 @@ namespace Clifton.Kademlia
 
             return val != null;
         }
-
-        /// <summary>
-        /// Using the k-bucket's key (it's high value), find the closest 
-        /// k-bucket the given key that isn't empty.
-        /// </summary>
-#if DEBUG           // For unit testing.
-        public virtual KBucket FindClosestNonEmptyKBucket(ID key)
-#else
-        protected virtual KBucket FindClosestNonEmptyKBucket(ID key)
 #endif
-        {
-            KBucket closest = node.BucketList.Buckets.Where(b => b.Contacts.Count > 0).OrderBy(b => b.Key ^ key).FirstOrDefault();
-            Validate.IsTrue<NoNonEmptyBucketsException>(closest != null, "No non-empty buckets exist.  You must first register a peer and add that peer to your bucketlist.");
-
-            return closest;
-        }
-
-        /// <summary>
-        /// Get sorted list of closest nodes to the given key.
-        /// </summary>
-#if DEBUG           // For unit testing.
-        public List<Contact> GetClosestNodes(ID key, KBucket bucket)
-#else
-        protected List<Contact> GetClosestNodes(ID key, KBucket bucket)
-#endif
-        {
-            return bucket.Contacts.OrderBy(c => c.ID ^ key).ToList();
-        }
 
         /// <summary>
         /// For each contact, call the FindNode and return all the nodes whose contacts responded
         /// within a "reasonable" period of time.
         /// </summary>
-        public (List<Contact> contacts, Contact foundBy, string val) RpcFindNodes(ID key, List<Contact> contacts)
+        public override (List<Contact> contacts, Contact foundBy, string val) RpcFindNodes(ID key, List<Contact> contacts)
         {
             List<Contact> nodes = new List<Contact>();
             contacts.ForEach(c => nodes.AddRange(c.Protocol.FindNode(node.OurContact, key)));
@@ -209,7 +172,7 @@ namespace Clifton.Kademlia
         /// For each contact, call the FindNode and return all the nodes whose contacts responded
         /// within a "reasonable" period of time, unless a value is returned, at which point we stop.
         /// </summary>
-        public (List<Contact> contacts, Contact foundBy, string val) RpcFindValue(ID key, List<Contact> contacts)
+        public override (List<Contact> contacts, Contact foundBy, string val) RpcFindValue(ID key, List<Contact> contacts)
         {
             List<Contact> nodes = new List<Contact>();
             string retval = null;
@@ -235,8 +198,5 @@ namespace Clifton.Kademlia
 
             return (nodes, foundBy, retval);
         }
-    }
+   }
 }
-
-
-
