@@ -2436,43 +2436,44 @@ the lookup algorithm to find other closer nodes that might have the value.</li>
 
   public void Store(ID key, string val)
   {
-    // We're storing to ourselves as well as k closer contacts.
+    // We're storing to k closer contacts.
     storage.Set(key, val);
     List&lt;Contact&gt; contacts = router.Lookup(key, router.RpcFindNodes).contacts;
     contacts.ForEach(c =&gt; c.Protocol.Store(node.OurContact, key, val));
   }
 
-public (bool found, List&lt;Contact&gt; contacts, string val) FindValue(ID key)
-{
-  TouchBucketWithKey(key);
-
-  string ourVal;
-  List&lt;Contact&gt; contactsQueried = new List&lt;Contact&gt;();
-  (bool found, List&lt;Contact&gt; contacts, string val) ret = (false, null, null);
-
-  // If we have it, return with our value.
-  if (storage.TryGetValue(key, out ourVal))
+  public (bool found, List&lt;Contact&gt; contacts, string val) FindValue(ID key)
   {
-    ret = (true, null, ourVal);
-  }
-  else
-  {
-    var lookup = router.Lookup(key, router.RpcFindValue);
+    TouchBucketWithKey(key);
 
-    if (lookup.found)
+    string ourVal;
+    List&lt;Contact&gt; contactsQueried = new List&lt;Contact&gt;();
+    (bool found, List&lt;Contact&gt; contacts, string val) ret = (false, null, null);
+
+    // If we have it, return with our value.
+    if (storage.TryGetValue(key, out ourVal))
     {
-      ret = (true, null, lookup.val);
-      // Find the first close contact (other than the one the value was found by) in which to also store the key-value.
-      var storeTo = lookup.contacts.Where(c =&gt; c != lookup.foundBy).OrderBy(c =&gt; c.ID.Value ^ key.Value).FirstOrDefault();
+      ret = (true, null, ourVal);
+    }
+    else
+    {
+      var lookup = router.Lookup(key, router.RpcFindValue);
 
-      if (storeTo != null)
+      if (lookup.found)
       {
-        storeTo.Protocol.Store(node.OurContact, key, lookup.val);
+        ret = (true, null, lookup.val);
+        // Find the first close contact (other than the one the value was found by) in which to also store the key-value.
+        var storeTo = lookup.contacts.Where(c =&gt; c != lookup.foundBy).OrderBy(c =&gt; c.ID.Value ^ key.Value).FirstOrDefault();
+
+        if (storeTo != null)
+        {
+          storeTo.Protocol.Store(node.OurContact, key, lookup.val);
+        }
       }
     }
-  }
 
-  return ret;
+    return ret;
+  }
 }</pre>
 <h2>The Dht Class - Unit Tests</h2>
 <h3>LocalStoreFoundValueTest</h3>
@@ -3049,6 +3050,144 @@ timestamp:</p>
   TimeStamp = DateTime.Now;
 }</pre>
 <h2>Key-Value Management</h2>
+<p>In this section you will learn something that is not at all clearly stated in 
+the Kademlia specification -- there are actually three kinds of data store:</p>
+<ol>
+	<li>Original publisher store</li>
+	<li>Republished store</li>
+	<li>Cached store</li>
+</ol>
+<p>Let's look at each of these.</p>
+<p><img border="0" src="important.png" width="38" height="32">&nbsp; It is 
+paramount to understand that the Kademlia specification does not discuss this at 
+all.&nbsp; The information in this section has been gleaned from closely looking 
+at the discussion on the emule project forum, particularly &quot;miniminime's&quot; 
+discussion of the roles that a node can take on<sup>18</sup>.&nbsp; Implementing 
+this approach requires that the receiver peer knows whether to store the 
+key-value in the republish store or in the cache store.</p>
+<h3>Original Publisher Store</h3>
+<p>The original publisher store is never written to as a result of an RPC store.&nbsp; 
+This store is updated only by the peer itself when it is the originator of the 
+key-value and wants to publish the key-value to other peers. </p>
+<p><img border="0" src="important.png" width="38" height="32"> Key-values from 
+this store are republished once every 24 hours.</p>
+<h3>Republished Store</h3>
+<p>This store contains key-values that have been republished by other peers as 
+part of process of distributing the data among peers.&nbsp; This store never 
+contains the peer's (as an originator) own storage, but only key-values received 
+from other peers. </p>
+<p><img border="0" src="important.png" width="38" height="32"> Key-values in 
+this store are republished to other peers only if a closer peer is found.&nbsp; 
+This check occurs every hour and is optimized to avoid calling the lookup 
+algorithm:</p>
+<ol>
+	<li>For a particular bucket if it has already been queried for closer nodes.</li>
+<li>If the key has been republished in the last hour.</li>
+</ol>
+<h3>Cached Store</h3>
+<p>The cached store is used when republishing a FindValue request onto the <i>
+next closest node</i>.&nbsp; The intention here is to avoid hotspots during 
+lookup of popular keys by temporarily republishing them onto other nearby peers.&nbsp; 
+These temporary key-values have an expiration time.</p>
+<p><img border="0" src="important.png" width="38" height="32">&nbsp; Key-values 
+in the cached store are never republished and are removed after the expiration 
+time.</p>
+<h3>Storage Mechanisms in the Dht Class</h3>
+<p>These are implemented in the <code>Dht</code> class:</p>
+<pre>protected IStorage originatorStorage;
+protected IStorage republishStorage;
+protected IStorage cacheStorage;</pre>
+<p>With a couple constructor options:</p>
+<pre>/// &lt;summary&gt;
+/// Use this constructor to initialize the stores to the same instance.
+/// &lt;/summary&gt;
+public Dht(ID id, IProtocol protocol, Func&lt;IStorage&gt; storageFactory)
+{
+  originatorStorage = storageFactory();
+  republishStorage = storageFactory();
+  cacheStorage = storageFactory();
+  FinishInitialization(id, protocol);
+}
+
+/// &lt;summary&gt;
+/// Supports different concrete storage types. For example, you may want the cacheStorage
+/// to be an in memory store, the originatorStorage to be a SQL database, and the republish store
+/// to be a key-value database.
+/// &lt;/summary&gt;
+public Dht(ID id, IProtocol protocol, IStorage originatorStorage, IStorage republishStorage, IStorage cacheStorage)
+{
+  this.originatorStorage = originatorStorage;
+  this.republishStorage = republishStorage;
+  this.cacheStorage = cacheStorage;
+  FinishInitialization(id, protocol);
+}</pre>
+<p>The ability to specify different storage mechanisms can be very useful, 
+however this means that a <code>Node</code> must store the key-value in the appropriate 
+storage:</p>
+<pre>/// &lt;summary&gt;
+/// Store a key-value pair in the republish or cache storage, updating the contact if it's not us.
+/// &lt;/summary&gt;
+public void Store(Contact sender, ID key, string val, bool isCached = false, int expirationTimeSec = 0)
+{
+  Validate.IsFalse&lt;SendingQueryToSelfException&gt;(sender.ID.Value == ourContact.ID.Value, &quot;Sender should not be ourself!&quot;);
+
+  if (isCached)
+  {
+    cacheStorage.Set(key, val, expirationTimeSec);
+  }
+  else
+  {
+    SendKeyValuesToNewContact(sender);
+    bucketList.AddContact(sender);
+
+    storage.Set(key, val, Constants.EXPIRATION_TIME_SECONDS);
+  }
+}</pre>
+<h3>Expiring Key-Value Pairs</h3>
+<p>Expire the key-values are removed from the republish and cache storage, 
+which happens in the <code>Dht</code> class:</p>
+<pre>/// &lt;summary&gt;
+/// Any expired keys in the republish or node's cache are removed.
+/// &lt;/summary&gt;
+protected void ExpireKeysElapsed(object sender, ElapsedEventArgs e)
+{
+  RemoveExpiredData(cacheStorage);
+  RemoveExpiredData(republishStorage);
+}
+
+protected void RemoveExpiredData(IStorage store)
+{
+  DateTime now = DateTime.Now;
+  // ToList so our key list is resolved now as we remove keys.
+  store.Where(k =&gt; (now - store.GetTimeStamp(k)).TotalSeconds &gt;= store.GetExpirationTimeSec(k)).ToList().ForEach(k =&gt;
+  {
+    store.Remove(k);
+  });
+}</pre>
+<h3>Originator Republishing - Discussion</h3>
+<p><font color="#FF00FF">For Kademlia’s current application (file sharing), we 
+also require the original publisher of a (key,value) pair to republish it every 
+24 hours. Otherwise, (key,value) pairs expire 24 hours after publication, so as 
+to limit stale index information in the system. For other applications, such as 
+digital certificates or cryptographic hash to value mappings, longer expiration 
+times may be appropriate.</font></p>
+<h3>Originator Republishing - Implementation</h3>
+<p>Republishing originator data is handled in a timer event that resends the 
+key-values in the originator's storage.</p>
+<pre>protected void OriginatorRepublishElapsed(object sender, ElapsedEventArgs e)
+{
+  DateTime now = DateTime.Now;
+
+  originatorStorage.Where(k =&gt; (now - originatorStorage.GetTimeStamp(k)).TotalMilliseconds &gt;= Constants.ORIGINATOR_REPUBLISH_INTERVAL).ForEach(k =&gt;
+  {
+    ID key = new ID(k);
+    // Just use close contacts, don't do a lookup.
+    var contacts = node.BucketList.GetCloseContacts(key, node.OurContact.ID);
+    contacts.ForEach(c =&gt; c.Protocol.Store(ourContact, key, originatorStorage.Get(key)));
+    originatorStorage.Touch(k);
+  });
+}</pre>
+<p>Republished key-values persist for 24 hours.</p>
 <h3>Storing Key-Values Onto the new Node When a new Node Registers - Discussion</h3>
 <p><font color="#FF00FF">When a new node joins the system, it must store any 
 key-value pair to which it is one of the k closest. Existing nodes, by similarly 
@@ -3082,6 +3221,7 @@ note that this algorithm executes regardless of whether the bootstrapping node
 actually added the the joining node to a k-bucket.&nbsp; Remember also that 
 &quot;joining&quot; actually means contacting another node with any one of the four RPC 
 calls.</p>
+<p>Republished key-values when a new node registers persist for 24 hours.</p>
 <h3>Storing Key-Values Onto the new Node When a new Node Registers - 
 Implementation</h3>
 <pre>protected void SendKeyValuesToNewContact(Contact sender)
@@ -3291,7 +3431,9 @@ farther bucket contacts are in red):</p>
 		<td>Bucket with prefix 001 always has contacts that are closer</td>
 	</tr>
 </table>
-<p>So for this reason, we use the bucket for which the key is in range.</p>
+<p>So for this reason, we use the bucket for which the key is in range.&nbsp; 
+Also, new key-values that are published onto to closer nodes persist for 24 
+hours.</p>
 <h3>Key Republishing - Implementation</h3>
 <p>One refactoring that has to occur is that the storage mechanism needs to 
 associate a timestamp with the key-value, which you'll see used in the following 
@@ -3333,51 +3475,14 @@ to the number of nodes between the current node and the node whose ID is closest
 to the key ID.</font></p>
 <p>&quot;Inversely proportional&quot; - meaning that the expiration time is shorter the 
 more nodes that are between the current node and the closest node.</p>
-<p>&quot;Exponentially proportional&quot; - meaning the expiration time is <i>a lot 
+<p>&quot;Exponentially inversely proportional&quot; - meaning the expiration time is <i>a lot 
 shorter</i> the more nodes that are between the current node and closest node.</p>
 <h4>Ambiguity #14</h4>
 <p>The specification provides no guidance for what the calculation for 
 &quot;exponentially inversely proportional&quot; should actually be.&nbsp; It's also 
 undefined as to what the time constants are -- what is a baseline time for which 
-a key-value should persist?&nbsp; Some digging around found a useful post on the 
-emule-project forum<sup>16</sup> section 3.2.4 
-(the whole forum post and responses are worth reading):</p>
-<blockquote>
-	<p>&quot;Gleaned from their implementation and according to the M&amp;M paper, key 
-	space=160, k=20, m=60, r=24, alpha=3, b=5, p=1*m, c=0.5*m, 
-	o=1/(2^(b*gap/(2^b-1)))...<br>
-	<br>
-	key space is defined as the system-wide size, in bits, of any key or ID.<br>
-	k is defined as the system-wide replication parameter.<br>
-	m is defined as the system-wide persistence parameter.<br>
-	r is defined as the system-wide expiration parameter.<br>
-	alpha is defined as the system-wide concurrency parameter.<br>
-	<br>
-	b is defined as the node-specific search accelerator parameter, specifying 
-	the number of bits to hop per iteration during node lookups.<br>
-	p is defined as the node-dependent pathological parameter.<br>
-	c is defined as the node-dependent consistency parameter.<br>
-	o is defined as the node-specific over-caching parameter.<br>
-	...<br>
-	Determine distance delta relative to me keyRme : d(key, Me ID) = Delta<br>
-	....<br>
-	all expiration timers that are associated with the values to a key are 
-	re-adjusted to prevent over-caching. Initially, the expiration timer is 
-	m*r*o, with o at 1. On adjustment the expiration is shortened by the o 
-	factor. This factor is determined from the absolute gap in k-buckets between 
-	distances keyRme and newRkey: o = 1/(2^(b*gap/(2^b-1))).&quot;</p>
-</blockquote>
-<p>The computation for <i>o</i> isn't in the spec, so it must have been gleaned 
-from eMule's implementation.&nbsp; The above computation looks at the distance 
-between buckets rather than the spec's &quot;number of nodes&quot; metric.&nbsp;&nbsp; The 
-baseline expiration time of 1400 minutes (24 hours) comes from the spec:</p>
-<p><font color="#FF00FF">For Kademlia’s current application (file sharing), we 
-also require the original publisher of a (key,value) pair to republish it every 
-24 hours. Otherwise, (key,value) pairs expire 24 hours after publication, so as 
-to limit stale index information in the system. For other applications, such as 
-digital certificates or cryptographic hash to value mappings, longer expiration 
-times may be appropriate.</font></p>
-<p>We need to track an expiration time that is separate 
+a key-value should persist?&nbsp; It is assumed that this should be a maximum of 
+24 hours.&nbsp; We also need to track an expiration time that is separate 
 from the key-value republish timestamp.&nbsp; Furthermore, up to this point, I 
 haven't implemented the concept of accelerated lookup optimization, which is 
 where the value of <i>b </i>comes from.&nbsp; In this implementation, where we 
@@ -3393,158 +3498,18 @@ closest to the key ID?&quot;&nbsp; Is the &quot;current node:&quot;</p>
 	<li>The receiver that is handling the store request, and counts the number 
 	of nodes between itself and the sender node?</li>
 </ol>
-<p>Keep in mind:</p>
-<ol>
-	<li>Cached key-values are republished every hour.</li>
-	<li>The originating node republishes its key-values every 24 hours.</li>
-	<li>Expiration times are &lt;= 24 hours.</li>
-	<li>It is entirely possible that a more distant node performs a re-publish 
-	to the node closest to the originator, particularly when the network is 
-	small and we're using farther nodes to fill the <i>k</i> contacts 
-	requirement.</li>
-</ol>
 <h4>Ambiguity #16</h4>
-<p><img border="0" src="important.png" width="38" height="32"> The reader may be 
-wondering why the originating node republishes its key-values every 24 hours 
-when key-values are being republished every hour anyways?&nbsp; There's a 
-subtlety here:&nbsp; the originator doesn't use its own node's store -- this is 
-just for the peer network.&nbsp; That may be obvious, but on the other hand it 
-is an easy mistake to assume that we can use our own node's storage system for 
-persisting our own node's data.&nbsp; This is <i>not</i> the case!&nbsp; The 
-storage <i>does not </i>distinguish between key-values for which we are from the 
-original publishing node and key-values in the store that are republications 
-from other nodes.&nbsp; It may even be possible that the originator ends up 
-getting a store request for its own data, but this will be for key-values that 
-have an expiration time.</p>
-<h4>Considerations</h4>
-<p>My take on the matter is as follows:</p>
-<ol>
-	<li>If the &quot;current node&quot; is the sender, then the packet being transmitted 
-	must include the expiration factor <i>o (not </i>the expiration date/time -- 
-	the receiving peer needs to calculate that), which I dislike because it 
-	makes the packet bigger.</li>
-	<li>However, in the case where &quot;current node&quot; is the originating node, it <i>
-	is</i> the closest node, so the expiration time is 24 hours.&nbsp; Every 
-	other node is farther away, and we don't want those nodes to necessarily 
-	expire the data sooner if the &quot;other&quot; node determines the expiration time, 
-	rather than the sender node.&nbsp; In other words, if we don't want the 
-	key-value to expire on the closest peers to the <i>originator </i>before the 
-	24 hour republish time (from the originator)<i> </i>then the sender must 
-	provide the expiration factor rather than it being computed by the receiver.</li>
-	<li>Even though originator A might have a closest node B, it is not true 
-	that when B receives A's store request, that B views A as the closest node.&nbsp; 
-	B may have peers that are in-between itself and A. </li>
-	<li>The rest of the description in section 3.2.4 of that forum post 
-	continues to describe how the expiration time is further adjusted using what 
-	seems to be a completely arbitrary algorithm implemented in emule.&nbsp; 
-	However, what do we do when a closer node (<i>o</i> would be larger) or a 
-	farther node (<i>o</i> would be smaller) republishes the key-value?&nbsp; 
-	</li>
-	<li>The whole point of this is to allow cached key-values to expire, and 
-	cached key-values on farther away nodes should expire faster.&nbsp; 
-	Eventually, if the originator goes away permanently, all its key-values will 
-	disappear from the network.&nbsp; In order for this to happen, we can't just 
-	reset the expiration time to &quot;now + 24 hours * <i>o</i>&quot; as the hourly 
-	republishing of key-values would continually reset this value.&nbsp; So 
-	instead, we can arbitrarily say &quot;multiply the old <i>o</i> by the new <i>
-	o</i>&quot; which has the effect of reducing the time to live (TTL) each 
-	time the key-value is republished.</li>
-</ol>
-<h4>But it Really Work?</h4>
-<p>But does this whole expiration process really work?&nbsp; Given that the 
-expiration time is never reset, only the expiration factor is updated, 
-eventually keys will be removed within one of the intervals of re-publishing, so 
-those keys, when the re-publish event fires, would not republish onto other 
-nodes.&nbsp; It is assumed that the key-value is also removed, when it expires, 
-from the node's store.&nbsp; But what happens when the the republish time 
-remaining and TTL's are set up as follows (all time is in minutes, 1440 = 60 
-minutes / hr * 24 hours):</p>
-<table border="1" width="74%">
-	<tr>
-		<td width="108">Time</td>
-		<td width="126">Event</td>
-		<td width="174" align="center">Node 1 Republish Clock<br>
-		Time Remaining (N<sub>1TR</sub>)</td>
-		<td width="177" align="center">Node 2 Republish Clock<br>
-		Time Remaining (N<sub>2TR</sub>)</td>
-		<td width="119" align="center">Node 1 key-value TTL (N<sub>1TTL</sub>)</td>
-		<td width="123" align="center">Node 2 key-value TTL (N<sub>2TTL</sub>)</td>
-	</tr>
-	<tr>
-		<td width="108">0</td>
-		<td width="126">Starting State</td>
-		<td width="174" align="center">25</td>
-		<td width="177" align="center">30</td>
-		<td width="119" align="center">10</td>
-		<td width="123" align="center">36</td>
-	</tr>
-	<tr>
-		<td width="108">+10 </td>
-		<td width="126">Node 1 TTL Expires</td>
-		<td width="174" align="center">15</td>
-		<td width="177" align="center">20</td>
-		<td width="119" align="center"><font color="#FF0000">0</font></td>
-		<td width="123" align="center">26</td>
-	</tr>
-	<tr>
-		<td width="108">+25 </td>
-		<td width="126">Node 1 Republishes (nothing to do)</td>
-		<td width="174" align="center"><font color="#FF0000">60 (resets)</font></td>
-		<td width="177" align="center">5</td>
-		<td width="119" align="center"><font color="#FF0000">X</font></td>
-		<td width="123" align="center">11</td>
-	</tr>
-	<tr>
-		<td width="108">+30 </td>
-		<td width="126">Node 2 Republishes</td>
-		<td width="174" align="center">55</td>
-		<td width="177" align="center"><font color="#FF0000">60 (resets)</font></td>
-		<td width="119" align="center"><font color="#FF0000"><i>o</i> * 1440</font></td>
-		<td width="123" align="center">6</td>
-	</tr>
-	<tr>
-		<td width="108">+36</td>
-		<td width="126">Node 2 TTL Expires</td>
-		<td width="174" align="center">49</td>
-		<td width="177" align="center">54</td>
-		<td width="119" align="center"><i>o</i> * 1440 - 6</td>
-		<td width="123" align="center"><font color="#FF0000">0</font></td>
-	</tr>
-	<tr>
-		<td width="108">+36 + <i>o</i> * 1440</td>
-		<td width="126">Node 1 TTL Expires</td>
-		<td width="174" align="center">49 - <i>o</i> * 1440</td>
-		<td width="177" align="center">54 - <i>o</i> * 1440</td>
-		<td width="119" align="center"><font color="#FF0000">0</font></td>
-		<td width="123" align="center">X</td>
-	</tr>
-</table>
-<p>As the above table illustrates:</p>
-<ol>
-	<li>at t + 10, node 1's key-value expires and is removed.</li>
-	<li>at t + 30, node 2 republishes its key-value onto node 1, with time &quot;10&quot; 
-	remaining before it expires</li>
-	<li>at t + 36, node 2's key-value expires</li>
-	<li>at t + 36 + <i>o</i> * 1440 (node 1's key-value TTL), node 1's key-value 
-	expires</li>
-</ol>
-<p>In the above scenario, node 1 removes the second occurrence (at t + 30) of the 
-key-value only if <i>o</i> * 1440 &lt;= 49, or more generally:</p>
-<p><code>o * 1440 &lt;= 60 - (N<sub>2TTL</sub> - N<sub>1TR</sub>)</code></p>
-<p>In this case, we know that o * 1440 &lt;= 49.&nbsp; When this republishes back 
-to node 2, the key-value on node 2 will only republish if o<sub>2</sub> * 1440 
-&lt;= 54, where o<sub>2</sub> is node 1's concept of its distance (measured in 
-number of separating nodes) from node 2.&nbsp; We can probably assume that node 
-1 and node 2 have similar concepts of how far apart they are from each other, 
-therefore o * 1440 &lt; o<sub>2</sub> * 1440, and node 2 will expire the key-value 
-before the republish event triggers.</p>
-<p>In the case where node 1's concept of its distance from node 2 is very 
-different (o<sub>2</sub> &gt;&gt; o) </p>
+<p>As discussed earlier, the entire concept of having a separate stores 
+(originator, republished, cached) is never discussed in the Kademlia 
+specification.&nbsp; Without understanding these three different stores, trying 
+to understand how caching works is probably impossible.</p>
+<h3>Never Expiring Republished Key-Values</h3>
+<p>It is reasonable for a cached key-value to expire, but we may never want to 
+expire originator or republished key-values.&nbsp; One good example is a 
+distributed blockchain (or distributed ledger) where data should never 
+disappear, even if the original publisher disappears from the peer network.</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
-<p>What if we never want a cached value to disappear, even if the originator 
-peer leaves the network?&nbsp; This is particularly important when considering 
-using Kademlia for a distributed ledger -- </p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
@@ -3681,6 +3646,9 @@ https://forum.emule-project.net/index.php?showtopic=32335</a>
 
 <p>[17] - <a href="http://www.emule-project.net/home/perl/general.cgi?l=1">
 http://www.emule-project.net/home/perl/general.cgi?l=1</a> </p>
+<p>[18] -
+<a href="https://forum.emule-project.net/index.php?showtopic=32335&view=findpost&p=214837">
+https://forum.emule-project.net/index.php?showtopic=32335&amp;view=findpost&amp;p=214837</a> </p>
 <p>&nbsp;</p>
 
 <p>----</p>

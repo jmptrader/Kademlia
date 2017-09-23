@@ -3,9 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Numerics;
 
-using Clifton.Kademlia;
-
-namespace UnitTests2
+namespace Clifton.Kademlia
 {
     public class VirtualStorage : IStorage
     {
@@ -13,11 +11,13 @@ namespace UnitTests2
 
         protected Dictionary<BigInteger, string> store;
         protected Dictionary<BigInteger, DateTime> republishTimestamps;
+        protected Dictionary<BigInteger, int> expirationTimes;
 
         public VirtualStorage()
         {
             store = new Dictionary<BigInteger, string>();
             republishTimestamps = new Dictionary<BigInteger, DateTime>();
+            expirationTimes = new Dictionary<BigInteger, int>();
         }
 
         public bool TryGetValue(ID key, out string val)
@@ -45,6 +45,11 @@ namespace UnitTests2
             return republishTimestamps[key];
         }
 
+        public int GetExpirationTimeSec(BigInteger key)
+        {
+            return expirationTimes[key];
+        }
+
 		/// <summary>
 		/// Updates the republish timestamp.
 		/// </summary>
@@ -53,10 +58,18 @@ namespace UnitTests2
             republishTimestamps[key] = DateTime.Now;
         }
 
-        public void Set(ID key, string val)
+        public void Set(ID key, string val, int expirationTime)
         {
             store[key.Value] = val;
+            expirationTimes[key.Value] = expirationTime;
             Touch(key.Value);
+        }
+
+        public void Remove(BigInteger key)
+        {
+            store.Remove(key);
+            republishTimestamps.Remove(key);
+            expirationTimes.Remove(key);
         }
 
         public IEnumerator<BigInteger> GetEnumerator()

@@ -9,7 +9,7 @@ namespace Clifton.Kademlia
         bool Ping(Contact sender);
         List<Contact> FindNode(Contact sender, ID key);
         (List<Contact> contacts, string val) FindValue(Contact sender, ID key);
-        void Store(Contact sender, ID key, string val);
+        void Store(Contact sender, ID key, string val, bool isCached = false, int expirationTimeSec = 0);
     }
 
     public interface IStorage : IEnumerable<BigInteger>
@@ -20,11 +20,13 @@ namespace Clifton.Kademlia
         string Get(ID key);
         string Get(BigInteger key);
         DateTime GetTimeStamp(BigInteger key);
-        void Set(ID key, string value);
+        void Set(ID key, string value, int expirationTimeSec = 0);
+        int GetExpirationTimeSec(BigInteger key);
+        void Remove(BigInteger key);
 
-		/// <summary>
-		/// Updates the republish timestamp.
-		/// </summary>
+        /// <summary>
+        /// Updates the republish timestamp.
+        /// </summary>
         void Touch(BigInteger key);
     }
 }

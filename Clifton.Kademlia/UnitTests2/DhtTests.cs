@@ -12,7 +12,7 @@ namespace UnitTests2
         public void LocalStoreFoundValueTest()
         {
             VirtualProtocol vp = new VirtualProtocol();
-            Dht dht = new Dht(ID.RandomID, vp, new VirtualStorage());
+            Dht dht = new Dht(ID.RandomID, vp, () => new VirtualStorage());
             vp.Node = dht.Router.Node;
             ID key = ID.RandomID;
             string val = "Test";
@@ -33,7 +33,7 @@ namespace UnitTests2
             VirtualStorage store2 = new VirtualStorage();
 
             // Ensures that all nodes are closer, because ID.Max ^ n < ID.Max when n > 0.
-            Dht dht = new Dht(ID.Max, vp1, store1);
+            Dht dht = new Dht(ID.Max, vp1, store1, store1, new VirtualStorage());
             vp1.Node = dht.Router.Node;
 
             ID contactID = ID.Mid;      // a closer contact.
@@ -72,7 +72,7 @@ namespace UnitTests2
             VirtualStorage store2 = new VirtualStorage();
 
             // Ensures that all nodes are closer, because ID.Max ^ n < ID.Max when n > 0.
-            Dht dht = new Dht(ID.Zero, vp1, store1);
+            Dht dht = new Dht(ID.Zero, vp1, store1, store1, new VirtualStorage());
             vp1.Node = dht.Router.Node;
 
             ID contactID = ID.Max;      // a farther contact.
@@ -111,7 +111,7 @@ namespace UnitTests2
             VirtualStorage store2 = new VirtualStorage();
 
             // Ensures that all nodes are closer, because ID.Max ^ n < ID.Max when n > 0.
-            Dht dht = new Dht(ID.Max, vp1, store1);
+            Dht dht = new Dht(ID.Max, vp1, store1, store1, new VirtualStorage());
             vp1.Node = dht.Router.Node;
 
             ID contactID = ID.Mid;      // a closer contact.
@@ -148,9 +148,10 @@ namespace UnitTests2
             VirtualStorage store1 = new VirtualStorage();
             VirtualStorage store2 = new VirtualStorage();
             VirtualStorage store3 = new VirtualStorage();
+            VirtualStorage cache3 = new VirtualStorage();
 
             // Ensures that all nodes are closer, because ID.Max ^ n < ID.Max when n > 0.
-            Dht dht = new Dht(ID.Max, vp1, store1);
+            Dht dht = new Dht(ID.Max, vp1, store1, store1, new VirtualStorage());
             vp1.Node = dht.Router.Node;
 
             // Setup node 2:
@@ -173,7 +174,7 @@ namespace UnitTests2
 
             ID contactID3 = ID.Zero.SetBit(158);      // 01000.... -- a farther contact.
             Contact otherContact3 = new Contact(vp3, contactID3);
-            Node otherNode3 = new Node(otherContact3, store3);
+            Node otherNode3 = new Node(otherContact3, store3, cache3);
             vp3.Node = otherNode3;
 
             // Add the third contact to our peer list.
@@ -185,7 +186,8 @@ namespace UnitTests2
             var ret = dht.FindValue(key);
 
             Assert.IsTrue(ret.found, "Expected value to be found.");
-            Assert.IsTrue(store3.Contains(key), "Expected the third peer to have stored the key-value.");
+            Assert.IsFalse(store3.Contains(key), "Key should not be in the republish store.");
+            Assert.IsTrue(cache3.Contains(key), "Key should be in the cache store.");
         }
 
         [TestMethod]
@@ -198,11 +200,11 @@ namespace UnitTests2
             22.ForEach((i) => vp[i] = new VirtualProtocol());
 
             // Us
-            Dht dhtUs = new Dht(ID.RandomID, vp[0], new VirtualStorage());
+            Dht dhtUs = new Dht(ID.RandomID, vp[0], () => new VirtualStorage());
             vp[0].Node = dhtUs.Router.Node;
 
             // Our bootstrap peer
-            Dht dhtBootstrap = new Dht(ID.RandomID, vp[1], new VirtualStorage());
+            Dht dhtBootstrap = new Dht(ID.RandomID, vp[1], () => new VirtualStorage());
             vp[1].Node = dhtBootstrap.Router.Node;
             Node n = null;
 
@@ -240,12 +242,12 @@ namespace UnitTests2
             32.ForEach((i) => vp[i] = new VirtualProtocol());
 
             // Us, ID doesn't matter.
-            Dht dhtUs = new Dht(ID.RandomID, vp[0], new VirtualStorage());
+            Dht dhtUs = new Dht(ID.RandomID, vp[0], () => new VirtualStorage());
             vp[0].Node = dhtUs.Router.Node;
 
             // Our bootstrap peer
             // All ID's are < 2^159
-            Dht dhtBootstrap = new Dht(ID.Zero.RandomizeBeyond(Constants.ID_LENGTH_BITS - 1), vp[1], new VirtualStorage());
+            Dht dhtBootstrap = new Dht(ID.Zero.RandomizeBeyond(Constants.ID_LENGTH_BITS - 1), vp[1], () => new VirtualStorage());
             vp[1].Node = dhtBootstrap.Router.Node;
             Node n = null;
 

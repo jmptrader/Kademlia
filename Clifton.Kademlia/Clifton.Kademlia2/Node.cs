@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace Clifton.Kademlia
@@ -8,20 +9,31 @@ namespace Clifton.Kademlia
         public Contact OurContact { get { return ourContact; } }
         public BucketList BucketList { get { return bucketList; } }
         public IStorage Storage { get { return storage; } }
+        public IStorage CacheStorage { get { return cacheStorage; } }
 
         protected Contact ourContact;
         protected BucketList bucketList;
         protected IStorage storage;
+        protected IStorage cacheStorage;
 
         protected Node()
         {
         }
 
-        public Node(Contact contact, IStorage storage)
+        /// <summary>
+        /// If cache storage is not explicity provided, we use an in-memory virtual storage.
+        /// </summary>
+        public Node(Contact contact, IStorage storage, IStorage cacheStorage = null)
         {
             ourContact = contact;
             bucketList = new BucketList(contact);
             this.storage = storage;
+            this.cacheStorage = cacheStorage;
+
+            if (cacheStorage == null)
+            {
+                this.cacheStorage = new VirtualStorage();
+            }
         }
 
         /// <summary>
@@ -37,15 +49,23 @@ namespace Clifton.Kademlia
         }
 
         /// <summary>
-        /// Store a key-value pair in our storage space, updating the contact if it's not us.
+        /// Store a key-value pair in the republish or cache storage, updating the contact if it's not us.
         /// </summary>
-        public void Store(Contact sender, ID key, string val)
+        public void Store(Contact sender, ID key, string val, bool isCached = false, int expirationTimeSec = 0)
         {
             Validate.IsFalse<SendingQueryToSelfException>(sender.ID.Value == ourContact.ID.Value, "Sender should not be ourself!");
-            SendKeyValuesToNewContact(sender);
-            bucketList.AddContact(sender);
 
-            storage.Set(key, val);
+            if (isCached)
+            {
+                cacheStorage.Set(key, val, expirationTimeSec);
+            }
+            else
+            {
+                SendKeyValuesToNewContact(sender);
+                bucketList.AddContact(sender);
+
+                storage.Set(key, val, Constants.EXPIRATION_TIME_SECONDS);
+            }
         }
 
         /// <summary>
@@ -79,6 +99,10 @@ namespace Clifton.Kademlia
             if (storage.Contains(key))
             {
                 return (null, storage.Get(key));
+            }
+            else if (CacheStorage.Contains(key))
+            {
+                return (null, CacheStorage.Get(key));
             }
             else
             {

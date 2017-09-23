@@ -11,24 +11,46 @@ namespace Clifton.Kademlia
         public Router Router { get { return router; } }
 #endif
 
+        /// <summary>
+        /// Server has access to this.
+        /// </summary>
+        public IStorage OriginatorStorage { get { return originatorStorage; } }
+
         protected Router router;
-        protected IStorage storage;
+        protected IStorage originatorStorage;
+        protected IStorage republishStorage;
+        protected IStorage cacheStorage;
         protected IProtocol protocol;
         protected Node node;
         protected Contact ourContact;
         protected ID ourId;
         protected Timer bucketRefreshTimer;
         protected Timer keyValueRepublishTimer;
+        protected Timer originatorRepublishTimer;
+        protected Timer expireKeysTimer;
 
-        public Dht(ID id, IProtocol protocol, IStorage storage)
+        /// <summary>
+        /// Use this constructor to initialize the stores to the same instance.
+        /// </summary>
+        public Dht(ID id, IProtocol protocol, Func<IStorage> storageFactory)
         {
-            this.storage = storage;
-            ourId = id;
-            ourContact = new Contact(protocol, id);
-            node = new Node(ourContact, storage);
-            router = new Router(node);
-            SetupBucketRefreshTimer();
-            SetupKeyValueRepublishTimer();
+            originatorStorage = storageFactory();
+            republishStorage = storageFactory();
+            cacheStorage = storageFactory();
+            FinishInitialization(id, protocol);
+        }
+
+        /// <summary>
+        /// Supports different concrete storage types.  For example, you may want the cacheStorage
+        /// to be an in memory store, the originatorStorage to be a SQL database, and the republish store
+        /// to be a key-value database.
+        /// </summary>
+        public Dht(ID id, IProtocol protocol, IStorage originatorStorage, IStorage republishStorage, IStorage cacheStorage)
+        {
+            this.originatorStorage = originatorStorage;
+            this.republishStorage = republishStorage;
+            this.cacheStorage = cacheStorage;
+            FinishInitialization(id, protocol);
         }
 
 /// <summary>
@@ -55,8 +77,8 @@ namespace Clifton.Kademlia
         {
             TouchBucketWithKey(key);
 
-            // We're storing to ourselves as well as k closer contacts.
-            storage.Set(key, val);
+            // We're storing to k closer contacts.
+            originatorStorage.Set(key, val);
 			StoreOnCloserContacts(key, val);
         }
 
@@ -68,29 +90,53 @@ namespace Clifton.Kademlia
             List<Contact> contactsQueried = new List<Contact>();
             (bool found, List<Contact> contacts, string val) ret = (false, null, null);
 
-            // If we have it, return with our value.
-            if (storage.TryGetValue(key, out ourVal))
+            if (originatorStorage.TryGetValue(key, out ourVal))
             {
+                // Sort of odd that we are using the key-value store to find something the key-value that we originate.
+                ret = (true, null, ourVal);
+            }
+            else if (republishStorage.TryGetValue(key, out ourVal))
+            {
+                // If we have it from another peer.
+                ret = (true, null, ourVal);
+            }
+            else if (cacheStorage.TryGetValue(key, out ourVal))
+            {
+                // If we have it because it was cached.
                 ret = (true, null, ourVal);
             }
             else
             {
                 var lookup = router.Lookup(key, router.RpcFindValue);
+                TouchBucketWithKey(key);
 
                 if (lookup.found)
                 {
                     ret = (true, null, lookup.val);
-                    // Find the first close contact (other than the one the value was found by) in which to also store the key-value.
+                    // Find the first close contact (other than the one the value was found by) in which to *cache* the key-value.
                     var storeTo = lookup.contacts.Where(c => c != lookup.foundBy).OrderBy(c => c.ID.Value ^ key.Value).FirstOrDefault();
 
                     if (storeTo != null)
                     {
-                        storeTo.Protocol.Store(node.OurContact, key, lookup.val);
+                        int expTimeSec = 0;
+                        storeTo.Protocol.Store(node.OurContact, key, lookup.val, true, expTimeSec);
                     }
                 }
             }
 
             return ret;
+        }
+
+        protected void FinishInitialization(ID id, IProtocol protocol)
+        {
+            ourId = id;
+            ourContact = new Contact(protocol, id);
+            node = new Node(ourContact, republishStorage, cacheStorage);
+            router = new Router(node);
+            SetupBucketRefreshTimer();
+            SetupKeyValueRepublishTimer();
+            SetupOriginatorRepublishTimer();
+            SetupExpireKeysTimer();
         }
 
         protected void TouchBucketWithKey(ID key)
@@ -114,6 +160,22 @@ namespace Clifton.Kademlia
             keyValueRepublishTimer.Start();
         }
 
+        protected void SetupOriginatorRepublishTimer()
+        {
+            originatorRepublishTimer = new Timer(Constants.ORIGINATOR_REPUBLISH_INTERVAL);
+            originatorRepublishTimer.AutoReset = true;
+            originatorRepublishTimer.Elapsed += OriginatorRepublishElapsed;
+            originatorRepublishTimer.Start();
+        }
+
+        protected void SetupExpireKeysTimer()
+        {
+            expireKeysTimer = new Timer(Constants.KEY_VALUE_EXPIRE_INTERVAL);
+            expireKeysTimer.AutoReset = true;
+            expireKeysTimer.Elapsed += ExpireKeysElapsed;
+            expireKeysTimer.Start();
+        }
+
         protected void BucketRefreshTimerElapsed(object sender, ElapsedEventArgs e)
         {
             DateTime now = DateTime.Now;
@@ -131,18 +193,51 @@ namespace Clifton.Kademlia
         {
             DateTime now = DateTime.Now;
 
-			node.Storage.Where(k => (now - storage.GetTimeStamp(k)).TotalMilliseconds >= Constants.KEY_VALUE_REPUBLISH_INTERVAL).ForEach(k=>
+			republishStorage.Where(k => (now - republishStorage.GetTimeStamp(k)).TotalMilliseconds >= Constants.KEY_VALUE_REPUBLISH_INTERVAL).ForEach(k=>
 			{
                 ID key = new ID(k);
-				StoreOnCloserContacts(key, storage.Get(key));
-				storage.Touch(k);			
+				StoreOnCloserContacts(key, republishStorage.Get(key));
+				republishStorage.Touch(k);			
 			});
         }
 
-		/// <summary>
-		/// Perform a lookup if the bucket containing the key has not been refreshed, otherwise, just get the contacts the k closest contacts we know about.
-		/// </summary>
-		protected void StoreOnCloserContacts(ID key, string val)
+        protected void OriginatorRepublishElapsed(object sender, ElapsedEventArgs e)
+        {
+            DateTime now = DateTime.Now;
+
+            originatorStorage.Where(k => (now - originatorStorage.GetTimeStamp(k)).TotalMilliseconds >= Constants.ORIGINATOR_REPUBLISH_INTERVAL).ForEach(k =>
+            {
+                ID key = new ID(k);
+                // Just use close contacts, don't do a lookup.
+                var contacts = node.BucketList.GetCloseContacts(key, node.OurContact.ID);
+                contacts.ForEach(c => c.Protocol.Store(ourContact, key, originatorStorage.Get(key)));
+                originatorStorage.Touch(k);
+            });
+        }
+
+        /// <summary>
+        /// Any expired keys in the republish or node's cache are removed.
+        /// </summary>
+        protected void ExpireKeysElapsed(object sender, ElapsedEventArgs e)
+        {
+            RemoveExpiredData(cacheStorage);
+            RemoveExpiredData(republishStorage);
+        }
+
+        protected void RemoveExpiredData(IStorage store)
+        {
+            DateTime now = DateTime.Now;
+            // ToList so our key list is resolved now as we remove keys.
+            store.Where(k => (now - store.GetTimeStamp(k)).TotalSeconds >= store.GetExpirationTimeSec(k)).ToList().ForEach(k =>
+            {
+                store.Remove(k);
+            });
+        }
+
+        /// <summary>
+        /// Perform a lookup if the bucket containing the key has not been refreshed, otherwise, just get the contacts the k closest contacts we know about.
+        /// </summary>
+        protected void StoreOnCloserContacts(ID key, string val)
 		{
 			DateTime now = DateTime.Now;
 

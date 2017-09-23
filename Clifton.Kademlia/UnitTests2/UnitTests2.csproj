@@ -58,7 +58,6 @@
     <Compile Include="LookupTests.cs" />
     <Compile Include="DhtTests.cs" />
     <Compile Include="VirtualProtocol.cs" />
-    <Compile Include="VirtualStorage.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

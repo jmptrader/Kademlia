@@ -56,9 +56,9 @@ namespace UnitTests2
         /// <summary>
         /// Stores the key-value on the remote peer.
         /// </summary>
-        public void Store(Contact sender, ID key, string val)
+        public void Store(Contact sender, ID key, string val, bool isCached = false, int expTimeSec = 0)
         {
-            Node.Store(sender, key, val);
+            Node.Store(sender, key, val, isCached, expTimeSec);
         }
     }
 }
