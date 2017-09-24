@@ -8,15 +8,6 @@ using System.Threading;
 
 namespace Clifton.Kademlia
 {
-    public class ContactQueueItem
-    {
-        public ID Key { get; set; }
-        public Contact Contact { get; set; }
-        public Func<ID, Contact, (List<Contact> contacts, Contact foundBy, string val)> RpcCall { get; set; }
-        public List<Contact> CloserContacts { get; set; }
-        public List<Contact> FartherContacts { get; set; }
-    }
-
     public class ParallelRouter : BaseRouter
     {
         // ======================
@@ -163,6 +154,9 @@ namespace Clifton.Kademlia
             now = DateTime.Now;
         }
 
+        /// <summary>
+        /// Returns true if the query time has expired.
+        /// </summary>
         protected bool QueryTimeExpired()
         {
             return (DateTime.Now - now).TotalMilliseconds > Constants.QUERY_TIME;
@@ -201,12 +195,12 @@ namespace Clifton.Kademlia
                         out foundBy))
                     {
                         // Possible multiple "found"
-                        lock (this)
+                        lock (item.CloserContacts)
                         {
                             found = true;
                             this.foundBy = foundBy;
                             foundValue = val;
-                            foundContacts = item.CloserContacts;
+                            foundContacts = item.CloserContacts.ToList();
                         }
                     }
                 }

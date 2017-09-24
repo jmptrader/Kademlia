@@ -3612,8 +3612,205 @@ results as they come in.&nbsp; This requires:</p>
 	<li>Changing the algorithm at the top level so that processing continues as 
 	soon as the results appear from the RPC call.</li>
 </ol>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
+<h4>The BaseRouter</h4>
+<p>For unit testing, it's useful to keep the non-parallel implementation, but 
+ideally both parallel and non-parallel calls to the <code>Router</code> should be made in the 
+same way.&nbsp; An abstract <code>BaseRouter</code> class allows for this:</p>
+<pre>public abstract class BaseRouter
+{
+  ...
+  public abstract (bool found, List&lt;Contact&gt; contacts, Contact foundBy, string val) Lookup(
+    ID key,
+    Func&lt;ID, List&lt;Contact&gt;, (List&lt;Contact&gt; contacts, Contact foundBy, string val)&gt; rpcCall,
+    bool giveMeAll = false);
+  ...
+}</pre>
+<p>We then pass the desired router to the <code>Dht</code> constructors:</p>
+<pre>public Dht(ID id, IProtocol protocol, Func&lt;IStorage&gt; storageFactory, BaseRouter router)
+...
+public Dht(ID id, IProtocol protocol, BaseRouter router, IStorage originatorStorage, IStorage republishStorage, IStorage cacheStorage)
+...</pre>
+<p>Several other methods common to the parallel and non-parallel routers have 
+been moved up to the base class as well, in additional to some extensive 
+refactoring around the fact that we're now passing only one contact, rather than 
+a list of contacts, to the RPC methods to query with either FindNode or 
+FindValue.</p>
+<p>One of the important pieces when multi-threading the GetCloserNodes method is 
+to ensure that threads don't simultaneously update the closer and farther 
+contact lists:</p>
+<pre>public bool GetCloserNodes( ID key,
+Contact nodeToQuery,
+Func&lt;ID, Contact, (List&lt;Contact&gt; contacts, Contact foundBy, string val)&gt; rpcCall,
+List&lt;Contact&gt; closerContacts,
+List&lt;Contact&gt; fartherContacts,
+out string val,
+out Contact foundBy)
+{
+  ...
+  lock (closerContacts)
+  {
+    closerContacts.
+      AddRangeDistinctBy(peersNodes.
+      Where(p =&gt; (p.ID ^ key) &lt; nearestNodeDistance),
+      (a, b) =&gt; a.ID == b.ID);
+  }
+
+  lock (fartherContacts)
+  {
+    fartherContacts.
+      AddRangeDistinctBy(peersNodes.
+      Where(p =&gt; (p.ID ^ key) &gt;= nearestNodeDistance),
+      (a, b) =&gt; a.ID == b.ID);
+  }
+  ...
+}</pre>
+<h4>The ParallelRouter</h4>
+<p>The <code>ParallelRouter</code> queues contacts to query, in addition to some other 
+information each thread needs to know about when executing the RPC call.</p>
+<pre>public class ContactQueueItem
+{
+  public ID Key { get; set; }
+  public Contact Contact { get; set; }
+  public Func&lt;ID, Contact, (List&lt;Contact&gt; contacts, Contact foundBy, string val)&gt; RpcCall { get; set; }
+  public List&lt;Contact&gt; CloserContacts { get; set; }
+  public List&lt;Contact&gt; FartherContacts { get; set; }
+}</pre>
+<p>The <code>ParallelRouter</code> also initializes an internal thread pool:</p>
+<pre>protected void InitializeThreadPool()
+{
+  threads = new List&lt;Thread&gt;();
+  Constants.MAX_THREADS.ForEach(() =&gt;
+  {
+    Thread thread = new Thread(new ThreadStart(RpcCaller));
+    thread.IsBackground = true;
+    thread.Start();
+  });
+}</pre>
+<p>Work is queued and a semaphore is released for a thread to pick up the work:</p>
+<pre>protected void AddToQueue(
+  ID key,
+  Contact contact,
+  Func&lt;ID, Contact, (List&lt;Contact&gt; contacts, Contact foundBy, string val)&gt; rpcCall,
+  List&lt;Contact&gt; closerContacts,
+  List&lt;Contact&gt; fartherContacts
+)
+{
+  contactQueue.Enqueue(new ContactQueueItem()
+  {
+    Key = key,
+    Contact = contact,
+    RpcCall = rpcCall,
+    CloserContacts = closerContacts,
+    FartherContacts = fartherContacts
+  });
+
+  semaphore.Release();
+}</pre>
+<p>Each thread dequeues an item for work in the <code>RpcCaller</code> method:</p>
+<pre>protected void RpcCaller()
+{
+  while (true)
+  {
+    semaphore.WaitOne();
+    ContactQueueItem item;
+
+    if (contactQueue.TryDequeue(out item))
+    {
+      string val;
+      Contact foundBy;
+
+      if (GetCloserNodes(
+        item.Key,
+        item.Contact,
+        item.RpcCall,
+        item.CloserContacts,
+        item.FartherContacts,
+        out val,
+        out foundBy))
+      {
+        // Possible multiple &quot;found&quot;
+        lock (item.closerContacts)
+        {
+          found = true;
+          this.foundBy = foundBy;
+          foundValue = val;
+          foundContacts = item.CloserContacts.ToList();
+        }
+      }
+    }
+  }
+}</pre>
+<p>The salient point with the above code is that when a value is found, it takes 
+a snapshot of the current closer contacts and stores all the information about a 
+closer contact in fields belonging to the <code>ParallelLookup</code> class.</p>
+<p>The ParallelRouter must terminate its search after a certain amount of time, 
+which handles unresponsive contacts.&nbsp; Whenever a response is received and 
+new contacts are added to the list of contacts that can be queried, a timer is 
+reset.&nbsp; The Lookup call exits when a value is found (for FindValue), or <i>
+k</i> closer contacts have been found, or the time period expires:</p>
+<pre>/// &lt;summary&gt;
+/// Sets the time of the query to now.
+/// &lt;/summary&gt;
+protected void SetQueryTime()
+{
+  now = DateTime.Now;
+}
+
+/// &lt;summary&gt;
+/// Returns true if the query time has expired.
+/// &lt;/summary&gt;
+protected bool QueryTimeExpired()
+{
+  return (DateTime.Now - now).TotalMilliseconds &gt; Constants.QUERY_TIME;
+}</pre>
+<p>The <code>Lookup</code> inner loop is the where the work is done, as with the non-parallel 
+version, but notice instead how work is queued and we wait for responses -- 
+particularly the check for whether we've waited long enough in the <code>haveWork</code> 
+assignment:</p>
+<pre>...
+ret.AddRangeDistinctBy(closerContacts, (a, b) =&gt; a.ID == b.ID);
+
+while (ret.Count &lt; Constants.K &amp;&amp; haveWork)
+{
+  Thread.Sleep(Constants.RESPONSE_WAIT_TIME);
+
+  if (ParallelFound(ref foundReturn))
+  {
+    DequeueRemainingWork();
+
+    return foundReturn;
+}
+
+  List&lt;Contact&gt; closerUncontactedNodes = closerContacts.Except(contactedNodes).ToList();
+  List&lt;Contact&gt; fartherUncontactedNodes = fartherContacts.Except(contactedNodes).ToList();
+  bool haveCloser = closerUncontactedNodes.Count &gt; 0;
+  bool haveFarther = fartherUncontactedNodes.Count &gt; 0;
+
+  haveWork = haveCloser || haveFarther || !QueryTimeExpired();
+
+  // Spec: Of the k nodes the initiator has heard of closest to the target...
+  if (haveCloser)
+  {
+    // We're about to contact these nodes.
+    var alphaNodes = closerUncontactedNodes.Take(Constants.ALPHA);
+    contactedNodes.AddRangeDistinctBy(alphaNodes, (a, b) =&gt; a.ID == b.ID);
+    alphaNodes.ForEach(n =&gt; AddToQueue(key, n, rpcCall, closerContacts, fartherContacts));
+    SetQueryTime();
+  }
+  else if (haveFarther)
+  {
+    // We're about to contact these nodes.
+    var alphaNodes = fartherUncontactedNodes.Take(Constants.ALPHA);
+    contactedNodes.AddRangeDistinctBy(alphaNodes, (a, b) =&gt; a.ID == b.ID);
+    alphaNodes.ForEach(n =&gt; AddToQueue(key, n, rpcCall, closerContacts, fartherContacts));
+  SetQueryTime();
+  }
+}
+</pre>
+<p>We can now take the Dht tests for non-parallel version and create parallel 
+versions of those tests, passing in the ParallelRouter instead:</p>
+<pre>Dht dht = new Dht(ID.RandomID, vp, () =&gt; new VirtualStorage(), new ParallelRouter());</pre>
+<p><img border="0" src="parallelTests.png" width="298" height="143"></p>
 <h2>Some Enhancements</h2>
 <h3>Operator Overloading of the ID Class</h3>
 <p>Rather than having to always use id.Value to compare and XOR the BigInteger 

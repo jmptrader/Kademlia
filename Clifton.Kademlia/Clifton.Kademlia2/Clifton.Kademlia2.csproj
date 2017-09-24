@@ -46,6 +46,7 @@
     <Compile Include="BucketList.cs" />
     <Compile Include="Constants.cs" />
     <Compile Include="Contact.cs" />
+    <Compile Include="ContactQueueItem.cs" />
     <Compile Include="Dht.cs" />
     <Compile Include="Exceptions.cs" />
     <Compile Include="ExtensionMethods.cs" />
