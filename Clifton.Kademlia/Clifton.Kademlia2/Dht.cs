@@ -11,6 +11,10 @@ namespace Clifton.Kademlia
         public BaseRouter Router { get { return router; } }
 #endif
 
+        public Node Node { get { return node; } }
+        public Contact Contact { get { return ourContact; } }
+        public ID ID { get { return ourId; } }
+
         /// <summary>
         /// Server has access to this.
         /// </summary>
