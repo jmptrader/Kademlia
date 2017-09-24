@@ -67,6 +67,7 @@ namespace Clifton.Kademlia
             // Resolve the list now, so we don't include additional contacts as we add to our bucket additional contacts.
             var otherBuckets = node.BucketList.Buckets.Where(b => b != knownPeerBucket).ToList();
             otherBuckets.ForEach(b => RefreshBucket(b));
+
             foreach (KBucket otherBucket in otherBuckets)
             {
                 RefreshBucket(otherBucket);

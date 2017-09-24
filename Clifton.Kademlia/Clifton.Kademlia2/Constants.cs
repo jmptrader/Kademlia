@@ -8,6 +8,8 @@
 		public const int ID_LENGTH_BITS = 160;
 
         public const int MAX_THREADS = 20;
+        public const int QUERY_TIME = 500;  // in ms.
+        public const int RESPONSE_WAIT_TIME = 10;   // in ms.
 
 #if DEBUG       // For unit tests
         public const int ALPHA = 20;

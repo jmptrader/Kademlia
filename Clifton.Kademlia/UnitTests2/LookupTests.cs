@@ -52,10 +52,14 @@ namespace UnitTests2
 
             closerContacts = new List<Contact>();
             fartherContacts = new List<Contact>();
-            router.GetCloserNodes(key, router.RpcFindNodes, contactsToQuery, closerContacts, fartherContacts, out var _, out var _);
 
-            Assert.IsTrue(closerContacts.Count == 0, "No new nodes expected.");
-            Assert.IsTrue(fartherContacts.Count == 0, "No new nodes expected.");
+            contactsToQuery.ForEach(c =>
+            {
+                router.GetCloserNodes(key, c, router.RpcFindNodes, closerContacts, fartherContacts, out var _, out var _);
+            });
+
+            Assert.IsTrue(closerContacts.ExceptBy(contactsToQuery, c=>c.ID).Count() == 0, "No new nodes expected.");
+            Assert.IsTrue(fartherContacts.ExceptBy(contactsToQuery, c=>c.ID).Count() == 0, "No new nodes expected.");
         }
 
         /// <summary>
@@ -91,7 +95,7 @@ namespace UnitTests2
 
             Assert.IsTrue(contacts.Count == Constants.K, "Expected k closer contacts.");
             Assert.IsTrue(router.CloserContacts.Count == Constants.K, "All contacts should be closer.");
-            Assert.IsTrue(router.FartherContacts.Count == 0, "Did not expected farther contacts.");
+            Assert.IsTrue(router.FartherContacts.Count == 0, "Expected no farther contacts.");
         }
 
         /// <summary>
@@ -121,7 +125,7 @@ namespace UnitTests2
             // Select the key such that n ^ 0 == n
             // This ensures that the distance metric uses only the node ID, which makes for an integer difference for distance, not an XOR distance.
             key = ID.Zero;
-            contactsToQuery = router.Node.BucketList.Buckets[0].Contacts;   // all contacts are in one bucket.
+            // contactsToQuery = router.Node.BucketList.Buckets[0].Contacts;   // all contacts are in one bucket.
 
             var contacts = router.Lookup(key, router.RpcFindNodes, true).contacts;
 
@@ -139,7 +143,10 @@ namespace UnitTests2
                 ID.rnd = new Random(seed);
                 Setup();
 
-                router.GetCloserNodes(key, router.RpcFindNodes, contactsToQuery, closerContacts, fartherContacts, out var _, out var _);
+                contactsToQuery.ForEach(c =>
+                {
+                    router.GetCloserNodes(key, c, router.RpcFindNodes, closerContacts, fartherContacts, out var _, out var _);
+                });
 
                 // Test whether the results are correct:  
 

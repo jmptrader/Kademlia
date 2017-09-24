@@ -52,6 +52,7 @@
   <ItemGroup>
     <Compile Include="BucketListTests.cs" />
     <Compile Include="IDTests.cs" />
+    <Compile Include="ParallelRouterTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="KBucketTests.cs" />
     <Compile Include="AddContactTests.cs" />
