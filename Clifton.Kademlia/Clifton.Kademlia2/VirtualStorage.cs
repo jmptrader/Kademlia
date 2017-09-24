@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Numerics;
 
@@ -9,15 +10,15 @@ namespace Clifton.Kademlia
     {
         public bool HasValues { get { return store.Count > 0; } }
 
-        protected Dictionary<BigInteger, string> store;
-        protected Dictionary<BigInteger, DateTime> republishTimestamps;
-        protected Dictionary<BigInteger, int> expirationTimes;
+        protected ConcurrentDictionary<BigInteger, string> store;
+        protected ConcurrentDictionary<BigInteger, DateTime> republishTimestamps;
+        protected ConcurrentDictionary<BigInteger, int> expirationTimes;
 
         public VirtualStorage()
         {
-            store = new Dictionary<BigInteger, string>();
-            republishTimestamps = new Dictionary<BigInteger, DateTime>();
-            expirationTimes = new Dictionary<BigInteger, int>();
+            store = new ConcurrentDictionary<BigInteger, string>();
+            republishTimestamps = new ConcurrentDictionary<BigInteger, DateTime>();
+            expirationTimes = new ConcurrentDictionary<BigInteger, int>();
         }
 
         public bool TryGetValue(ID key, out string val)
@@ -67,9 +68,9 @@ namespace Clifton.Kademlia
 
         public void Remove(BigInteger key)
         {
-            store.Remove(key);
-            republishTimestamps.Remove(key);
-            expirationTimes.Remove(key);
+            store.TryRemove(key, out _);
+            republishTimestamps.TryRemove(key, out _);
+            expirationTimes.TryRemove(key, out _);
         }
 
         public IEnumerator<BigInteger> GetEnumerator()

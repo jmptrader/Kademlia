@@ -16,10 +16,7 @@ namespace Clifton.Kademlia
         protected Semaphore semaphore;
         protected List<Thread> threads;
 
-        protected bool found;
-        protected List<Contact> foundContacts;
-        protected Contact foundBy;
-        protected string foundValue;
+        protected bool stopWork;
 
         protected DateTime now;
         // ======================
@@ -41,12 +38,19 @@ namespace Clifton.Kademlia
             InitializeThreadPool();
         }
 
+        /// <summary>
+        /// Perform a lookup on the given key, finding either a node containing the key value
+        /// or returning all closer contacts.
+        /// This method is not re-entrant!  Do not call this method in parallel!
+        /// </summary>
         public override (bool found, List<Contact> contacts, Contact foundBy, string val) Lookup(
             ID key,
             Func<ID, Contact, (List<Contact> contacts, Contact foundBy, string val)> rpcCall,
             bool giveMeAll = false)
         {
+            stopWork = false;
             bool haveWork = true;
+            FindResult findResult = new FindResult();
             List<Contact> ret = new List<Contact>();
             List<Contact> contactedNodes = new List<Contact>();
             List<Contact> closerContacts = new List<Contact>();
@@ -86,7 +90,7 @@ namespace Clifton.Kademlia
             // Spec: The initiator then sends parallel, asynchronous FIND_NODE RPCS to the a nodes it has chosen, 
             // a is a system-wide concurrency parameter, such as 3.
 
-            nodesToQuery.ForEach(n => AddToQueue(key, n, rpcCall, closerContacts, fartherContacts));
+            nodesToQuery.ForEach(n => QueueWork(key, n, rpcCall, closerContacts, fartherContacts, findResult));
             SetQueryTime();
 
             // Add any new closer contacts to the list we're going to return.
@@ -97,13 +101,13 @@ namespace Clifton.Kademlia
             {
                 Thread.Sleep(Constants.RESPONSE_WAIT_TIME);
 
-                if (ParallelFound(ref foundReturn))
+                if (ParallelFound(findResult, ref foundReturn))
                 {
 #if DEBUG       // For unit testing.
                     CloserContacts = closerContacts;
                     FartherContacts = fartherContacts;
 #endif
-                    DequeueRemainingWork();
+                    StopRemainingWork();
 
                     return foundReturn;
                 }
@@ -121,7 +125,7 @@ namespace Clifton.Kademlia
                     // We're about to contact these nodes.
                     var alphaNodes = closerUncontactedNodes.Take(Constants.ALPHA);
                     contactedNodes.AddRangeDistinctBy(alphaNodes, (a, b) => a.ID == b.ID);
-                    alphaNodes.ForEach(n => AddToQueue(key, n, rpcCall, closerContacts, fartherContacts));
+                    alphaNodes.ForEach(n => QueueWork(key, n, rpcCall, closerContacts, fartherContacts, findResult));
                     SetQueryTime();
                 }
                 else if (haveFarther)
@@ -129,7 +133,7 @@ namespace Clifton.Kademlia
                     // We're about to contact these nodes.
                     var alphaNodes = fartherUncontactedNodes.Take(Constants.ALPHA);
                     contactedNodes.AddRangeDistinctBy(alphaNodes, (a, b) => a.ID == b.ID);
-                    alphaNodes.ForEach(n => AddToQueue(key, n, rpcCall, closerContacts, fartherContacts));
+                    alphaNodes.ForEach(n => QueueWork(key, n, rpcCall, closerContacts, fartherContacts, findResult));
                     SetQueryTime();
                 }
             }
@@ -139,11 +143,15 @@ namespace Clifton.Kademlia
             FartherContacts = fartherContacts;
 #endif
 
-            DequeueRemainingWork();
+            StopRemainingWork();
 
             // Spec (sort of): Return max(k) closer nodes, sorted by distance.
             // For unit testing, giveMeAll can be true so that we can match against our alternate way of getting closer contacts.
-            return (false, (giveMeAll ? ret : ret.Take(Constants.K).OrderBy(c => c.ID ^ key).ToList()), null, null);
+            lock (locker)
+            {
+                // Clone the returning closer contact list so any threads still to return don't affect the collection at this point.
+                return (false, new List<Contact>(giveMeAll ? ret : ret.Take(Constants.K).OrderBy(c => c.ID ^ key).ToList()), null, null);
+            }
         }
 
         /// <summary>
@@ -194,25 +202,29 @@ namespace Clifton.Kademlia
                         out val,
                         out foundBy))
                     {
-                        // Possible multiple "found"
-                        lock (item.CloserContacts)
+                        if (!stopWork)
                         {
-                            found = true;
-                            this.foundBy = foundBy;
-                            foundValue = val;
-                            foundContacts = item.CloserContacts.ToList();
+                            // Possible multiple "found"
+                            lock (locker)
+                            {
+                                item.FindResult.Found = true;
+                                item.FindResult.FoundBy = foundBy;
+                                item.FindResult.FoundValue = val;
+                                item.FindResult.FoundContacts = new List<Contact>(item.CloserContacts);
+                            }
                         }
                     }
                 }
             }
         }
 
-        protected void AddToQueue(
+        protected void QueueWork(
             ID key,
             Contact contact,
             Func<ID, Contact, (List<Contact> contacts, Contact foundBy, string val)> rpcCall,
             List<Contact> closerContacts,
-            List<Contact> fartherContacts
+            List<Contact> fartherContacts,
+            FindResult findResult
             )
         {
             contactQueue.Enqueue(new ContactQueueItem()
@@ -221,10 +233,17 @@ namespace Clifton.Kademlia
                 Contact = contact,
                 RpcCall = rpcCall,
                 CloserContacts = closerContacts,
-                FartherContacts = fartherContacts
+                FartherContacts = fartherContacts,
+                FindResult = findResult
             });
 
             semaphore.Release();
+        }
+
+        protected void StopRemainingWork()
+        {
+            DequeueRemainingWork();
+            stopWork = true;
         }
 
         protected void DequeueRemainingWork()
@@ -232,18 +251,21 @@ namespace Clifton.Kademlia
             while (contactQueue.TryDequeue(out _)) { };
         }
 
-        protected bool ParallelFound(ref (bool found, List<Contact> contacts, Contact foundBy, string val) foundRet)
+        protected bool ParallelFound(FindResult findResult, ref (bool found, List<Contact> contacts, Contact foundBy, string val) foundRet)
         {
-            if (found)
+            lock (locker)
             {
-                // Prevent found contacts from changing as we clone the found contacts list.
-                lock (foundContacts)
+                if (findResult.Found)
                 {
-                    foundRet = (true, foundContacts.ToList(), foundBy, foundValue);
+                    // Prevent found contacts from changing as we clone the found contacts list.
+                    lock (findResult.FoundContacts)
+                    {
+                        foundRet = (true, findResult.FoundContacts.ToList(), findResult.FoundBy, findResult.FoundValue);
+                    }
                 }
-            }
 
-            return found;
+                return findResult.Found;
+            }
         }
     }
 }

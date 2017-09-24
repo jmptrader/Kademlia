@@ -50,6 +50,7 @@
     <Compile Include="Dht.cs" />
     <Compile Include="Exceptions.cs" />
     <Compile Include="ExtensionMethods.cs" />
+    <Compile Include="FindResult.cs" />
     <Compile Include="ID.cs" />
     <Compile Include="Interfaces.cs" />
     <Compile Include="KBucket.cs" />

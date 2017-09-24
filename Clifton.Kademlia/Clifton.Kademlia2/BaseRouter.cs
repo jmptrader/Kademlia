@@ -14,6 +14,7 @@ namespace Clifton.Kademlia
         public Node Node { get { return node; } set { node = value; } }
 
         protected Node node;
+        protected object locker = new object();
 
         public abstract (bool found, List<Contact> contacts, Contact foundBy, string val) Lookup(
             ID key,
@@ -71,7 +72,7 @@ namespace Clifton.Kademlia
             // Null continuation is a special case primarily for unit testing when we have no nodes in any buckets.
             var nearestNodeDistance = nodeToQuery.ID ^ key;
 
-            lock (closerContacts)
+            lock (locker)
             {
                 closerContacts.
                     AddRangeDistinctBy(peersNodes.
@@ -79,7 +80,7 @@ namespace Clifton.Kademlia
                         (a, b) => a.ID == b.ID);
             }
 
-            lock (fartherContacts)
+            lock (locker)
             {
                 fartherContacts.
                     AddRangeDistinctBy(peersNodes.
