@@ -6,24 +6,36 @@ using System.Numerics;
 
 namespace Clifton.Kademlia
 {
+    public class StoreValue
+    {
+        public string Value { get; set; }
+        public DateTime RepublishTimeStamp { get; set; }
+        public int ExpirationTime { get; set; }
+    }
+
     public class VirtualStorage : IStorage
     {
         public bool HasValues { get { return store.Count > 0; } }
 
-        protected ConcurrentDictionary<BigInteger, string> store;
-        protected ConcurrentDictionary<BigInteger, DateTime> republishTimestamps;
-        protected ConcurrentDictionary<BigInteger, int> expirationTimes;
+        protected ConcurrentDictionary<BigInteger, StoreValue> store;
 
         public VirtualStorage()
         {
-            store = new ConcurrentDictionary<BigInteger, string>();
-            republishTimestamps = new ConcurrentDictionary<BigInteger, DateTime>();
-            expirationTimes = new ConcurrentDictionary<BigInteger, int>();
+            store = new ConcurrentDictionary<BigInteger, StoreValue>();
         }
 
         public bool TryGetValue(ID key, out string val)
         {
-            return store.TryGetValue(key.Value, out val);
+            val = null;
+            StoreValue sv;
+            bool ret = store.TryGetValue(key.Value, out sv);
+
+            if (ret)
+            {
+                val = sv.Value;
+            }
+
+            return ret;
         }
 
         public bool Contains(ID key)
@@ -33,22 +45,22 @@ namespace Clifton.Kademlia
 
         public string Get(ID key)
         {
-            return store[key.Value];
+            return store[key.Value].Value;
         }
 
         public string Get(BigInteger key)
         {
-            return store[key];
+            return store[key].Value;
         }
 
         public DateTime GetTimeStamp(BigInteger key)
         {
-            return republishTimestamps[key];
+            return store[key].RepublishTimeStamp;
         }
 
         public int GetExpirationTimeSec(BigInteger key)
         {
-            return expirationTimes[key];
+            return store[key].ExpirationTime;
         }
 
 		/// <summary>
@@ -56,21 +68,18 @@ namespace Clifton.Kademlia
 		/// </summary>
 		public void Touch(BigInteger key)
         {
-            republishTimestamps[key] = DateTime.Now;
+            store[key].RepublishTimeStamp = DateTime.Now;
         }
 
         public void Set(ID key, string val, int expirationTime)
         {
-            store[key.Value] = val;
-            expirationTimes[key.Value] = expirationTime;
+            store[key.Value] = new StoreValue() { Value = val, ExpirationTime = expirationTime };
             Touch(key.Value);
         }
 
         public void Remove(BigInteger key)
         {
             store.TryRemove(key, out _);
-            republishTimestamps.TryRemove(key, out _);
-            expirationTimes.TryRemove(key, out _);
         }
 
         public IEnumerator<BigInteger> GetEnumerator()

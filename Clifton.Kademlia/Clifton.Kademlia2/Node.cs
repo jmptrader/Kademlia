@@ -124,7 +124,7 @@ namespace Clifton.Kademlia
             if (!bucketList.ContactExists(sender))
             {
                 // and our distance to the key < any other contact's distance to the key...
-                storage.ForEach(k =>
+                storage.AsParallel().ForEach(k =>
                 {
                     var contacts = bucketList.Buckets.SelectMany(b => b.Contacts);
 

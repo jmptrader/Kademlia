@@ -3230,7 +3230,7 @@ Implementation</h3>
   if (!bucketList.ContactExists(sender))
   {
     // and our distance to the key &lt; any other contact's distance to the key...
-    storage.ForEach(k =&gt;
+    storage.AsParallel.ForEach(k =&gt;
     {
       var contacts = bucketList.Buckets.SelectMany(b =&gt; b.Contacts);
 
@@ -3246,10 +3246,11 @@ Implementation</h3>
     });
   }
 }</pre>
-<p><img border="0" src="todo.png" width="82" height="32"> Annoyingly, for every 
+<p>Annoyingly, for every 
 stored value, there just isn't any way to not perform the XOR computation on 
-every contact.&nbsp; This could get expensive and should probably be done 
-asynchronously.</p>
+every contact.&nbsp; This could get expensive and is optimized using Linq's 
+parallel feature.</p>
+<p>&nbsp;</p>
 <h3>Storing Key-Values Onto the new Node When a new Node Registers - Unit Test</h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> There's a lot of 
 setup here to for creating two existing contacts and two key-values and their 
@@ -3574,6 +3575,32 @@ The persistence of key-values is handled separately and is defined by the
 specific implementation needs.</p>
 <h2>Considerations for an Asynchronous Implementation</h2>
 <h3>Thread Safety</h3>
+<p>The entry points to the node:</p>
+<ul>
+	<li>Ping</li>
+	<li>Store</li>
+<li>FindNode</li>
+<li>FindValue</li>
+</ul>
+<p>must be re-entrant.&nbsp; The first issue is with add contacts and the bucket 
+manipulation that occurs.&nbsp; Collections should not be modified while they 
+are searched or otherwise manipulated.&nbsp; The simplest way to handle this is 
+to put a lock around the entire <code>AddContact</code> method:</p>
+<pre>public void AddContact(Contact contact)
+{
+  Validate.IsFalse&lt;OurNodeCannotBeAContactException&gt;(ourID == contact.ID, &quot;Cannot add ourselves as a contact!&quot;);
+
+  lock (this)
+  {
+    ...
+  }
+}</pre>
+<p><img border="0" src="todo.png" width="82" height="32"> There are potentially more optimized approaches such as locking only the 
+specific <code>KBucket</code> being manipulated and only locking the <code>BucketList</code> when it 
+itself is being modified, however I leave those to some other time.</p>
+<p>It is also assumed that the storage implementation can be re-entrant.&nbsp; 
+In the virtual storage, this is handled by <code>ConcurrentDictionary</code> instances:</p>
+<pre>protected ConcurrentDictionary&lt;BigInteger, StoreValue&gt; store;</pre>
 <h3>Parallel Queries - Discussion</h3>
 <p><font color="#FF00FF">The initiator then sends parallel, asynchronous 
 find_node RPCs to the a nodes it has chosen, a is a system-wide concurrency 
@@ -3822,8 +3849,8 @@ exits.&nbsp; We deal with this in several ways:</p>
 	<li>Copy the closer contacts collection when executing the FindValue RPC 
 	call: <code>foundContacts = item.CloserContacts.ToList();</code>&nbsp; </li>
 	<li>Setting a &quot;stop work&quot; flag that ignores any further FindValue RPC 
-	successful return values.</li>
-	<li>Using a per-lookup <code>findResult</code> instance.</li>
+	successful return values for the current lookup.</li>
+	<li>Using a local (per-lookup call) <code>findResult</code> instance.</li>
 	<li>Using a common <code>locker</code> object to prevent both closer/farther 
 	contacts from being updated as well as updating the values in the <code>findResult</code> 
 	instance.</li>
@@ -3833,13 +3860,14 @@ exits.&nbsp; We deal with this in several ways:</p>
 	closer/farther collections as well as the <code>findResult</code> instance in which to 
 	store any found value.</li>
 </ol>
-<p>While the use of a single <code>locker</code> for blocking updates to collections <i>and</i> 
+<p>This ensures that even if there are threads still performing work on a 
+previous lookup, they do not affect the results of the current lookup.</p>
+<p><img border="0" src="note.png" width="24" height="32"> While the use of a single <code>locker</code> for blocking updates to collections <i>and</i> 
 the updating the find value is slightly inefficient, it avoids using nested 
 locks, otherwise the thread, when if finds a value, would technically have to 
 lock both the <code>closerContacts</code> collection and the <code>findResult</code> instance.</p>
 <p><img border="0" src="important.png" width="38" height="32"> The Lookup method 
 itself is not intended to be re-entrant.</p>
-<p>&nbsp;</p>
 <h2>Some Enhancements</h2>
 <h3>Operator Overloading of the ID Class</h3>
 <p>Rather than having to always use id.Value to compare and XOR the BigInteger 
