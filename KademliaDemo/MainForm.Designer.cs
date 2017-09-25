@@ -31,6 +31,8 @@
             this.pnlFlowSharp = new System.Windows.Forms.Panel();
             this.btnStep = new System.Windows.Forms.Button();
             this.btnRun = new System.Windows.Forms.Button();
+            this.groupBox1 = new System.Windows.Forms.GroupBox();
+            this.groupBox1.SuspendLayout();
             this.SuspendLayout();
             // 
             // pnlFlowSharp
@@ -38,14 +40,14 @@
             this.pnlFlowSharp.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.pnlFlowSharp.Location = new System.Drawing.Point(176, 4);
+            this.pnlFlowSharp.Location = new System.Drawing.Point(197, 4);
             this.pnlFlowSharp.Name = "pnlFlowSharp";
-            this.pnlFlowSharp.Size = new System.Drawing.Size(679, 502);
+            this.pnlFlowSharp.Size = new System.Drawing.Size(636, 510);
             this.pnlFlowSharp.TabIndex = 0;
             // 
             // btnStep
             // 
-            this.btnStep.Location = new System.Drawing.Point(13, 13);
+            this.btnStep.Location = new System.Drawing.Point(6, 19);
             this.btnStep.Name = "btnStep";
             this.btnStep.Size = new System.Drawing.Size(75, 23);
             this.btnStep.TabIndex = 1;
@@ -55,23 +57,35 @@
             // 
             // btnRun
             // 
-            this.btnRun.Location = new System.Drawing.Point(94, 13);
+            this.btnRun.Location = new System.Drawing.Point(97, 19);
             this.btnRun.Name = "btnRun";
             this.btnRun.Size = new System.Drawing.Size(75, 23);
             this.btnRun.TabIndex = 2;
             this.btnRun.Text = "Run";
             this.btnRun.UseVisualStyleBackColor = true;
+            this.btnRun.Click += new System.EventHandler(this.btnRun_Click);
+            // 
+            // groupBox1
+            // 
+            this.groupBox1.Controls.Add(this.btnRun);
+            this.groupBox1.Controls.Add(this.btnStep);
+            this.groupBox1.Location = new System.Drawing.Point(8, 12);
+            this.groupBox1.Name = "groupBox1";
+            this.groupBox1.Size = new System.Drawing.Size(178, 57);
+            this.groupBox1.TabIndex = 3;
+            this.groupBox1.TabStop = false;
+            this.groupBox1.Text = "Bootstrapping";
             // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(856, 508);
-            this.Controls.Add(this.btnRun);
-            this.Controls.Add(this.btnStep);
+            this.ClientSize = new System.Drawing.Size(834, 516);
+            this.Controls.Add(this.groupBox1);
             this.Controls.Add(this.pnlFlowSharp);
             this.Name = "MainForm";
             this.Text = "Kademlia Demo";
+            this.groupBox1.ResumeLayout(false);
             this.ResumeLayout(false);
 
         }
@@ -81,6 +95,7 @@
         private System.Windows.Forms.Panel pnlFlowSharp;
         private System.Windows.Forms.Button btnStep;
         private System.Windows.Forms.Button btnRun;
+        private System.Windows.Forms.GroupBox groupBox1;
     }
 }
 

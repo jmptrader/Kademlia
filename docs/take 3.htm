@@ -3896,7 +3896,54 @@ values, we can add some operators to the ID class itself.&nbsp; Some examples:</
 }</pre>
 <p>And so forth.</p>
 <h2>Putting It Together - A Demo</h2>
-<p>As usual, there's nothing like a visual demo to see what is happening.</p>
+<p>As usual, there's nothing like a visual demo to see what is happening.&nbsp; 
+This demo uses <a href="https://www.codeproject.com/Articles/1136050/FlowSharp">
+FlowSharp</a> as the drawing canvas.&nbsp; 
+We start with 60 peers (green), five of which are known peers (red):</p>
+<pre>protected void InitializeDhts()
+{
+  dhts = new List&lt;Dht&gt;();
+  dhtPos = new List&lt;Rectangle&gt;();
+
+  NUM_DHT.ForEach((n) =&gt;
+  {
+    IProtocol protocol = new VirtualProtocol();
+    Dht dht = new Dht(ID.RandomID, protocol, () =&gt; new VirtualStorage(), new Router());
+    ((VirtualProtocol)protocol).Node = dht.Node;
+    dhts.Add(dht);
+    dhtPos.Add(new Rectangle(XOFFSET + rnd.Next(-JITTER, JITTER) + (n % ITEMS_PER_ROW) * XSPACING, YOFFSET + rnd.Next(-JITTER, JITTER) + (n / ITEMS_PER_ROW) * YSPACING, SIZE, SIZE));
+  });
+}
+
+protected void InitializeKnownPeers()
+{
+  knownPeers = new List&lt;Dht&gt;();
+  List&lt;Dht&gt; workingList = new List&lt;Dht&gt;(dhts);
+
+  NUM_KNOWN_PEERS.ForEach(() =&gt;
+  {
+    Dht knownPeer = workingList[rnd.Next(workingList.Count)];
+    knownPeers.Add(knownPeer);
+    workingList.Remove(knownPeer);
+  });
+}</pre>
+<p><img border="0" src="bootstrap0.png" width="611" height="469"></p>
+<p>After each peer bootstraps with one of the known peers (randomly selected):</p>
+<pre>protected void BootstrapWithAPeer()
+{
+  Dht dht = dhts[peerBootrappingIdx];
+  var peerList = knownPeers.ExceptBy(dht, c =&gt; c.ID).ToList();
+  Dht bootstrapWith = peerList[rnd.Next(peerList.Count)];
+  dht.Bootstrap(bootstrapWith.Contact);
+
+  WebSocketHelpers.ClearCanvas();
+  DrawDhts();
+}</pre>
+<p>The peer network is established:</p>
+<p><img border="0" src="bootstrap.png" width="617" height="482"></p>
+<p>The directionality of the connection is not shown -- arrows would get lost in 
+this drawing!</p>
+<p>&nbsp;</p>
 <h2>Not Implemented</h2>
 <h3>Delayed Eviction (Optimized Contact Accounting) - Discussion</h3>
 <p><font color="#FF00FF">To reduce traffic, Kademlia delays probing contacts 
