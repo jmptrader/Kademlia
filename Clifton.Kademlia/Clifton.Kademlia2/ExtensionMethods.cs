@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 namespace Clifton.Kademlia
 {
@@ -269,6 +270,11 @@ namespace Clifton.Kademlia
                 stdDev = Math.Sqrt(sum / (n - 1));
 
             return stdDev;
+        }
+
+        public static byte[] to_Utf8(this string str)
+        {
+            return Encoding.UTF8.GetBytes(str);
         }
 
         /*

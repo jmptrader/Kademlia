@@ -115,6 +115,12 @@ namespace Clifton.Kademlia
             id = bi;
         }
 
+        public ID(string strid)
+        {
+            bool ok = BigInteger.TryParse(strid, out id);
+            Validate.IsTrue<BadIDException>(ok, "ID string is not valid.");
+        }
+
         /// <summary>
         /// Returns an ID within the range of the bucket's Low and High range.
         /// The optional parameter forceBit1 is for our unit tests.

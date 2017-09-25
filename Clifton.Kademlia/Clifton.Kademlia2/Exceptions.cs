@@ -49,4 +49,22 @@ namespace Clifton.Kademlia
         public NullIDException() { }
         public NullIDException(string msg) : base(msg) { }
     }
+
+    public class BadIDException : Exception
+    {
+        public BadIDException() { }
+        public BadIDException(string msg) : base(msg) { }
+    }
+
+    public class RpcException : Exception
+    {
+        public RpcException() { }
+        public RpcException(string msg) : base(msg) { }
+    }
+
+    public class IDMismatchException : Exception
+    {
+        public IDMismatchException() { }
+        public IDMismatchException(string msg) : base(msg) { }
+    }
 }

@@ -12,12 +12,12 @@ namespace Clifton.Kademlia.Protocols
 {
     public abstract class BaseRequest
     {
-        public string RandomID { get; set; }
-        public string Sender { get; set; }
+        public BigInteger RandomID { get; set; }
+        public BigInteger Sender { get; set; }
 
         public BaseRequest()
         {
-            RandomID = ID.RandomID.ToString();
+            RandomID = ID.RandomID.Value;
         }
     }
 
@@ -28,19 +28,19 @@ namespace Clifton.Kademlia.Protocols
 
     public class FindNodeRequest : BaseSubnetRequest
     {
-        public string Key { get; set; }
+        public BigInteger Key { get; set; }
     }
 
     public class FindValueRequest : BaseSubnetRequest
     {
-        public string Key { get; set; }
+        public BigInteger Key { get; set; }
     }
 
     public class PingRequest : BaseSubnetRequest { }
 
     public class StoreRequest : BaseSubnetRequest
     {
-        public string Key { get; set; }
+        public BigInteger Key { get; set; }
         public string Value { get; set; }
         public bool IsCached { get; set; }
         public int ExpirationTimeSec { get; set; }
@@ -53,14 +53,19 @@ namespace Clifton.Kademlia.Protocols
         public BigInteger RandomID { get; set; }
     }
 
+    public class ErrorResponse : BaseResponse
+    {
+        public string ErrorMessage { get; set; }
+    }
+
     public class FindNodeResponse : BaseResponse
     {
-        public List<Contact> Contacts { get; set; }
+        public List<BigInteger> Contacts { get; set; }
     }
 
     public class FindValueResponse : BaseResponse
     {
-        public List<Contact> Contacts { get; set; }
+        public List<BigInteger> Contacts { get; set; }
         public string Value { get; set; }
     }
 
@@ -70,7 +75,8 @@ namespace Clifton.Kademlia.Protocols
 
     public class TcpSubnetProtocol : IProtocol
     {
-        public int Subnet { get; set; }
+        public int Subnet { get { return subnet; } }
+
         protected string url;
         protected int port;
         protected int subnet;
@@ -84,47 +90,58 @@ namespace Clifton.Kademlia.Protocols
 
         public List<Contact> FindNode(Contact sender, ID key)
         {
+            ErrorResponse error;
             ID id = ID.RandomID;
-            var ret = RestCall.Post<FindNodeResponse>(url + ":" + port + "//FindNode",
-                JsonConvert.SerializeObject(new FindNodeRequest() { Subnet = subnet, Sender = sender.ID.ToString(), Key = key.ToString()}));
+            var ret = RestCall.Post<FindNodeResponse, ErrorResponse>(url + ":" + port + "//FindNode",
+                new FindNodeRequest() { Subnet = subnet, Sender = sender.ID.Value, Key = key.Value, RandomID = id.Value }, out error);
 
-            return ret.Contacts;
+            return ret.Contacts.Select(val => new Contact(null, new ID(val))).ToList();
         }
 
         public (List<Contact> contacts, string val) FindValue(Contact sender, ID key)
         {
+            ErrorResponse error;
             ID id = ID.RandomID;
-            var ret = RestCall.Post<FindValueResponse>(url + ":" + port + "//FindValue",
-                JsonConvert.SerializeObject(new FindValueRequest() { Subnet = subnet, Sender = sender.ID.ToString(), Key = key.ToString()}));
+            var ret = RestCall.Post<FindValueResponse, ErrorResponse>(url + ":" + port + "//FindValue",
+                new FindValueRequest() { Subnet = subnet, Sender = sender.ID.Value, Key = key.Value, RandomID = id.Value }, out error);
 
-            return (ret.Contacts, ret.Value);
+            Validate.IsTrue<RpcException>(error == null, error?.ErrorMessage);
+            Validate.IsTrue<IDMismatchException>(id == ret.RandomID, "Peer did not respond with appropriate random ID.");
 
+            return (ret?.Contacts?.Select(val => new Contact(null, new ID(val))).ToList(), ret.Value);
         }
 
         public bool Ping(Contact sender)
         {
+            ErrorResponse error;
             ID id = ID.RandomID;
-            var ret = RestCall.Post<FindValueResponse>(url + ":" + port + "//Ping",
-                JsonConvert.SerializeObject(new PingRequest() { Subnet = subnet, Sender = sender.ID.ToString()}));
+            var ret = RestCall.Post<FindValueResponse, ErrorResponse>(url + ":" + port + "//Ping",
+                new PingRequest() { Subnet = subnet, Sender = sender.ID.Value, RandomID = id.Value}, out error);
+
+            Validate.IsTrue<RpcException>(error == null, error?.ErrorMessage);
+            Validate.IsTrue<IDMismatchException>(id == ret.RandomID, "Peer did not respond with appropriate random ID.");
 
             return true;
         }
 
         public void Store(Contact sender, ID key, string val, bool isCached = false, int expirationTimeSec = 0)
         {
+            ErrorResponse error;
             ID id = ID.RandomID;
-            var ret = RestCall.Post<FindValueResponse>(url + ":" + port + "//Store",
-                JsonConvert.SerializeObject(
+            var ret = RestCall.Post<FindValueResponse, ErrorResponse>(url + ":" + port + "//Store",
                     new StoreRequest()
                     {
                         Subnet = subnet,
-                        Sender = sender.ID.ToString(),
-                        Key = key.ToString(),
+                        Sender = sender.ID.Value,
+                        Key = key.Value,
                         Value = val,
                         IsCached = isCached,
                         ExpirationTimeSec = expirationTimeSec,
-                        RandomID = ID.RandomID.ToString()
-                    }));
+                        RandomID = id.Value
+                    }, out error);
+
+            Validate.IsTrue<RpcException>(error == null, error?.ErrorMessage);
+            Validate.IsTrue<IDMismatchException>(id == ret.RandomID, "Peer did not respond with appropriate random ID.");
         }
     }
 }

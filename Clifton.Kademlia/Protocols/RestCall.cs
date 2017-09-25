@@ -48,8 +48,9 @@ namespace Clifton.Kademlia.Protocols
             return ret;
         }
 
-        public static R Post<R>(string url, object obj)
+        public static R Post<R, E>(string url, object obj, out E errorResponse) where R : new() where E : ErrorResponse, new()
         {
+            errorResponse = default(E);
             R target = Activator.CreateInstance<R>();
             Stream st = null;
             string json = string.Empty;
@@ -60,15 +61,42 @@ namespace Clifton.Kademlia.Protocols
             request.Method = "POST";
             request.ContentType = "application/json";
             request.ContentLength = json.Length;
-            st = request.GetRequestStream();
+
+            try
+            {
+                st = request.GetRequestStream();
+            }
+
+            catch (WebException ex)
+            {
+                E error = Activator.CreateInstance<E>();
+                error.ErrorMessage = ex.Message;
+
+                // Bail now.
+                return target;
+            }
+
             byte[] bytes = Encoding.UTF8.GetBytes(json);
             st.Write(bytes, 0, bytes.Length);
-            WebResponse resp = request.GetResponse();
-            retjson = new StreamReader(resp.GetResponseStream()).ReadToEnd();
-            JObject jobj = JObject.Parse(retjson);
-            JsonConvert.PopulateObject(jobj.ToString(), target);
+            WebResponse resp;
 
-            resp.Close();
+            try
+            {
+                resp = request.GetResponse();
+                retjson = new StreamReader(resp.GetResponseStream()).ReadToEnd();
+                JObject jobj = JObject.Parse(retjson);
+                JsonConvert.PopulateObject(jobj.ToString(), target);
+                resp.Close();
+            }
+            catch (WebException ex)
+            {
+                E error = Activator.CreateInstance<E>();
+                retjson = new StreamReader(ex.Response.GetResponseStream()).ReadToEnd();
+                JObject jobj = JObject.Parse(retjson);
+                JsonConvert.PopulateObject(jobj.ToString(), error);
+                errorResponse = error;
+            }
+
             st.Close();
 
             return target;
