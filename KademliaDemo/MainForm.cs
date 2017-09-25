@@ -17,17 +17,31 @@ namespace KademliaDemo
         protected List<Dht> knownPeers;
         protected List<Rectangle> dhtPos;
         protected Random rnd = new Random(4);
-        protected int peerBootrappingIdx = 0;
+        protected int peerBootstrappingIdx = 0;
+        protected List<Peer2Peer> connections;
 
-        protected const int NUM_DHT = 60;
-        protected const int ITEMS_PER_ROW = 10;
+
+        // 60 peer network:
+        //protected const int NUM_DHT = 60;
+        //protected const int ITEMS_PER_ROW = 10;
+        //protected const int XOFFSET = 30;
+        //protected const int YOFFSET = 30;
+        //protected const int SIZE = 30;
+        //protected const int XSPACING = 60;
+        //protected const int YSPACING = 80;
+        //protected const int JITTER = 15;
+        //protected const int NUM_KNOWN_PEERS = 5;
+
+        // 25 peer network:
+        protected const int NUM_DHT = 25;
+        protected const int ITEMS_PER_ROW = 5;
         protected const int XOFFSET = 30;
         protected const int YOFFSET = 30;
         protected const int SIZE = 30;
-        protected const int XSPACING = 60;
-        protected const int YSPACING = 80;
+        protected const int XSPACING = 100;
+        protected const int YSPACING = 100;
         protected const int JITTER = 15;
-        protected const int NUM_KNOWN_PEERS = 5;
+        protected const int NUM_KNOWN_PEERS = 3;
 
         public MainForm()
         {
@@ -96,8 +110,7 @@ namespace KademliaDemo
 
         protected void DrawDhts()
         {
-            List<Peer2Peer> bidirectional = new List<Peer2Peer>();
-
+            connections = new List<Peer2Peer>();
             dhtPos.ForEachWithIndex((p, i) => WebSocketHelpers.DropShape("Ellipse", i.ToString(), p, knownPeers.Contains(dhts[i]) ? Color.Red : Color.Green, ""));
 
             dhts.ForEachWithIndex((d, i) =>
@@ -108,45 +121,84 @@ namespace KademliaDemo
                       var otherDir = new Peer2Peer() { idx1 = idx, idx2 = i };
 
                       // Don't draw connector going back (idx -> i) because this is a redundant draw.  Speeds things up a little.
-                      if (!bidirectional.Contains(otherDir))
+                      if (!connections.Contains(otherDir))
                       {
                           Point c1 = dhtPos[i].Center();
                           Point c2 = dhtPos[idx].Center();
-                          WebSocketHelpers.DropConnector("DiagonalConnector", "c" + i, c1.X, c1.Y, c2.X, c2.Y);
-                          bidirectional.Add(new Peer2Peer() { idx1 = i, idx2 = idx });
+                          WebSocketHelpers.DropConnector("DiagonalConnector", "c" + i, c1.X, c1.Y, c2.X, c2.Y, Color.Gray);
+                          connections.Add(new Peer2Peer() { idx1 = i, idx2 = idx });
                       }
                   });
             });
         }
 
-        protected void BootstrapWithAPeer()
+        protected void BootstrapWithAPeer(int peerBootstrappingIdx)
         {
-            Dht dht = dhts[peerBootrappingIdx];
+            Dht dht = dhts[peerBootstrappingIdx];
             var peerList = knownPeers.ExceptBy(dht, c => c.ID).ToList();
             Dht bootstrapWith = peerList[rnd.Next(peerList.Count)];
             dht.Bootstrap(bootstrapWith.Contact);
+        }
 
-            WebSocketHelpers.ClearCanvas();
-            DrawDhts();
+        protected void EnableBucketRefresh()
+        {
+            btnStep.Enabled = false;
+            btnRun.Enabled = false;
+            btnBucketRefresh.Enabled = true;
         }
 
         private void btnStep_Click(object sender, EventArgs e)
         {
-            if (peerBootrappingIdx < dhts.Count)
+            if (peerBootstrappingIdx < dhts.Count)
             {
-                BootstrapWithAPeer();
-                ++peerBootrappingIdx;
+                BootstrapWithAPeer(peerBootstrappingIdx);
+                ++peerBootstrappingIdx;
+            }
+            else
+            {
+                EnableBucketRefresh();
             }
         }
 
         private void btnRun_Click(object sender, EventArgs e)
         {
-            while (peerBootrappingIdx < dhts.Count)
+            Enumerable.Range(peerBootstrappingIdx, dhts.Count - peerBootstrappingIdx).
+                AsParallel().
+                ForEach(n =>
             {
-                BootstrapWithAPeer();
-                ++peerBootrappingIdx;
-                Application.DoEvents();
-            }
+                BootstrapWithAPeer(n);
+            });
+
+            WebSocketHelpers.ClearCanvas();
+            DrawDhts();
+            EnableBucketRefresh();
+        }
+
+        /// <summary>
+        /// Manually refresh all buckets and draw the new connections in purple.
+        /// </summary>
+        private void btnBucketRefresh_Click(object sender, EventArgs e)
+        {
+            dhts.AsParallel().ForEach(d => d.PerformBucketRefresh());
+
+            dhts.ForEachWithIndex((d, i) =>
+            {
+                d.Node.BucketList.Buckets.SelectMany(b => b.Contacts).ForEach(c =>
+                {
+                    int idx = dhts.FindIndex(target => target.ID == c.ID);
+                    var current = new Peer2Peer() { idx1 = i, idx2 = idx };
+                    var otherDir = new Peer2Peer() { idx1 = idx, idx2 = i };
+
+                    // Don't draw connector going back (idx -> i) because this is a redundant draw.  Speeds things up a little.
+                    if (!connections.Contains(otherDir) && !connections.Contains(current) )
+                    {
+                        Point c1 = dhtPos[i].Center();
+                        Point c2 = dhtPos[idx].Center();
+                        WebSocketHelpers.DropConnector("DiagonalConnector", "c" + i, c1.X, c1.Y, c2.X, c2.Y, Color.Purple);
+                        connections.Add(new Peer2Peer() { idx1 = i, idx2 = idx });
+                    }
+                });
+            });
         }
     }
 

@@ -13,6 +13,9 @@ namespace Clifton.Kademlia
         public int ExpirationTime { get; set; }
     }
 
+    /// <summary>
+    /// In-memory storage, used for node cache store if not explicitly specified.
+    /// </summary>
     public class VirtualStorage : IStorage
     {
         public bool HasValues { get { return store.Count > 0; } }

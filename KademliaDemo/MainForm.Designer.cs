@@ -32,7 +32,10 @@
             this.btnStep = new System.Windows.Forms.Button();
             this.btnRun = new System.Windows.Forms.Button();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
+            this.groupBox2 = new System.Windows.Forms.GroupBox();
+            this.btnBucketRefresh = new System.Windows.Forms.Button();
             this.groupBox1.SuspendLayout();
+            this.groupBox2.SuspendLayout();
             this.SuspendLayout();
             // 
             // pnlFlowSharp
@@ -76,16 +79,39 @@
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = "Bootstrapping";
             // 
+            // groupBox2
+            // 
+            this.groupBox2.Controls.Add(this.btnBucketRefresh);
+            this.groupBox2.Location = new System.Drawing.Point(8, 75);
+            this.groupBox2.Name = "groupBox2";
+            this.groupBox2.Size = new System.Drawing.Size(178, 57);
+            this.groupBox2.TabIndex = 4;
+            this.groupBox2.TabStop = false;
+            this.groupBox2.Text = "Bucket Refresh";
+            // 
+            // btnBucketRefresh
+            // 
+            this.btnBucketRefresh.Enabled = false;
+            this.btnBucketRefresh.Location = new System.Drawing.Point(52, 19);
+            this.btnBucketRefresh.Name = "btnBucketRefresh";
+            this.btnBucketRefresh.Size = new System.Drawing.Size(75, 23);
+            this.btnBucketRefresh.TabIndex = 1;
+            this.btnBucketRefresh.Text = "Step";
+            this.btnBucketRefresh.UseVisualStyleBackColor = true;
+            this.btnBucketRefresh.Click += new System.EventHandler(this.btnBucketRefresh_Click);
+            // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(834, 516);
+            this.Controls.Add(this.groupBox2);
             this.Controls.Add(this.groupBox1);
             this.Controls.Add(this.pnlFlowSharp);
             this.Name = "MainForm";
             this.Text = "Kademlia Demo";
             this.groupBox1.ResumeLayout(false);
+            this.groupBox2.ResumeLayout(false);
             this.ResumeLayout(false);
 
         }
@@ -96,6 +122,8 @@
         private System.Windows.Forms.Button btnStep;
         private System.Windows.Forms.Button btnRun;
         private System.Windows.Forms.GroupBox groupBox1;
+        private System.Windows.Forms.GroupBox groupBox2;
+        private System.Windows.Forms.Button btnBucketRefresh;
     }
 }
 

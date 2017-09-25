@@ -233,6 +233,11 @@ namespace Clifton.Kademlia
             return this == (ID)obj;
         }
 
+        public override string ToString()
+        {
+            return Value.ToString();
+        }
+
         /// <summary>
         /// Compare one ID with another.
         /// </summary>

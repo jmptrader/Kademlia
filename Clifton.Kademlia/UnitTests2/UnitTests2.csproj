@@ -58,6 +58,7 @@
     <Compile Include="AddContactTests.cs" />
     <Compile Include="LookupTests.cs" />
     <Compile Include="DhtTests.cs" />
+    <Compile Include="TcpSubnetTests.cs" />
     <Compile Include="VirtualProtocol.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -67,6 +68,10 @@
     <ProjectReference Include="..\Clifton.Kademlia2\Clifton.Kademlia2.csproj">
       <Project>{cacae687-6109-41f8-a707-d35b4242ccd7}</Project>
       <Name>Clifton.Kademlia2</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Protocols\Protocols.csproj">
+      <Project>{2199eabf-fcac-4e51-a85f-0a1b0f9c0cb0}</Project>
+      <Name>Protocols</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets" Condition="Exists('$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets')" />

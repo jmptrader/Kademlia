@@ -133,6 +133,16 @@ namespace Clifton.Kademlia
             return ret;
         }
 
+#if DEBUG
+        public void PerformBucketRefresh()
+        {
+            // Get current bucket list in a separate collection because the bucket list might be modified
+            // as the result of a bucket split.
+            List<KBucket> currentBuckets = new List<KBucket>(node.BucketList.Buckets);
+            currentBuckets.ForEach(b => RefreshBucket(b));
+        }
+#endif
+
         /// <summary>
         /// Return the number of nodes between the two contacts, where the contact list is sorted by the integer ID values (not XOR distance.)
         /// </summary>
@@ -202,9 +212,11 @@ namespace Clifton.Kademlia
         {
             DateTime now = DateTime.Now;
 
-            node.BucketList.Buckets.
-                Where(b => (now - b.TimeStamp).TotalMilliseconds >= Constants.BUCKET_REFRESH_INTERVAL).
-                ForEach(b => RefreshBucket(b));
+            // Put into a separate list as bucket collections may be modified.
+            List<KBucket> currentBuckets = new List<KBucket>(node.BucketList.Buckets.
+                Where(b => (now - b.TimeStamp).TotalMilliseconds >= Constants.BUCKET_REFRESH_INTERVAL));
+
+            currentBuckets.ForEach(b => RefreshBucket(b));
         }
 
         /// <summary>

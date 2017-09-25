@@ -66,6 +66,12 @@ namespace KademliaDemo
             ws.Send(string.Format("cmd=CmdDropConnector&ConnectorName={0}&Name={1}&X1={2}&Y1={3}&X2={4}&Y2={5}", shapeName, name, x1, y1, x2, y2));
         }
 
+        public static void DropConnector(string shapeName, string name, int x1, int y1, int x2, int y2, Color borderColor)
+        {
+            Connect();
+            ws.Send(string.Format("cmd=CmdDropConnector&ConnectorName={0}&Name={1}&X1={2}&Y1={3}&X2={4}&Y2={5}&BorderColor={6}", shapeName, name, x1, y1, x2, y2, borderColor.ToHtmlColor('!')));
+        }
+
         private static void Connect()
         {
             if (ws == null || !ws.IsAlive)

@@ -3895,6 +3895,17 @@ values, we can add some operators to the ID class itself.&nbsp; Some examples:</
   ...  
 }</pre>
 <p>And so forth.</p>
+<h2>A Basic TCP Protocol</h2>
+<p>There's a few points to make in this implementation:</p>
+<ol>
+	<li>A single port is used along with a subnet identifier to route requests 
+	to the correct handler.&nbsp; The subnet identifier makes it easier to test 
+	multiple &quot;servers&quot; on the same machine as we don't need to open (and 
+	&quot;allow&quot;) a unique port number per &quot;server.&quot;</li>
+	<li>JSON is used as the serialization format for request and response data.</li>
+</ol>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
 <h2>Putting It Together - A Demo</h2>
 <p>As usual, there's nothing like a visual demo to see what is happening.&nbsp; 
 This demo uses <a href="https://www.codeproject.com/Articles/1136050/FlowSharp">
@@ -3928,10 +3939,10 @@ protected void InitializeKnownPeers()
   });
 }</pre>
 <p><img border="0" src="bootstrap0.png" width="611" height="469"></p>
-<p>After each peer bootstraps with one of the known peers (randomly selected):</p>
+<h3>Bootstrapping</h3>
 <pre>protected void BootstrapWithAPeer()
 {
-  Dht dht = dhts[peerBootrappingIdx];
+  Dht dht = dhts[peerBootstrappingIdx];
   var peerList = knownPeers.ExceptBy(dht, c =&gt; c.ID).ToList();
   Dht bootstrapWith = peerList[rnd.Next(peerList.Count)];
   dht.Bootstrap(bootstrapWith.Contact);
@@ -3939,11 +3950,41 @@ protected void InitializeKnownPeers()
   WebSocketHelpers.ClearCanvas();
   DrawDhts();
 }</pre>
-<p>The peer network is established:</p>
+<p>After each peer bootstraps with one of the known peers (randomly selected) the peer network is established:</p>
 <p><img border="0" src="bootstrap.png" width="617" height="482"></p>
 <p>The directionality of the connection is not shown -- arrows would get lost in 
 this drawing!</p>
-<p>&nbsp;</p>
+<h3>Bucket Refresh</h3>
+<p>To illustrate bucket refresh, let's start with a smaller set of peers (25) 
+and draw their bootstrapped connections in grey:</p>
+<p><img border="0" src="bucketrefresh1.png" width="466" height="474"></p>
+<p>A bucket refresh calls FindNode all the contacts in each bucket:</p>
+<pre>#if DEBUG
+public void PerformBucketRefresh()
+{
+  // Get current bucket list in a separate collection because the bucket list might be modified
+  // as the result of a bucket split.
+  List&lt;KBucket&gt; currentBuckets = new List&lt;KBucket&gt;(node.BucketList.Buckets);
+  currentBuckets.ForEach(b =&gt; RefreshBucket(b));
+}
+#endif
+
+protected void RefreshBucket(KBucket bucket)
+{
+  bucket.Touch();
+  ID rndId = ID.RandomIDWithinBucket(bucket);
+  // Isolate in a separate list as contacts collection for this bucket might change.
+  List&lt;Contact&gt; contacts = bucket.Contacts.ToList();
+  contacts.ForEach(c =&gt; c.Protocol.FindNode(ourContact, rndId).ForEach(otherContact =&gt; node.BucketList.AddContact(otherContact)));
+}</pre>
+<p>The method <code>PerformBucketRefresh</code> is available only in debug mode for testing 
+and the demo.&nbsp; This updates the contacts for each peer based on the <i>k</i> closest 
+contacts returned by the contact:</p>
+<p><img border="0" src="bucketrefresh2.png" width="460" height="463">&nbsp; </p>
+<p>The newly discovered contacts are drawn in purple.&nbsp; In a small network 
+like this, just about every peer learns about every other peer -- another 
+iteration of bucket refreshing results in only a couple more contacts being 
+discovered.</p>
 <h2>Not Implemented</h2>
 <h3>Delayed Eviction (Optimized Contact Accounting) - Discussion</h3>
 <p><font color="#FF00FF">To reduce traffic, Kademlia delays probing contacts 
@@ -3955,7 +3996,7 @@ contacts in the k-bucket, any unresponsive ones can be evicted and replaced with
 entries in the replacement cache. The replacement cache is kept sorted by time 
 last seen, with the most recently seen entry having the highest priority as a 
 replacement candidate.</font></p>
-<h3>UDP Drop Outs - Discussion</h3>
+<h3>UDP Drop Outs</h3>
 <p><font color="#FF00FF">A related problem is that because Kademlia uses UDP, 
 valid contacts will sometimes fail to respond when network packets are dropped. 
 Since packet loss often indicates network congestion, Kademlia locks 
@@ -3973,7 +4014,7 @@ for a while.&nbsp; This algorithm is somewhat entangled with delayed eviction.&n
 In delayed eviction, the spec state &quot;any unresponsive ones can be evicted.&quot;&nbsp; 
 It is the spec's description of UDP drop outs that actually defines what 
 &quot;unresponsive&quot; actually means.</p>
-<h3>Accelerated Lookups - Discussion</h3>
+<h3>Accelerated Lookups</h3>
 <font color="#FF00FF">When a contact fails to respond to 5 RPCs in a row, it 
 is considered stale. If a fe-bucket is not full or its replacement cache is 
 empty, Kademlia merely flags stale contacts rather than remove them. This 
