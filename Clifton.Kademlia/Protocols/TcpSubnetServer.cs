@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -68,23 +69,26 @@ namespace Clifton.Kademlia.Protocols
             }
         }
 
-        protected virtual void ProcessRequest(HttpListenerContext context)
+        protected virtual async void ProcessRequest(HttpListenerContext context)
         {
             string data = new StreamReader(context.Request.InputStream, context.Request.ContentEncoding).ReadToEnd();
 
             if (context.Request.HttpMethod == "POST")
             {
-                Type request;
+                Type requestType;
                 string path = context.Request.RawUrl;
 
-                if (routePackets.TryGetValue(path, out request))
+                if (routePackets.TryGetValue(path, out requestType))
                 {
-                    BaseSubnetRequest req = (BaseSubnetRequest)JsonConvert.DeserializeObject(data, request);
+                    CommonRequest commonRequest = JsonConvert.DeserializeObject<CommonRequest>(data);
+                    int subnet = ((BaseSubnetRequest)JsonConvert.DeserializeObject(data, requestType)).Subnet;
                     Node node;
 
-                    if (subnets.TryGetValue(req.Subnet, out node))
+                    if (subnets.TryGetValue(subnet, out node))
                     {
-                        string methodName = path.Substring(2);      // Remove "//"
+                        // Remove "//"
+                        // Prefix our call with "Server" so that the method name is unambiguous.
+                        string methodName = "Server" + path.Substring(2);      
 
 #if DEBUG       // For unit testing
                         if (!((TcpSubnetProtocol)node.OurContact.Protocol).Responds)
@@ -97,31 +101,9 @@ namespace Clifton.Kademlia.Protocols
 #endif
                         try
                         {
-                            var sender = new Contact(null, new ID(req.Sender));
-
-                            // Ugh.
-                            switch (methodName)
-                            {
-                                case "Ping":
-                                    node.Ping(sender);
-                                    SendResponse(context, new PingResponse() { RandomID = req.RandomID });
-                                    break;
-
-                                case "Store":
-                                    node.Store(sender, new ID(((StoreRequest)req).Key), ((StoreRequest)req).Value, ((StoreRequest)req).IsCached, ((StoreRequest)req).ExpirationTimeSec);
-                                    SendResponse(context, new StoreResponse() { RandomID = req.RandomID });
-                                    break;
-
-                                case "FindNode":
-                                    List<Contact> contacts = node.FindNode(sender, new ID(((FindNodeRequest)req).Key)).contacts;
-                                    SendResponse(context, new FindNodeResponse() { Contacts = contacts.Select(c => c.ID.Value).ToList(), RandomID = req.RandomID });
-                                    break;
-
-                                case "FindValue":
-                                    var ret = node.FindValue(sender, new ID(((FindValueRequest)req).Key));
-                                    SendResponse(context, new FindValueResponse() { Contacts = ret.contacts?.Select(c => c.ID.Value)?.ToList(), RandomID = req.RandomID, Value = ret.val });
-                                    break;
-                            }
+                            MethodInfo mi = node.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
+                            object response = await Task.Run(() => mi.Invoke(node, new object[] { commonRequest }));
+                            SendResponse(context, response);
                         }
                         catch (Exception ex)
                         {
@@ -142,7 +124,7 @@ namespace Clifton.Kademlia.Protocols
             context.Response.Close();
         }
 
-        protected void SendResponse(HttpListenerContext context, BaseResponse resp)
+        protected void SendResponse(HttpListenerContext context, object resp)
         {
             context.Response.StatusCode = 200;
             SendResponseInternal(context, resp);
@@ -154,7 +136,7 @@ namespace Clifton.Kademlia.Protocols
             SendResponseInternal(context, resp);
         }
 
-        private void SendResponseInternal(HttpListenerContext context, BaseResponse resp)
+        private void SendResponseInternal(HttpListenerContext context, object resp)
         {
             context.Response.ContentType = "text/text";
             context.Response.ContentEncoding = Encoding.UTF8;

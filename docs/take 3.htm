@@ -3907,6 +3907,61 @@ values, we can add some operators to the ID class itself.&nbsp; Some examples:</
 	are other implementations that continue based on the random ID and handler, 
 	which I chose not to implement.</li>
 </ol>
+<h3>Request Messages</h3>
+<p>Requests issued by the DHT are serialized to JSON from the following classes:</p>
+<pre>public abstract class BaseRequest
+{
+  public BigInteger RandomID { get; set; }
+  public BigInteger Sender { get; set; }
+
+  public BaseRequest()
+  {
+    RandomID = ID.RandomID.Value;
+  }
+}
+
+public abstract class BaseSubnetRequest : BaseRequest
+{
+  public int Subnet { get; set; }
+}
+
+public class FindNodeRequest : BaseSubnetRequest
+{
+  public BigInteger Key { get; set; }
+}
+
+public class FindValueRequest : BaseSubnetRequest
+{
+  public BigInteger Key { get; set; }
+}
+
+public class PingRequest : BaseSubnetRequest { }
+
+public class StoreRequest : BaseSubnetRequest
+{
+  public BigInteger Key { get; set; }
+  public string Value { get; set; }
+  public bool IsCached { get; set; }
+  public int ExpirationTimeSec { get; set; }
+}</pre>
+<p>On the server side, which receives these messages, they are handled by a 
+common request class:</p>
+<pre>/// &lt;summary&gt;
+/// For passing to Node handlers with common parameters.
+/// &lt;/summary&gt;
+public class CommonRequest
+{
+  public BigInteger RandomID { get; set; }
+  public BigInteger Sender { get; set; }
+  public BigInteger Key { get; set; }
+  public string Value { get; set; }
+  public bool IsCached { get; set; }
+  public int ExpirationTimeSec { get; set; }
+}</pre>
+<p>As the comment states, the common request simplifies the server 
+implementation by having RPC handler methods with the same parameter.</p>
+<h3>Responses</h3>
+<p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <h2>Putting It Together - A Demo</h2>

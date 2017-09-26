@@ -1,77 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Numerics;
 using System.Linq;
-using System.Net;
-using System.Text;
-using System.Threading.Tasks;
-
-using Newtonsoft.Json;
 
 namespace Clifton.Kademlia.Protocols
 {
-    public abstract class BaseRequest
-    {
-        public BigInteger RandomID { get; set; }
-        public BigInteger Sender { get; set; }
-
-        public BaseRequest()
-        {
-            RandomID = ID.RandomID.Value;
-        }
-    }
-
-    public abstract class BaseSubnetRequest : BaseRequest
-    {
-        public int Subnet { get; set; }
-    }
-
-    public class FindNodeRequest : BaseSubnetRequest
-    {
-        public BigInteger Key { get; set; }
-    }
-
-    public class FindValueRequest : BaseSubnetRequest
-    {
-        public BigInteger Key { get; set; }
-    }
-
-    public class PingRequest : BaseSubnetRequest { }
-
-    public class StoreRequest : BaseSubnetRequest
-    {
-        public BigInteger Key { get; set; }
-        public string Value { get; set; }
-        public bool IsCached { get; set; }
-        public int ExpirationTimeSec { get; set; }
-    }
-
     // ==========================
-
-    public abstract class BaseResponse
-    {
-        public BigInteger RandomID { get; set; }
-    }
-
-    public class ErrorResponse : BaseResponse
-    {
-        public string ErrorMessage { get; set; }
-    }
-
-    public class FindNodeResponse : BaseResponse
-    {
-        public List<BigInteger> Contacts { get; set; }
-    }
-
-    public class FindValueResponse : BaseResponse
-    {
-        public List<BigInteger> Contacts { get; set; }
-        public string Value { get; set; }
-    }
-
-    public class PingResponse : BaseResponse { }
-
-    public class StoreResponse : BaseResponse { }
 
     public class TcpSubnetProtocol : IProtocol
     {

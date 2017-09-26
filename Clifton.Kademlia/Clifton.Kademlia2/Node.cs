@@ -36,6 +36,38 @@ namespace Clifton.Kademlia
             }
         }
 
+        // ======= Server Entry Points =======
+
+        public object ServerPing(CommonRequest request)
+        {
+            Ping(new Contact(null, new ID(request.Sender)));
+
+            return new { RandomID = request.RandomID };
+        }
+
+        public object ServerStore(CommonRequest request)
+        {
+            Store(new Contact(null, new ID(request.Sender)), new ID(request.Key), request.Value, request.IsCached, request.ExpirationTimeSec);
+
+            return new { RandomID = request.RandomID };
+        }
+
+        public object ServerFindNode(CommonRequest request)
+        {
+            var (contacts, val) = FindNode(new Contact(null, new ID(request.Sender)), new ID(request.Key));
+
+            return new { Contacts = contacts.Select(c => c.ID.Value).ToList(), RandomID = request.RandomID };
+        }
+
+        public object ServerFindValue(CommonRequest request)
+        {
+            var (contacts, val) = FindValue(new Contact(null, new ID(request.Sender)), new ID(request.Key));
+
+            return new { Contacts = contacts?.Select(c => c.ID.Value)?.ToList(), RandomID = request.RandomID, Value = val };
+        }
+
+        // ======= ======= ======= ======= =======
+
         /// <summary>
         /// Someone is pinging us.  Register the contact and respond.
         /// </summary>
