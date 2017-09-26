@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Numerics;
 
-namespace Protocols
+namespace Clifton.Kademlia.Protocols
 {
     public abstract class BaseResponse
     {
