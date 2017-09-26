@@ -98,7 +98,7 @@ namespace Clifton.Kademlia
             var (newContacts, timeoutError) = contact.Protocol.FindNode(node.OurContact, key);
 
             // Null continuation here to support unit tests where a DHT hasn't been set up.
-            dht?.HandleTimeoutError(timeoutError, contact);
+            dht?.HandleError(timeoutError, contact);
             
             return (newContacts, null, null);
         }
@@ -113,19 +113,22 @@ namespace Clifton.Kademlia
             string retval = null;
             Contact foundBy = null;
 
-            var (otherContacts, val, timeoutError) = contact.Protocol.FindValue(node.OurContact, key);
-            dht.HandleTimeoutError(timeoutError, contact);
+            var (otherContacts, val, error) = contact.Protocol.FindValue(node.OurContact, key);
+            dht.HandleError(error, contact);
 
-            if (otherContacts != null)
+            if (!error.HasError)
             {
-                nodes.AddRange(otherContacts);
-            }
-            else if (!timeoutError)
-            {
-                Validate.IsTrue<ValueCannotBeNullException>(val != null, "Null values are not supported nor expected.");
-                nodes.Add(contact);           // The node we just contacted found the value.
-                foundBy = contact;
-                retval = val;
+                if (otherContacts != null)
+                {
+                    nodes.AddRange(otherContacts);
+                }
+                else
+                {
+                    Validate.IsTrue<ValueCannotBeNullException>(val != null, "Null values are not supported nor expected.");
+                    nodes.Add(contact);           // The node we just contacted found the value.
+                    foundBy = contact;
+                    retval = val;
+                }
             }
 
             return (nodes, foundBy, retval);

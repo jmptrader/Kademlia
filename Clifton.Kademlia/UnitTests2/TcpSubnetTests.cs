@@ -131,9 +131,9 @@ namespace UnitTests2
 
             ID testID = ID.RandomID;
             string testValue = "Test";
-            bool timeout = p2.Store(c1, testID, testValue);
+            RpcError error = p2.Store(c1, testID, testValue);
 
-            Assert.IsTrue(timeout, "Expected timeout.");
+            Assert.IsTrue(error.TimeoutError, "Expected timeout.");
         }
     }
 }

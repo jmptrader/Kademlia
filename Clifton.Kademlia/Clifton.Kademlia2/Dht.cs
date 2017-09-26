@@ -62,13 +62,13 @@ namespace Clifton.Kademlia
         /// to our list, then getting the contacts for other peers not in the
         /// bucket range of our known peer we're joining.
         /// </summary>
-        public bool Bootstrap(Contact knownPeer)
+        public RpcError Bootstrap(Contact knownPeer)
         {
             node.BucketList.AddContact(knownPeer);
-            var (contacts, timeoutError) = knownPeer.Protocol.FindNode(ourContact, ourId);
-            HandleTimeoutError(timeoutError, knownPeer);
+            var (contacts, error) = knownPeer.Protocol.FindNode(ourContact, ourId);
+            HandleError(error, knownPeer);
 
-            if (!timeoutError)
+            if (!error.HasError)
             {
                 contacts.ForEach(c => node.BucketList.AddContact(c));
                 KBucket knownPeerBucket = node.BucketList.GetKBucket(knownPeer.ID);
@@ -82,7 +82,7 @@ namespace Clifton.Kademlia
                 }
             }
 
-            return timeoutError;
+            return error;
         }
 
         public void Store(ID key, string val)
@@ -132,8 +132,8 @@ namespace Clifton.Kademlia
                     {
                         int separatingNodes = GetSeparatingNodesCount(ourContact, storeTo);
                         int expTimeSec = (int)(Constants.EXPIRATION_TIME_SECONDS / Math.Pow(2, separatingNodes));
-                        bool timeoutError = storeTo.Protocol.Store(node.OurContact, key, lookup.val, true, expTimeSec);
-                        HandleTimeoutError(timeoutError, storeTo);
+                        RpcError error = storeTo.Protocol.Store(node.OurContact, key, lookup.val, true, expTimeSec);
+                        HandleError(error, storeTo);
                     }
                 }
             }
@@ -156,7 +156,7 @@ namespace Clifton.Kademlia
         /// If it has timed out a certain amount, remove it from the bucket and replace it with the most
         /// recent pending contact that are queued for that bucket.
         /// </summary>
-        public void HandleTimeoutError(bool timeoutError, Contact contact)
+        public void HandleError(RpcError error, Contact contact)
         {
             // TODO: IMPLEMENT!
         }
@@ -266,8 +266,8 @@ namespace Clifton.Kademlia
 
                 contacts.ForEach(c =>
                 {
-                    bool timeoutError = c.Protocol.Store(ourContact, key, originatorStorage.Get(key));
-                    HandleTimeoutError(timeoutError, c);
+                    RpcError error = c.Protocol.Store(ourContact, key, originatorStorage.Get(key));
+                    HandleError(error, c);
                 });
 
                 originatorStorage.Touch(k);
@@ -317,8 +317,8 @@ namespace Clifton.Kademlia
 
             contacts.ForEach(c =>
             {
-                bool timeoutError = c.Protocol.Store(node.OurContact, key, val);
-                HandleTimeoutError(timeoutError, c);
+                RpcError error = c.Protocol.Store(node.OurContact, key, val);
+                HandleError(error, c);
             });
 		}
 
@@ -332,7 +332,7 @@ namespace Clifton.Kademlia
             contacts.ForEach(c =>
             {
                 var (newContacts, timeoutError) = c.Protocol.FindNode(ourContact, rndId);
-                HandleTimeoutError(timeoutError, c);
+                HandleError(timeoutError, c);
                 newContacts?.ForEach(otherContact => node.BucketList.AddContact(otherContact));
             });
         }

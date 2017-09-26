@@ -6,10 +6,10 @@ namespace Clifton.Kademlia
 {
     public interface IProtocol
     {
-        bool Ping(Contact sender);
-        (List<Contact> contacts, bool timeoutError) FindNode(Contact sender, ID key);
-        (List<Contact> contacts, string val, bool timeoutError) FindValue(Contact sender, ID key);
-        bool Store(Contact sender, ID key, string val, bool isCached = false, int expirationTimeSec = 0);
+        RpcError Ping(Contact sender);
+        (List<Contact> contacts, RpcError error) FindNode(Contact sender, ID key);
+        (List<Contact> contacts, string val, RpcError error) FindValue(Contact sender, ID key);
+        RpcError Store(Contact sender, ID key, string val, bool isCached = false, int expirationTimeSec = 0);
     }
 
     public interface IStorage : IEnumerable<BigInteger>

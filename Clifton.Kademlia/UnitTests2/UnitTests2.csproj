@@ -59,7 +59,6 @@
     <Compile Include="LookupTests.cs" />
     <Compile Include="DhtTests.cs" />
     <Compile Include="TcpSubnetTests.cs" />
-    <Compile Include="VirtualProtocol.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
