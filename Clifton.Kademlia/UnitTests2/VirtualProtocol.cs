@@ -34,31 +34,34 @@ namespace UnitTests2
                 Node.Ping(sender);
             }
 
-            return Responds;
+            return !Responds;
         }
 
         /// <summary>
         /// Get the list of contacts for this node closest to the key.
         /// </summary>
-        public List<Contact> FindNode(Contact sender, ID key)
+        public (List<Contact> contacts, bool timeoutError) FindNode(Contact sender, ID key)
         {
-            return Node.FindNode(sender, key).contacts;
+            return (Node.FindNode(sender, key).contacts, false);
         }
 
         /// <summary>
         /// Returns either contacts or null if the value is found.
         /// </summary>
-        public (List<Contact> contacts, string val) FindValue(Contact sender, ID key)
+        public (List<Contact> contacts, string val, bool timeoutError) FindValue(Contact sender, ID key)
         {
-            return Node.FindValue(sender, key);
+            var (newContacts, val) = Node.FindValue(sender, key);
+            return (newContacts, val, false);
         }
 
         /// <summary>
         /// Stores the key-value on the remote peer.
         /// </summary>
-        public void Store(Contact sender, ID key, string val, bool isCached = false, int expTimeSec = 0)
+        public bool Store(Contact sender, ID key, string val, bool isCached = false, int expTimeSec = 0)
         {
             Node.Store(sender, key, val, isCached, expTimeSec);
+
+            return false;
         }
     }
 }

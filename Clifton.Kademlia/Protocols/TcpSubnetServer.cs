@@ -86,6 +86,15 @@ namespace Clifton.Kademlia.Protocols
                     {
                         string methodName = path.Substring(2);      // Remove "//"
 
+#if DEBUG       // For unit testing
+                        if (!((TcpSubnetProtocol)node.OurContact.Protocol).Responds)
+                        {
+                            // Exceeds 500ms timeout.
+                            System.Threading.Thread.Sleep(1000);
+                            context.Response.Close();
+                            return;         // bail now.
+                        }
+#endif
                         try
                         {
                             var sender = new Contact(null, new ID(req.Sender));

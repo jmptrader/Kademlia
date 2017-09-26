@@ -7,9 +7,9 @@ namespace Clifton.Kademlia
     public interface IProtocol
     {
         bool Ping(Contact sender);
-        List<Contact> FindNode(Contact sender, ID key);
-        (List<Contact> contacts, string val) FindValue(Contact sender, ID key);
-        void Store(Contact sender, ID key, string val, bool isCached = false, int expirationTimeSec = 0);
+        (List<Contact> contacts, bool timeoutError) FindNode(Contact sender, ID key);
+        (List<Contact> contacts, string val, bool timeoutError) FindValue(Contact sender, ID key);
+        bool Store(Contact sender, ID key, string val, bool isCached = false, int expirationTimeSec = 0);
     }
 
     public interface IStorage : IEnumerable<BigInteger>

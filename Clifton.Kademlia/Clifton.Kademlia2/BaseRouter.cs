@@ -12,7 +12,9 @@ namespace Clifton.Kademlia
 #endif
 
         public Node Node { get { return node; } set { node = value; } }
+        public Dht Dht { get { return dht; } set { dht = value; } }
 
+        protected Dht dht;
         protected Node node;
         protected object locker = new object();
 
@@ -93,7 +95,12 @@ namespace Clifton.Kademlia
 
         public (List<Contact> contacts, Contact foundBy, string val) RpcFindNodes(ID key, Contact contact)
         {
-            return (contact.Protocol.FindNode(node.OurContact, key), null, null);
+            var (newContacts, timeoutError) = contact.Protocol.FindNode(node.OurContact, key);
+
+            // Null continuation here to support unit tests where a DHT hasn't been set up.
+            dht?.HandleTimeoutError(timeoutError, contact);
+            
+            return (newContacts, null, null);
         }
 
         /// <summary>
@@ -106,13 +113,14 @@ namespace Clifton.Kademlia
             string retval = null;
             Contact foundBy = null;
 
-            (var otherContacts, var val) = contact.Protocol.FindValue(node.OurContact, key);
+            var (otherContacts, val, timeoutError) = contact.Protocol.FindValue(node.OurContact, key);
+            dht.HandleTimeoutError(timeoutError, contact);
 
             if (otherContacts != null)
             {
                 nodes.AddRange(otherContacts);
             }
-            else
+            else if (!timeoutError)
             {
                 Validate.IsTrue<ValueCannotBeNullException>(val != null, "Null values are not supported nor expected.");
                 nodes.Add(contact);           // The node we just contacted found the value.

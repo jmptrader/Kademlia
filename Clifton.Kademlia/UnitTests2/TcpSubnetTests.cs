@@ -81,7 +81,7 @@ namespace UnitTests2
             server.Start();
 
             ID id = ID.RandomID;
-            List<Contact> ret = p2.FindNode(c1, id);
+            List<Contact> ret = p2.FindNode(c1, id).contacts;
 
             Assert.IsTrue(ret.Count == 1, "Expected 1 contact.");
             Assert.IsTrue(ret[0].ID == otherPeer, "Expected contact to the other peer (not us).");
@@ -109,8 +109,31 @@ namespace UnitTests2
             Assert.IsTrue(n2.Storage.Get(testID) == testValue, "Expected remote peer to contain stored value.");
 
             var ret = p2.FindValue(c1, testID);
+
             Assert.IsTrue(ret.contacts == null, "Expected to find value.");
             Assert.IsTrue(ret.val == testValue, "Value does not match expected value from peer.");
+        }
+
+        [TestMethod]
+        public void UnresponsiveNodeTest()
+        {
+            TcpSubnetProtocol p1 = new TcpSubnetProtocol(localIP, port, 1);
+            TcpSubnetProtocol p2 = new TcpSubnetProtocol(localIP, port, 2);
+            p2.Responds = false;
+            ID ourID = ID.RandomID;
+            Contact c1 = new Contact(p1, ourID);
+            Node n1 = new Node(c1, new VirtualStorage());
+            Node n2 = new Node(new Contact(p2, ID.RandomID), new VirtualStorage());
+
+            server.RegisterProtocol(p1.Subnet, n1);
+            server.RegisterProtocol(p2.Subnet, n2);
+            server.Start();
+
+            ID testID = ID.RandomID;
+            string testValue = "Test";
+            bool timeout = p2.Store(c1, testID, testValue);
+
+            Assert.IsTrue(timeout, "Expected timeout.");
         }
     }
 }

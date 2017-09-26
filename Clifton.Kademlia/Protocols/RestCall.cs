@@ -33,6 +33,8 @@ namespace Clifton.Kademlia.Protocols
 {
     public static class RestCall
     {
+        private static int REQUEST_TIMEOUT = 500;       // 500 ms for response.
+
         public static string Get(string url)
         {
             string ret = String.Empty;
@@ -48,9 +50,10 @@ namespace Clifton.Kademlia.Protocols
             return ret;
         }
 
-        public static R Post<R, E>(string url, object obj, out E errorResponse) where R : new() where E : ErrorResponse, new()
+        public static R Post<R, E>(string url, object obj, out E errorResponse, out bool timeoutError, int? timeout = null) where R : new() where E : ErrorResponse, new()
         {
             errorResponse = default(E);
+            timeoutError = false;
             R target = Activator.CreateInstance<R>();
             Stream st = null;
             string json = string.Empty;
@@ -61,6 +64,7 @@ namespace Clifton.Kademlia.Protocols
             request.Method = "POST";
             request.ContentType = "application/json";
             request.ContentLength = json.Length;
+            request.Timeout = timeout ?? REQUEST_TIMEOUT;
 
             try
             {
@@ -91,10 +95,19 @@ namespace Clifton.Kademlia.Protocols
             catch (WebException ex)
             {
                 E error = Activator.CreateInstance<E>();
-                retjson = new StreamReader(ex.Response.GetResponseStream()).ReadToEnd();
-                JObject jobj = JObject.Parse(retjson);
-                JsonConvert.PopulateObject(jobj.ToString(), error);
-                errorResponse = error;
+
+                try
+                {
+                    retjson = new StreamReader(ex.Response.GetResponseStream()).ReadToEnd();
+                    JObject jobj = JObject.Parse(retjson);
+                    JsonConvert.PopulateObject(jobj.ToString(), error);
+                    errorResponse = error;
+                }
+                catch
+                {
+                    // This is a timeout exception
+                    timeoutError = true;
+                }
             }
 
             st.Close();

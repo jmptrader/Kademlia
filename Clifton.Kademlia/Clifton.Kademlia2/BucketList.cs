@@ -70,10 +70,13 @@ namespace Clifton.Kademlia
                     else
                     {
                         Contact lastSeenContact = kbucket.Contacts.OrderBy(c => c.LastSeen).First();
-                        bool stillUp = lastSeenContact.Protocol.Ping(ourContact);
+                        bool timeoutError = lastSeenContact.Protocol.Ping(ourContact);
 
-                        if (!stillUp)
+                        if (timeoutError)
                         {
+                            // TODO: Put into DHT's collection of timed out contacts.
+                            // For unit testing, we may not have a DHT!  How do we get the DHT?
+                            // We might want to have this wired up as an event?
                             kbucket.EvictContact(lastSeenContact);
                             kbucket.AddContact(contact);
                         }

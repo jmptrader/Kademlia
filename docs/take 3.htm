@@ -3903,6 +3903,9 @@ values, we can add some operators to the ID class itself.&nbsp; Some examples:</
 	multiple &quot;servers&quot; on the same machine as we don't need to open (and 
 	&quot;allow&quot;) a unique port number per &quot;server.&quot;</li>
 	<li>JSON is used as the serialization format for request and response data.</li>
+	<li>RPC calls are synchronous, in that they wait for a response.&nbsp; There 
+	are other implementations that continue based on the random ID and handler, 
+	which I chose not to implement.</li>
 </ol>
 <p>&nbsp;</p>
 <p>&nbsp;</p>

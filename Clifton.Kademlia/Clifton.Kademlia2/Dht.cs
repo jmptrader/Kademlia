@@ -62,20 +62,27 @@ namespace Clifton.Kademlia
         /// to our list, then getting the contacts for other peers not in the
         /// bucket range of our known peer we're joining.
         /// </summary>
-        public void Bootstrap(Contact knownPeer)
+        public bool Bootstrap(Contact knownPeer)
         {
             node.BucketList.AddContact(knownPeer);
-            List<Contact> contacts = knownPeer.Protocol.FindNode(ourContact, ourId);
-            contacts.ForEach(c => node.BucketList.AddContact(c));
-            KBucket knownPeerBucket = node.BucketList.GetKBucket(knownPeer.ID);
-            // Resolve the list now, so we don't include additional contacts as we add to our bucket additional contacts.
-            var otherBuckets = node.BucketList.Buckets.Where(b => b != knownPeerBucket).ToList();
-            otherBuckets.ForEach(b => RefreshBucket(b));
+            var (contacts, timeoutError) = knownPeer.Protocol.FindNode(ourContact, ourId);
+            HandleTimeoutError(timeoutError, knownPeer);
 
-            foreach (KBucket otherBucket in otherBuckets)
+            if (!timeoutError)
             {
-                RefreshBucket(otherBucket);
+                contacts.ForEach(c => node.BucketList.AddContact(c));
+                KBucket knownPeerBucket = node.BucketList.GetKBucket(knownPeer.ID);
+                // Resolve the list now, so we don't include additional contacts as we add to our bucket additional contacts.
+                var otherBuckets = node.BucketList.Buckets.Where(b => b != knownPeerBucket).ToList();
+                otherBuckets.ForEach(b => RefreshBucket(b));
+
+                foreach (KBucket otherBucket in otherBuckets)
+                {
+                    RefreshBucket(otherBucket);
+                }
             }
+
+            return timeoutError;
         }
 
         public void Store(ID key, string val)
@@ -125,7 +132,8 @@ namespace Clifton.Kademlia
                     {
                         int separatingNodes = GetSeparatingNodesCount(ourContact, storeTo);
                         int expTimeSec = (int)(Constants.EXPIRATION_TIME_SECONDS / Math.Pow(2, separatingNodes));
-                        storeTo.Protocol.Store(node.OurContact, key, lookup.val, true, expTimeSec);
+                        bool timeoutError = storeTo.Protocol.Store(node.OurContact, key, lookup.val, true, expTimeSec);
+                        HandleTimeoutError(timeoutError, storeTo);
                     }
                 }
             }
@@ -142,6 +150,16 @@ namespace Clifton.Kademlia
             currentBuckets.ForEach(b => RefreshBucket(b));
         }
 #endif
+
+        /// <summary>
+        /// Put the timed out contact into a collection and increment the number of times it has timed out.
+        /// If it has timed out a certain amount, remove it from the bucket and replace it with the most
+        /// recent pending contact that are queued for that bucket.
+        /// </summary>
+        public void HandleTimeoutError(bool timeoutError, Contact contact)
+        {
+            // TODO: IMPLEMENT!
+        }
 
         /// <summary>
         /// Return the number of nodes between the two contacts, where the contact list is sorted by the integer ID values (not XOR distance.)
@@ -165,6 +183,7 @@ namespace Clifton.Kademlia
             node = new Node(ourContact, republishStorage, cacheStorage);
             this.router = router;
             this.router.Node = node;
+            this.router.Dht = this;
             SetupBucketRefreshTimer();
             SetupKeyValueRepublishTimer();
             SetupOriginatorRepublishTimer();
@@ -244,7 +263,13 @@ namespace Clifton.Kademlia
                 ID key = new ID(k);
                 // Just use close contacts, don't do a lookup.
                 var contacts = node.BucketList.GetCloseContacts(key, node.OurContact.ID);
-                contacts.ForEach(c => c.Protocol.Store(ourContact, key, originatorStorage.Get(key)));
+
+                contacts.ForEach(c =>
+                {
+                    bool timeoutError = c.Protocol.Store(ourContact, key, originatorStorage.Get(key));
+                    HandleTimeoutError(timeoutError, c);
+                });
+
                 originatorStorage.Touch(k);
             });
         }
@@ -290,7 +315,11 @@ namespace Clifton.Kademlia
 				TouchBucketWithKey(key);
 			}
 
-			contacts.ForEach(c => c.Protocol.Store(node.OurContact, key, val));
+            contacts.ForEach(c =>
+            {
+                bool timeoutError = c.Protocol.Store(node.OurContact, key, val);
+                HandleTimeoutError(timeoutError, c);
+            });
 		}
 
 		protected void RefreshBucket(KBucket bucket)
@@ -299,7 +328,13 @@ namespace Clifton.Kademlia
             ID rndId = ID.RandomIDWithinBucket(bucket);
             // Isolate in a separate list as contacts collection for this bucket might change.
             List<Contact> contacts = bucket.Contacts.ToList();
-            contacts.ForEach(c => c.Protocol.FindNode(ourContact, rndId).ForEach(otherContact => node.BucketList.AddContact(otherContact)));
+
+            contacts.ForEach(c =>
+            {
+                var (newContacts, timeoutError) = c.Protocol.FindNode(ourContact, rndId);
+                HandleTimeoutError(timeoutError, c);
+                newContacts?.ForEach(otherContact => node.BucketList.AddContact(otherContact));
+            });
         }
     }
 }
