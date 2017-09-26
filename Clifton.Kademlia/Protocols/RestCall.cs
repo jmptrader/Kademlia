@@ -109,6 +109,11 @@ namespace Clifton.Kademlia.Protocols
                     timeoutError = true;
                 }
             }
+            catch (Exception ex)
+            {
+                E error = Activator.CreateInstance<E>();
+                error.ErrorMessage = ex.Message;
+            }
 
             st.Close();
 

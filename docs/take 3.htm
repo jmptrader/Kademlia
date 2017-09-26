@@ -3895,7 +3895,7 @@ values, we can add some operators to the ID class itself.&nbsp; Some examples:</
   ...  
 }</pre>
 <p>And so forth.</p>
-<h2>A Basic TCP Protocol</h2>
+<h2>A Basic TCP Subnet Protocol</h2>
 <p>There's a few points to make in this implementation:</p>
 <ol>
 	<li>A single port is used along with a subnet identifier to route requests 
@@ -3961,8 +3961,321 @@ public class CommonRequest
 <p>As the comment states, the common request simplifies the server 
 implementation by having RPC handler methods with the same parameter.</p>
 <h3>Responses</h3>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
+<p>JSON responses are deserialized into the following classes:</p>
+<pre>public abstract class BaseResponse
+{
+  public BigInteger RandomID { get; set; }
+}
+
+public class ErrorResponse : BaseResponse
+{
+  public string ErrorMessage { get; set; }
+}
+
+public class FindNodeResponse : BaseResponse
+{
+  public List&lt;BigInteger&gt; Contacts { get; set; }
+}
+
+public class FindValueResponse : BaseResponse
+{
+  public List&lt;BigInteger&gt; Contacts { get; set; }
+  public string Value { get; set; }
+}
+
+public class PingResponse : BaseResponse { }
+public class StoreResponse : BaseResponse { }</pre>
+<h3>Server Implementation</h3>
+<p>The server is a straightforward <code>HttpListener</code> but note how the subnet ID is 
+used to route the request to the specific node associated with the subnet:</p>
+<pre>protected virtual async void ProcessRequest(HttpListenerContext context)
+{
+  string data = new StreamReader(context.Request.InputStream, context.Request.ContentEncoding).ReadToEnd();
+
+  if (context.Request.HttpMethod == &quot;POST&quot;)
+  {
+    Type requestType;
+    string path = context.Request.RawUrl;
+
+    if (routePackets.TryGetValue(path, out requestType))
+    {
+      CommonRequest commonRequest = JsonConvert.DeserializeObject&lt;CommonRequest&gt;(data);
+      int subnet = ((BaseSubnetRequest)JsonConvert.DeserializeObject(data, requestType)).Subnet;
+      Node node;
+
+      if (subnets.TryGetValue(subnet, out node))
+      {
+        // Remove &quot;//&quot;
+        // Prefix our call with &quot;Server&quot; so that the method name is unambiguous.
+        string methodName = &quot;Server&quot; + path.Substring(2); 
+
+#if DEBUG // For unit testing
+        if (!((TcpSubnetProtocol)node.OurContact.Protocol).Responds)
+        {
+          // Exceeds 500ms timeout.
+          System.Threading.Thread.Sleep(1000);
+          context.Response.Close();
+          return; // bail now.
+        }
+#endif
+
+        try
+        {
+          MethodInfo mi = node.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
+          object response = await Task.Run(() =&gt; mi.Invoke(node, new object[] { commonRequest }));
+          SendResponse(context, response);
+        }
+        catch (Exception ex)
+        {
+          SendErrorResponse(context, new ErrorResponse() { ErrorMessage = ex.Message });
+        }
+      }
+      else
+      {
+        SendErrorResponse(context, new ErrorResponse() { ErrorMessage = &quot;Subnet node not found.&quot; });
+      }
+    }
+    else
+    {
+      SendErrorResponse(context, new ErrorResponse() { ErrorMessage = &quot;Method not recognized.&quot; });
+    }
+  }
+
+  context.Response.Close();
+}
+</pre>
+<h3>The TCP Subnet Protocol</h3>
+<p>The protocol implements the four RPC calls, issuing HTTP POST's to the 
+server.</p>
+<pre>public (List&lt;Contact&gt; contacts, RpcError error) FindNode(Contact sender, ID key)
+{
+  ErrorResponse error;
+  ID id = ID.RandomID;
+  bool timeoutError;
+
+  var ret = RestCall.Post&lt;FindNodeResponse, ErrorResponse&gt;(url + &quot;:&quot; + port + &quot;//FindNode&quot;,
+  new FindNodeRequest() { Subnet = subnet, Sender = sender.ID.Value, Key = key.Value, RandomID = id.Value }, out error, out timeoutError);
+
+  return (ret?.Contacts?.Select(val =&gt; new Contact(null, new ID(val))).ToList() ?? EmptyContactList(), GetRpcError(id, ret, timeoutError, error));
+}
+
+/// &lt;summary&gt;
+/// Attempt to find the value in the peer network.
+/// &lt;/summary&gt;
+/// &lt;returns&gt;A null contact list is acceptable here as it is a valid return if the value is found.
+/// The caller is responsible for checking the timeoutError flag to make sure null contacts is not
+/// the result of a timeout error.&lt;/returns&gt;
+public (List&lt;Contact&gt; contacts, string val, RpcError error) FindValue(Contact sender, ID key)
+{
+  ErrorResponse error;
+  ID id = ID.RandomID;
+  bool timeoutError;
+
+  var ret = RestCall.Post&lt;FindValueResponse, ErrorResponse&gt;(url + &quot;:&quot; + port + &quot;//FindValue&quot;,
+  new FindValueRequest() { Subnet = subnet, Sender = sender.ID.Value, Key = key.Value, RandomID = id.Value }, out error, out timeoutError);
+
+  return (ret?.Contacts?.Select(val =&gt; new Contact(null, new ID(val))).ToList(), ret.Value, GetRpcError(id, ret, timeoutError, error));
+}
+
+public RpcError Ping(Contact sender)
+{
+  ErrorResponse error;
+  ID id = ID.RandomID;
+  bool timeoutError;
+
+  var ret = RestCall.Post&lt;FindValueResponse, ErrorResponse&gt;(url + &quot;:&quot; + port + &quot;//Ping&quot;,
+  new PingRequest() { Subnet = subnet, Sender = sender.ID.Value, RandomID = id.Value}, out error, out timeoutError);
+
+  return GetRpcError(id, ret, timeoutError, error);
+}
+
+public RpcError Store(Contact sender, ID key, string val, bool isCached = false, int expirationTimeSec = 0)
+{
+  ErrorResponse error;
+  ID id = ID.RandomID;
+  bool timeoutError;
+
+  var ret = RestCall.Post&lt;FindValueResponse, ErrorResponse&gt;(url + &quot;:&quot; + port + &quot;//Store&quot;,
+  new StoreRequest()
+  {
+    Subnet = subnet,
+    Sender = sender.ID.Value,
+    Key = key.Value,
+    Value = val,
+    IsCached = isCached,
+    ExpirationTimeSec = expirationTimeSec,
+    RandomID = id.Value
+  }, out error, out timeoutError);
+
+  return GetRpcError(id, ret, timeoutError, error);
+}
+
+protected RpcError GetRpcError(ID id, BaseResponse resp, bool timeoutError, ErrorResponse peerError)
+{
+  return new RpcError() { IDMismatchError = id != resp.RandomID, TimeoutError = timeoutError, PeerError = peerError != null, PeerErrorMessage = peerError?.ErrorMessage };
+}
+
+protected List&lt;Contact&gt; EmptyContactList()
+{
+  return new List&lt;Contact&gt;();
+}</pre>
+<h3>Error Reporting</h3>
+<p>Note how the protocol has been refactored to return any errors from the RPC 
+call.&nbsp; This is handled by the <code>RpcResponse</code> class:</p>
+<pre>public class RpcError
+{
+  public bool HasError { get { return TimeoutError || IDMismatchError || PeerError; } }
+
+  public bool TimeoutError { get; set; }
+  public bool IDMismatchError { get; set; }
+  public bool PeerError { get; set; }
+  public string PeerErrorMessage { get; set; }
+}</pre>
+<p>Note that this class reflects several different errors that can occur:</p>
+<ol>
+	<li>Timeout - the peer failed to respond in the <code>RestCall.REQUEST_TIMEOUT</code> 
+	period, which by default is 500ms.</li>
+	<li>ID mismatch - the peer responded but not with an ID that matched the 
+	sender's random ID.</li>
+	<li>Peer error - the peer encountered an exception, in which case the 
+	exception message is returned to the caller.</li>
+	<li>Deserialization errors - The <code>Post</code> method catches JSON 
+	deserialization errors which also indicates an error with the peer response.</li>
+</ol>
+<p>Error handling will be discussed in the next major section, RPC Error 
+Handling.</p>
+<h3>TCP Subnet Unit Testing</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> The following unit 
+tests validate the round trip calls, exercising the protocol calls and the 
+server.&nbsp; Each test initializes the server and then tears it down:</p>
+<pre>protected string localIP = &quot;http://127.0.0.1&quot;;
+protected int port = 2720;
+protected TcpSubnetServer server;
+
+[TestInitialize]
+public void Initialize()
+{
+  server = new TcpSubnetServer(localIP, port);
+}
+
+[TestCleanup]
+public void TestCleanup()
+{
+  server.Stop();
+}</pre>
+<p>The unit tests exercise each of the four RPC calls as well as a timeout 
+error:</p>
+<pre>[TestMethod]
+public void PingRouteTest()
+{
+  TcpSubnetProtocol p1 = new TcpSubnetProtocol(localIP, port, 1);
+  TcpSubnetProtocol p2 = new TcpSubnetProtocol(localIP, port, 2);
+  ID ourID = ID.RandomID;
+  Contact c1 = new Contact(p1, ourID);
+  Node n1 = new Node(c1, new VirtualStorage());
+  Node n2 = new Node(new Contact(p2, ID.RandomID), new VirtualStorage());
+  server.RegisterProtocol(p1.Subnet, n1);
+  server.RegisterProtocol(p2.Subnet, n2);
+  server.Start();
+
+  p2.Ping(c1);
+}
+
+[TestMethod]
+public void StoreRouteTest()
+{
+  TcpSubnetProtocol p1 = new TcpSubnetProtocol(localIP, port, 1);
+  TcpSubnetProtocol p2 = new TcpSubnetProtocol(localIP, port, 2);
+  ID ourID = ID.RandomID;
+  Contact c1 = new Contact(p1, ourID);
+  Node n1 = new Node(c1, new VirtualStorage());
+  Node n2 = new Node(new Contact(p2, ID.RandomID), new VirtualStorage());
+  server.RegisterProtocol(p1.Subnet, n1);
+  server.RegisterProtocol(p2.Subnet, n2);
+  server.Start();
+
+  Contact sender = new Contact(p1, ID.RandomID);
+  ID testID = ID.RandomID;
+  string testValue = &quot;Test&quot;;
+  p2.Store(sender, testID, testValue);
+  Assert.IsTrue(n2.Storage.Contains(testID), &quot;Expected remote peer to have value.&quot;);
+  Assert.IsTrue(n2.Storage.Get(testID) == testValue, &quot;Expected remote peer to contain stored value.&quot;);
+}
+
+[TestMethod]
+public void FindNodesRouteTest()
+{
+  TcpSubnetProtocol p1 = new TcpSubnetProtocol(localIP, port, 1);
+  TcpSubnetProtocol p2 = new TcpSubnetProtocol(localIP, port, 2);
+  ID ourID = ID.RandomID;
+  Contact c1 = new Contact(p1, ourID);
+  Node n1 = new Node(c1, new VirtualStorage());
+  Node n2 = new Node(new Contact(p2, ID.RandomID), new VirtualStorage());
+
+  // Node 2 knows about another contact, that isn't us (because we're excluded.)
+  ID otherPeer = ID.RandomID;
+  n2.BucketList.Buckets[0].Contacts.Add(new Contact(null, otherPeer));
+
+  server.RegisterProtocol(p1.Subnet, n1);
+  server.RegisterProtocol(p2.Subnet, n2);
+  server.Start();
+
+  ID id = ID.RandomID;
+  List&lt;Contact&gt; ret = p2.FindNode(c1, id).contacts;
+
+  Assert.IsTrue(ret.Count == 1, &quot;Expected 1 contact.&quot;);
+  Assert.IsTrue(ret[0].ID == otherPeer, &quot;Expected contact to the other peer (not us).&quot;);
+}
+
+[TestMethod]
+public void FindValueRouteTest()
+{
+  TcpSubnetProtocol p1 = new TcpSubnetProtocol(localIP, port, 1);
+  TcpSubnetProtocol p2 = new TcpSubnetProtocol(localIP, port, 2);
+  ID ourID = ID.RandomID;
+  Contact c1 = new Contact(p1, ourID);
+  Node n1 = new Node(c1, new VirtualStorage());
+  Node n2 = new Node(new Contact(p2, ID.RandomID), new VirtualStorage());
+
+  server.RegisterProtocol(p1.Subnet, n1);
+  server.RegisterProtocol(p2.Subnet, n2);
+  server.Start();
+
+  ID testID = ID.RandomID;
+  string testValue = &quot;Test&quot;;
+  p2.Store(c1, testID, testValue);
+
+  Assert.IsTrue(n2.Storage.Contains(testID), &quot;Expected remote peer to have value.&quot;);
+  Assert.IsTrue(n2.Storage.Get(testID) == testValue, &quot;Expected remote peer to contain stored value.&quot;);
+
+  var ret = p2.FindValue(c1, testID);
+
+  Assert.IsTrue(ret.contacts == null, &quot;Expected to find value.&quot;);
+  Assert.IsTrue(ret.val == testValue, &quot;Value does not match expected value from peer.&quot;);
+}
+
+[TestMethod]
+public void UnresponsiveNodeTest()
+{
+  TcpSubnetProtocol p1 = new TcpSubnetProtocol(localIP, port, 1);
+  TcpSubnetProtocol p2 = new TcpSubnetProtocol(localIP, port, 2);
+  p2.Responds = false;
+  ID ourID = ID.RandomID;
+  Contact c1 = new Contact(p1, ourID);
+  Node n1 = new Node(c1, new VirtualStorage());
+  Node n2 = new Node(new Contact(p2, ID.RandomID), new VirtualStorage());
+
+  server.RegisterProtocol(p1.Subnet, n1);
+  server.RegisterProtocol(p2.Subnet, n2);
+  server.Start();
+
+  ID testID = ID.RandomID;
+  string testValue = &quot;Test&quot;;
+  RpcError error = p2.Store(c1, testID, testValue);
+
+  Assert.IsTrue(error.TimeoutError, &quot;Expected timeout.&quot;);
+}</pre>
+<h2>RPC Error Handling</h2>
 <p>&nbsp;</p>
 <h2>Putting It Together - A Demo</h2>
 <p>As usual, there's nothing like a visual demo to see what is happening.&nbsp; 

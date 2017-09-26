@@ -99,6 +99,7 @@ namespace Clifton.Kademlia.Protocols
                             return;         // bail now.
                         }
 #endif
+
                         try
                         {
                             MethodInfo mi = node.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
@@ -117,7 +118,7 @@ namespace Clifton.Kademlia.Protocols
                 }
                 else
                 {
-                    SendErrorResponse(context, new ErrorResponse() { ErrorMessage = "Method not recognmized." });
+                    SendErrorResponse(context, new ErrorResponse() { ErrorMessage = "Method not recognized." });
                 }
             }
 
