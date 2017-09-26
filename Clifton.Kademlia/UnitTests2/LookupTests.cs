@@ -202,8 +202,8 @@ namespace UnitTests2
             // Each peer needs to know about the other peers except of course itself.
             nodes.ForEach(n => nodes.Where(nOther => nOther != n).ForEach(nOther => n.BucketList.AddContact(nOther.OurContact)));
 
+            // Pick a random bucket, or bucket where the key is in range, otherwise we're defeating the purpose of the algorithm.
             key = ID.RandomID;            // Pick an ID
-            // TODO: Pick a random bucket, or bucket where the key is in range, otherwise we're defeating the purpose of the algorithm.
             // DO NOT DO THIS:
             // List<Contact> nodesToQuery = router.Node.BucketList.GetCloseContacts(key, router.Node.OurContact.ID).Take(Constants.ALPHA).ToList();
 
