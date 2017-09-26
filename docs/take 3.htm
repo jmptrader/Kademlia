@@ -4275,8 +4275,155 @@ public void UnresponsiveNodeTest()
 
   Assert.IsTrue(error.TimeoutError, &quot;Expected timeout.&quot;);
 }</pre>
-<h2>RPC Error Handling</h2>
-<p>&nbsp;</p>
+<h2>RPC Error Handling and Delayed Eviction - Discussion</h2>
+<p>One of the optimizations in the Kademlia protocol can now be implemented -- 
+delayed eviction:</p>
+<p><font color="#FF00FF">When a Kademlia node receives an RPC 
+from an unknown contact and the k-bucket for that contact is already full with 
+<i>k</i> entries, the node places the new contact in a replacement cache of 
+nodes eligible to replace stale k-bucket entries. The next time the node queries 
+contacts in the k-bucket, any unresponsive ones can be evicted and replaced with 
+entries in the replacement cache. The replacement cache is kept sorted by time 
+last seen, with the most recently seen entry having the highest priority as a 
+replacement candidate.</font></p>
+<h3>Ambiguity #18</h3>
+<p>What happens when the peer throws an exception or the random ID that the peer 
+responds with doesn't match what was sent?&nbsp; To make matters simple, in this 
+implementation we'll handle all error conditions, including timeouts, in the 
+same way.</p>
+<h2>RPC Error Handling and Delayed Eviction - Implementation</h2>
+<p>The implementation for handling evictions and replacing them with contacts 
+waiting to be added to the bucket is handled in the Dht.&nbsp; First, the error 
+handler:</p>
+<pre>/// &lt;summary&gt;
+/// Put the timed out contact into a collection and increment the number of times it has timed out.
+/// If it has timed out a certain amount, remove it from the bucket and replace it with the most
+/// recent pending contact that are queued for that bucket.
+/// &lt;/summary&gt;
+public void HandleError(RpcError error, Contact contact)
+{
+  // For all errors:
+  int count = AddContactToEvict(contact.ID.Value);
+
+  if (count == Constants.EVICTION_LIMIT)
+  {
+    ReplaceContact(contact);
+  }
+}</pre>
+<p>We also have the special case for attempting to add a contact to a bucket 
+that cannot be split in the BucketList.AddContact method:</p>
+<pre>...
+if (error.HasError)
+{
+  // Null continuation is used because unit tests may not initialize a DHT.
+  dht?.DelayEviction(lastSeenContact, contact);
+}
+...</pre>
+<p>And the implementation of <code>DelayEviction</code>:</p>
+<pre> /// &lt;summary&gt;
+/// The contact that did not respond (or had an error) gets n tries before being evicted
+/// and replaced with the most recently contact that wants to go into the non-responding contact's kbucket.
+/// &lt;/summary&gt;
+/// &lt;param name=&quot;toEvict&quot;&gt;The contact that didn't respond.&lt;/param&gt;
+/// &lt;param name=&quot;toReplace&quot;&gt;The contact that can replace the non-responding contact.&lt;/param&gt;
+public void DelayEviction(Contact toEvict, Contact toReplace)
+{
+  // Non-concurrent list needs locking.
+  lock (pendingContacts)
+  {
+    pendingContacts.AddDistinctBy(toReplace, c=&gt;c.ID);
+  }
+
+  BigInteger key = toEvict.ID.Value;
+  int count = AddContactToEvict(key);
+
+  if (count == Constants.EVICTION_LIMIT)
+  {
+    ReplaceContact(toEvict);
+  }
+}
+</pre>
+<p>Note the difference:</p>
+<ul>
+	<li>When a contact fails to respond with an RPC call, its eviction count is 
+	incremented, and if exceeded, it is removed and replaced with the most 
+	recently seen contact that goes in the bucket.</li>
+	<li>Conversely, when a contact is being added to a full bucket and the last 
+	seen contact fails to respond (or has an error), it is added to the eviction 
+	pool and the new contact wanting to be added is placed into the pending 
+	contacts pool.</li>
+</ul>
+<p>The rest is just the implementation of the helper methods:</p>
+<pre>protected int AddContactToEvict(BigInteger key)
+{
+  if (!evictionCount.ContainsKey(key))
+  {
+    evictionCount[key] = 0;
+  }
+
+  int count = evictionCount[key] + 1;
+  evictionCount[key] = count;
+
+  return count;
+}
+
+protected void ReplaceContact(Contact toEvict)
+{
+  KBucket bucket = node.BucketList.GetKBucket(toEvict.ID);
+
+  // Prevent other threads from manipulating the bucket list or buckets.
+  lock (node.BucketList)
+  {
+    EvictContact(bucket, toEvict);
+    ReplaceWithPendingContact(bucket);
+  }
+}
+
+protected void EvictContact(KBucket bucket, Contact toEvict)
+{
+  evictionCount.TryRemove(toEvict.ID.Value, out _);
+  Validate.IsTrue&lt;BucketDoesNotContainContactToEvict&gt;(bucket.Contains(toEvict.ID), &quot;Bucket doesn't contain the contact to be evicted.&quot;);
+  bucket.EvictContact(toEvict);
+}
+
+/// &lt;summary&gt;
+/// Find a pending contact that goes into the bucket that now has room.
+/// &lt;/summary&gt;
+protected void ReplaceWithPendingContact(KBucket bucket)
+{
+  Contact contact;
+
+  // Non-concurrent list needs locking while we query it.
+  lock (pendingContacts)
+  {
+    contact = pendingContacts.Where(c =&gt; node.BucketList.GetKBucket(c.ID) == bucket).OrderBy(c =&gt; c.LastSeen).LastOrDefault();
+
+    if (contact != null)
+    {
+      pendingContacts.Remove(contact);
+      bucket.AddContact(contact);
+    }
+  }
+}</pre>
+<h2>RPC Error Handling and Delayed Eviction - Unit Tests</h2>
+<p><img border="0" src="unittest.png" width="14" height="32"> We can now modify the existing test for a non-responding contact by checking 
+the pending buffer and eviction count dictionary.&nbsp; The assertions change to 
+this:</p>
+<pre>Assert.IsTrue(dht.PendingContacts.Count == 1, &quot;Expected one pending contact.&quot;);
+Assert.IsTrue(dht.PendingContacts.Contains(nextNewContact), &quot;Expected pending contact to be the 21st contact.&quot;);
+Assert.IsTrue(dht.EvictionCount.Count == 1, &quot;Expected one contact to be pending eviction.&quot;);</pre>
+<p><img border="0" src="unittest.png" width="14" height="32"> We can also add a 
+unit test that verifies that after the contact has had <code>Constants.EVICTION_LIMIT</code> 
+tries, it is evicted and the pending contact set up by the unit test replaced 
+it.&nbsp; The unit test is modified slightly to make sure we try enough times:</p>
+<pre>// Hit the non-responding contact EVICTION_LIMIT times, which will trigger the eviction algorithm.
+Constants.EVICTION_LIMIT.ForEach(() =&gt; bucketList.AddContact(nextNewContact));</pre>
+<p>and then we assert the expected conditions:</p>
+<pre>Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, &quot;Expected 20 contacts in bucket 1.&quot;);
+Assert.IsTrue(dht.PendingContacts.Count == 0, &quot;Pending contact list should now be empty.&quot;);
+Assert.IsFalse(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nonRespondingContact), &quot;Expected bucket to NOT contain non-responding contact.&quot;);
+Assert.IsTrue(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nextNewContact), &quot;Expected bucket to contain new contact.&quot;);
+Assert.IsTrue(dht.EvictionCount.Count == 0, &quot;Expected no contacts to be pending eviction.&quot;);</pre>
 <h2>Putting It Together - A Demo</h2>
 <p>As usual, there's nothing like a visual demo to see what is happening.&nbsp; 
 This demo uses <a href="https://www.codeproject.com/Articles/1136050/FlowSharp">
@@ -4357,16 +4504,6 @@ like this, just about every peer learns about every other peer -- another
 iteration of bucket refreshing results in only a couple more contacts being 
 discovered.</p>
 <h2>Not Implemented</h2>
-<h3>Delayed Eviction (Optimized Contact Accounting) - Discussion</h3>
-<p><font color="#FF00FF">To reduce traffic, Kademlia delays probing contacts 
-until it has useful messages to send them. When a Kademlia node receives an RPC 
-from an unknown contact and the k-bucket for that contact is already full with 
-<i>k</i> entries, the node places the new contact in a replacement cache of 
-nodes eligible to replace stale k-bucket entries. The next time the node queries 
-contacts in the k-bucket, any unresponsive ones can be evicted and replaced with 
-entries in the replacement cache. The replacement cache is kept sorted by time 
-last seen, with the most recently seen entry having the highest priority as a 
-replacement candidate.</font></p>
 <h3>UDP Drop Outs</h3>
 <p><font color="#FF00FF">A related problem is that because Kademlia uses UDP, 
 valid contacts will sometimes fail to respond when network packets are dropped. 

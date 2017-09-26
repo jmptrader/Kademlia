@@ -67,4 +67,10 @@ namespace Clifton.Kademlia
         public IDMismatchException() { }
         public IDMismatchException(string msg) : base(msg) { }
     }
+
+    public class BucketDoesNotContainContactToEvict : Exception
+    {
+        public BucketDoesNotContainContactToEvict() { }
+        public BucketDoesNotContainContactToEvict(string msg) : base(msg) { }
+    }
 }

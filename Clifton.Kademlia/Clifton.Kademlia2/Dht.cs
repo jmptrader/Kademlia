@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Timers;
 
 namespace Clifton.Kademlia
@@ -9,6 +11,8 @@ namespace Clifton.Kademlia
     {
 #if DEBUG       // for unit testing
         public BaseRouter Router { get { return router; } }
+        public List<Contact> PendingContacts { get { return pendingContacts; } }
+        public ConcurrentDictionary<BigInteger, int> EvictionCount { get { return evictionCount; } }
 #endif
 
         public Node Node { get { return node; } }
@@ -32,6 +36,9 @@ namespace Clifton.Kademlia
         protected Timer keyValueRepublishTimer;
         protected Timer originatorRepublishTimer;
         protected Timer expireKeysTimer;
+
+        protected ConcurrentDictionary<BigInteger, int> evictionCount;
+        protected List<Contact> pendingContacts;
 
         /// <summary>
         /// Use this constructor to initialize the stores to the same instance.
@@ -158,7 +165,88 @@ namespace Clifton.Kademlia
         /// </summary>
         public void HandleError(RpcError error, Contact contact)
         {
-            // TODO: IMPLEMENT!
+            // For all errors:
+            int count = AddContactToEvict(contact.ID.Value);
+
+            if (count == Constants.EVICTION_LIMIT)
+            {
+                ReplaceContact(contact);
+            }
+        }
+
+        /// <summary>
+        ///  The contact that did not respond (or had an error) gets n tries before being evicted
+        ///  and replaced with the most recently contact that wants to go into the non-responding contact's kbucket.
+        /// </summary>
+        /// <param name="toEvict">The contact that didn't respond.</param>
+        /// <param name="toReplace">The contact that can replace the non-responding contact.</param>
+        public void DelayEviction(Contact toEvict, Contact toReplace)
+        {
+            // Non-concurrent list needs locking.
+            lock (pendingContacts)
+            {
+                pendingContacts.AddDistinctBy(toReplace, c=>c.ID);
+            }
+
+            BigInteger key = toEvict.ID.Value;
+            int count = AddContactToEvict(key);
+
+            if (count == Constants.EVICTION_LIMIT)
+            {
+                ReplaceContact(toEvict);
+            }
+        }
+
+        protected int AddContactToEvict(BigInteger key)
+        {
+            if (!evictionCount.ContainsKey(key))
+            {
+                evictionCount[key] = 0;
+            }
+
+            int count = evictionCount[key] + 1;
+            evictionCount[key] = count;
+
+            return count;
+        }
+
+        protected void ReplaceContact(Contact toEvict)
+        {
+            KBucket bucket = node.BucketList.GetKBucket(toEvict.ID);
+
+            // Prevent other threads from manipulating the bucket list or buckets.
+            lock (node.BucketList)
+            {
+                EvictContact(bucket, toEvict);
+                ReplaceWithPendingContact(bucket);
+            }
+        }
+
+        protected void EvictContact(KBucket bucket, Contact toEvict)
+        {
+            evictionCount.TryRemove(toEvict.ID.Value, out _);
+            Validate.IsTrue<BucketDoesNotContainContactToEvict>(bucket.Contains(toEvict.ID), "Bucket doesn't contain the contact to be evicted.");
+            bucket.EvictContact(toEvict);
+        }
+
+        /// <summary>
+        /// Find a pending contact that goes into the bucket that now has room.
+        /// </summary>
+        protected void ReplaceWithPendingContact(KBucket bucket)
+        {
+            Contact contact;
+
+            // Non-concurrent list needs locking while we query it.
+            lock (pendingContacts)
+            {
+                contact = pendingContacts.Where(c => node.BucketList.GetKBucket(c.ID) == bucket).OrderBy(c => c.LastSeen).LastOrDefault();
+
+                if (contact != null)
+                {
+                    pendingContacts.Remove(contact);
+                    bucket.AddContact(contact);
+                }
+            }
         }
 
         /// <summary>
@@ -178,9 +266,12 @@ namespace Clifton.Kademlia
 
         protected void FinishInitialization(ID id, IProtocol protocol, BaseRouter router)
         {
+            evictionCount = new ConcurrentDictionary<BigInteger, int>();
+            pendingContacts = new List<Contact>();
             ourId = id;
             ourContact = new Contact(protocol, id);
             node = new Node(ourContact, republishStorage, cacheStorage);
+            node.BucketList.Dht = this;
             this.router = router;
             this.router.Node = node;
             this.router.Dht = this;

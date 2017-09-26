@@ -7,10 +7,12 @@ namespace Clifton.Kademlia
     public class BucketList
     {
         public List<KBucket> Buckets { get { return buckets; } }
+        public Dht Dht { get { return dht; } set { dht = value; } }
 
         protected List<KBucket> buckets;
         protected ID ourID;
         protected Contact ourContact;
+        protected Dht dht;
 
 #if DEBUG       // For unit testing
         public BucketList(ID id, Contact dummyContact)
@@ -74,11 +76,8 @@ namespace Clifton.Kademlia
 
                         if (error.HasError)
                         {
-                            // TODO: Put into DHT's collection of timed out contacts.
-                            // For unit testing, we may not have a DHT!  How do we get the DHT?
-                            // We might want to have this wired up as an event?
-                            kbucket.EvictContact(lastSeenContact);
-                            kbucket.AddContact(contact);
+                            // Null continuation is used because unit tests may not initialize a DHT.
+                            dht?.DelayEviction(lastSeenContact, contact);
                         }
                     }
                 }

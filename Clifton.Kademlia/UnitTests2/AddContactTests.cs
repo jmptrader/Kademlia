@@ -174,13 +174,18 @@ namespace UnitTests2
 			File.WriteAllText("prefixTest.txt", sb.ToString());
 		}
 
+        /// <summary>
+        /// Tests that a non-responding contact puts the new contact into a pending list.
+        /// </summary>
         [TestMethod]
-        public void NonRespondingContactTest()
+        public void NonRespondingContactDelayedEvictionTest()
         {
-            Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
-            ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
+            // Create a DHT so we have an eviction handler.
+            Dht dht = new Dht(ID.Zero, new VirtualProtocol(), () => null, new Router());
+            //Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
+            //((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
 
-            BucketList bucketList = SetupSplitFailure();
+            BucketList bucketList = SetupSplitFailure(dht.Node.BucketList);
 
             Assert.IsTrue(bucketList.Buckets.Count == 2, "Bucket split should have occurred.");
             Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, "Expected 1 contact in bucket 0.");
@@ -194,15 +199,57 @@ namespace UnitTests2
             nonRespondingContact.Protocol = vpUnresponding;
 
             // Setup the next new contact (it can respond.)
-            Contact nextNewContact = new Contact(dummyContact.Protocol, ID.Zero.SetBit(159));
+            Contact nextNewContact = new Contact(dht.Contact.Protocol, ID.Zero.SetBit(159));
 
             bucketList.AddContact(nextNewContact);
 
             Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, "Expected 20 contacts in bucket 1.");
 
             // Verify CanSplit -> Evict happened.
+
+            Assert.IsTrue(dht.PendingContacts.Count == 1, "Expected one pending contact.");
+            Assert.IsTrue(dht.PendingContacts.Contains(nextNewContact), "Expected pending contact to be the 21st contact.");
+            Assert.IsTrue(dht.EvictionCount.Count == 1, "Expected one contact to be pending eviction.");
+        }
+
+        /// <summary>
+        /// Tests that a non-responding contact is evicted after Constant.EVICTION_LIMIT tries.
+        /// </summary>
+        [TestMethod]
+        public void NonRespondingContactEvictedTest()
+        {
+            // Create a DHT so we have an eviction handler.
+            Dht dht = new Dht(ID.Zero, new VirtualProtocol(), () => null, new Router());
+            //Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
+            //((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
+
+            BucketList bucketList = SetupSplitFailure(dht.Node.BucketList);
+
+            Assert.IsTrue(bucketList.Buckets.Count == 2, "Bucket split should have occurred.");
+            Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, "Expected 1 contact in bucket 0.");
+            Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, "Expected 20 contacts in bucket 1.");
+
+            // The bucket is now full.  Pick the first contact, as it is last seen (they are added in chronological order.)
+            Contact nonRespondingContact = bucketList.Buckets[1].Contacts[0];
+
+            // Since the protocols are shared, we need to assign a unique protocol for this node for testing.
+            VirtualProtocol vpUnresponding = new VirtualProtocol(((VirtualProtocol)nonRespondingContact.Protocol).Node, false);
+            nonRespondingContact.Protocol = vpUnresponding;
+
+            // Setup the next new contact (it can respond.)
+            Contact nextNewContact = new Contact(dht.Contact.Protocol, ID.Zero.SetBit(159));
+
+            // Hit the non-responding contact EVICTION_LIMIT times, which will trigger the eviction algorithm.
+            Constants.EVICTION_LIMIT.ForEach(() => bucketList.AddContact(nextNewContact));
+
+            Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, "Expected 20 contacts in bucket 1.");
+
+            // Verify CanSplit -> Evict happened.
+
+            Assert.IsTrue(dht.PendingContacts.Count == 0, "Pending contact list should now be empty.");
             Assert.IsFalse(bucketList.Buckets.SelectMany(b => b.Contacts).Contains(nonRespondingContact), "Expected bucket to NOT contain non-responding contact.");
             Assert.IsTrue(bucketList.Buckets.SelectMany(b => b.Contacts).Contains(nextNewContact), "Expected bucket to contain new contact.");
+            Assert.IsTrue(dht.EvictionCount.Count == 0, "Expected no contacts to be pending eviction.");
         }
 
         /// <summary>
@@ -257,7 +304,7 @@ namespace UnitTests2
             Assert.IsTrue(unseen.Storage.Get(ID.Mid) == valMid, "Expected valMid value to match.");
         }
 
-        protected BucketList SetupSplitFailure()
+        protected BucketList SetupSplitFailure(BucketList bucketList = null)
         {
             // force host node ID to < 2^159 so the node ID is not in the 2^159 ... 2^160 range
             byte[] bhostID = new byte[20];
@@ -266,7 +313,7 @@ namespace UnitTests2
 
             Contact dummyContact = new Contact(new VirtualProtocol(), hostID);
             ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
-            BucketList bucketList = new BucketList(hostID, dummyContact);
+            bucketList = bucketList ?? new BucketList(hostID, dummyContact);
 
             // Also add a contact in this 0 - 2^159 range, arbitrarily something not our host ID.
             // This ensures that only one bucket split will occur after 20 nodes with ID >= 2^159 are added,
