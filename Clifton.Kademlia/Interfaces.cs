@@ -1,27 +1,32 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Numerics;
 
 namespace Clifton.Kademlia
 {
-	public interface IRouter { }
+    public interface IProtocol
+    {
+        RpcError Ping(Contact sender);
+        (List<Contact> contacts, RpcError error) FindNode(Contact sender, ID key);
+        (List<Contact> contacts, string val, RpcError error) FindValue(Contact sender, ID key);
+        RpcError Store(Contact sender, ID key, string val, bool isCached = false, int expirationTimeSec = 0);
+    }
 
-	public interface IStorage
-	{
-		int Entries();
-		bool HasValue(string key);
-		bool TryGetValue(string key, out string val);
-		string Get(string key);
-		void Set(string key, string val);
-	}
+    public interface IStorage : IEnumerable<BigInteger>
+    {
+        bool HasValues { get; }
+        bool Contains(ID key);
+        bool TryGetValue(ID key, out string val);
+        string Get(ID key);
+        string Get(BigInteger key);
+        DateTime GetTimeStamp(BigInteger key);
+        void Set(ID key, string value, int expirationTimeSec = 0);
+        int GetExpirationTimeSec(BigInteger key);
+        void Remove(BigInteger key);
 
-	public interface IAddress
-	{
-		Contact Ping(Contact sender, IAddress recipient, ID randomID);
-		void Store(Contact sender, IAddress recipient, ID randomID, ID keyID, string val);
-		(List<Contact> nodes, string val) FindNode(Contact sender, IAddress recipient, ID randomID, ID toFind);
-		(List<Contact> nodes, string val) FindValue(Contact sender, IAddress recipient, ID randomID, ID keyID);
-	}
+        /// <summary>
+        /// Updates the republish timestamp.
+        /// </summary>
+        void Touch(BigInteger key);
+    }
 }

@@ -1,4 +1,6 @@
-﻿using System;
+﻿// #define IGNORE_SLOW_TESTS
+
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
@@ -81,8 +83,11 @@ namespace UnitTests2
             Assert.IsFalse(bucketList.Buckets[1].Contacts.Contains(newContact), "Expected new contact NOT to replace an older contact.");
 		}
 
-		[TestMethod, Ignore]
-		public void RandomIDDistributionTest()
+		[TestMethod]
+#if IGNORE_SLOW_TESTS
+        [Ignore]
+#endif
+        public void RandomIDDistributionTest()
 		{
             Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
             ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
@@ -98,7 +103,9 @@ namespace UnitTests2
 				3200.ForEach(() =>
 				{
 					rnd.NextBytes(buffer);
-					bucketList.AddContact(new Contact(null, new ID(buffer)));
+                    Contact contact = new Contact(new VirtualProtocol(), new ID(buffer));
+                    ((VirtualProtocol)contact.Protocol).Node = new Node(contact, new VirtualStorage());
+                    bucketList.AddContact(contact);
 				});
 
 				int contacts = bucketList.Buckets.Sum(b => b.Contacts.Count);
@@ -109,8 +116,11 @@ namespace UnitTests2
 			Assert.IsTrue(contactsAdded.Select(n=>(double)n).StdDev().ApproximatelyEquals(10, 2), "Bad distribution");
 		}
 
-		[TestMethod, Ignore]
-		public void RandomPrefixDistributionTest()
+		[TestMethod]
+#if IGNORE_SLOW_TESTS
+        [Ignore]
+#endif
+        public void RandomPrefixDistributionTest()
 		{
             Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
             ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
@@ -118,11 +128,23 @@ namespace UnitTests2
 
 			100.ForEach(() =>
 			{
-				BucketList bucketList = new BucketList(ID.RandomIDInKeySpace, dummyContact);
-				3200.ForEach(() => bucketList.AddContact(new Contact(null, ID.RandomIDInKeySpace)));
-				int contacts = bucketList.Buckets.Sum(b => b.Contacts.Count);
-				contactsAdded.Add(contacts);
-			});
+                ID ourID = ID.RandomIDInKeySpace;
+                BucketList bucketList = new BucketList(ourID, dummyContact);
+                3200.ForEach(() =>
+                {
+                    ID id = ID.RandomIDInKeySpace;
+
+                    if (id != ourID)
+                    {
+                        Contact contact = new Contact(new VirtualProtocol(), id);
+                        ((VirtualProtocol)contact.Protocol).Node = new Node(contact, new VirtualStorage());
+                        bucketList.AddContact(contact);
+                    }
+                });
+
+                int contacts = bucketList.Buckets.Sum(b => b.Contacts.Count);
+                contactsAdded.Add(contacts);
+            });
 
 			double avg = contactsAdded.Average();
 			double stdev = contactsAdded.Select(n => (double)n).StdDev();
@@ -130,8 +152,11 @@ namespace UnitTests2
 			Assert.IsTrue(stdev.ApproximatelyEquals(800, 100), "Bad distribution: stdev = " + stdev);
 		}
 
-		[TestMethod, Ignore]
-		public void DistributionTestForEachPrefix()
+		[TestMethod]
+#if IGNORE_SLOW_TESTS
+        [Ignore]
+#endif
+        public void DistributionTestForEachPrefix()
 		{
             Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
             ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
@@ -146,7 +171,9 @@ namespace UnitTests2
 				3200.ForEach(() =>
 				{
 					rnd.NextBytes(buffer);
-					bucketList.AddContact(new Contact(null, new ID(buffer)));
+                    Contact contact = new Contact(new VirtualProtocol(), new ID(buffer));
+                    ((VirtualProtocol)contact.Protocol).Node = new Node(contact, new VirtualStorage());
+                    bucketList.AddContact(contact);
 				});
 
 				int contacts = bucketList.Buckets.Sum(b => b.Contacts.Count);
@@ -156,8 +183,11 @@ namespace UnitTests2
 			File.WriteAllText("prefixTest.txt", sb.ToString());
 		}
 
-		[TestMethod, Ignore]
-		public void DistributionTestForEachPrefixWithRandomPrefixDistributedContacts()
+		[TestMethod]
+#if IGNORE_SLOW_TESTS
+        [Ignore]
+#endif
+        public void DistributionTestForEachPrefixWithRandomPrefixDistributedContacts()
 		{
             Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
             ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
@@ -166,7 +196,9 @@ namespace UnitTests2
 			160.ForEach((i) =>
 			{
 				BucketList bucketList = new BucketList(new ID(BigInteger.Pow(new BigInteger(2), i)), dummyContact);
-				3200.ForEach(() => bucketList.AddContact(new Contact(null, ID.RandomIDInKeySpace)));
+                Contact contact = new Contact(new VirtualProtocol(), ID.RandomIDInKeySpace);
+                ((VirtualProtocol)contact.Protocol).Node = new Node(contact, new VirtualStorage());
+                3200.ForEach(() => bucketList.AddContact(contact));
 				int contacts = bucketList.Buckets.Sum(b => b.Contacts.Count);
 				sb.Append(i + "," + contacts + CRLF);
 			});
@@ -244,7 +276,7 @@ namespace UnitTests2
 
             Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, "Expected 20 contacts in bucket 1.");
 
-            // Verify CanSplit -> Evict happened.
+            // Verify CanSplit -> Pending eviction happened.
 
             Assert.IsTrue(dht.PendingContacts.Count == 0, "Pending contact list should now be empty.");
             Assert.IsFalse(bucketList.Buckets.SelectMany(b => b.Contacts).Contains(nonRespondingContact), "Expected bucket to NOT contain non-responding contact.");

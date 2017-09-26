@@ -4,20 +4,20 @@ namespace Clifton.Kademlia
 {
 	public static class Validate
 	{
-		public static void IsTrue(bool b, string errorMessage)
+		public static void IsTrue<T>(bool b, string errorMessage) where T : Exception, new()
 		{
-			if (!b)
-			{
-				throw new Exception(errorMessage);
-			}
+            if (!b)
+            {
+                throw (T)Activator.CreateInstance(typeof(T), new object[] { errorMessage });
+            }
 		}
 
-		public static void IsFalse(bool b, string errorMessage)
-		{
+		public static void IsFalse<T>(bool b, string errorMessage) where T : Exception, new()
+        {
 			if (b)
 			{
-				throw new Exception(errorMessage);
-			}
-		}
+                throw (T)Activator.CreateInstance(typeof(T), new object[] { errorMessage });
+            }
+        }
 	}
 }

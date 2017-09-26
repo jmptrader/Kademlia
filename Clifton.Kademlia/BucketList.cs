@@ -1,138 +1,142 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Numerics;
+﻿using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 
 namespace Clifton.Kademlia
 {
-	public class BucketList
-	{
-        // used for unit testing, should be read-only list and read-only entries.
+    public class BucketList
+    {
         public List<KBucket> Buckets { get { return buckets; } }
+        public Dht Dht { get { return dht; } set { dht = value; } }
 
-		protected List<KBucket> buckets;
+        protected List<KBucket> buckets;
         protected ID ourID;
+        protected Contact ourContact;
+        protected Dht dht;
 
-		public BucketList(ID ourID)
-		{
-            this.ourID = ourID;
-			buckets = new List<KBucket>();
+#if DEBUG       // For unit testing
+        public BucketList(ID id, Contact dummyContact)
+        {
+            ourID = id;
+            ourContact = dummyContact;
+            buckets = new List<KBucket>();
 
             // First kbucket has max range.
             buckets.Add(new KBucket());
-		}
+        }
+#endif
 
-        public void AddContact(Contact contact, Func<Contact, bool> discardHead)
+        /// <summary>
+        /// Initialize the bucket list with our host ID and create a single bucket for the full ID range.
+        /// </summary>
+        /// <param name="ourID"></param>
+        public BucketList(Contact ourContact)
         {
-            // A node must never put its own node ID into a bucket as a contact.
-            if (ourID != contact.NodeID)
-            {
-                KBucket kbucket = GetKBucket(contact.NodeID);
+            this.ourContact = ourContact;
+            ourID = ourContact.ID;
+            buckets = new List<KBucket>();
 
-                if (kbucket.Exists(contact.NodeID))
+            // First kbucket has max range.
+            buckets.Add(new KBucket());
+        }
+
+        /// <summary>
+        /// Add a contact if possible, based on the algorithm described
+        /// in sections 2.2, 2.4 and 4.2
+        /// </summary>
+        public void AddContact(Contact contact)
+        {
+            Validate.IsFalse<OurNodeCannotBeAContactException>(ourID == contact.ID, "Cannot add ourselves as a contact!");
+
+            lock (this)
+            {
+                contact.Touch();            // Update the LastSeen to now.
+                KBucket kbucket = GetKBucket(contact.ID);
+
+                if (kbucket.Contains(contact.ID))
                 {
-                    kbucket.MoveToTail(contact);
+                    // Replace the existing contact, updating the network info and LastSeen timestamp.
+                    kbucket.ReplaceContact(contact);
                 }
                 else if (kbucket.IsBucketFull)
                 {
                     if (CanSplit(kbucket))
                     {
+                        // Split the bucket and try again.
                         (KBucket k1, KBucket k2) = kbucket.Split();
-                        int idx = GetKBucketIndex(contact.NodeID);
+                        int idx = GetKBucketIndex(contact.ID);
                         buckets[idx] = k1;
                         buckets.Insert(idx + 1, k2);
-
-                        // Recurse until we can't.
-                        AddContact(contact, discardHead);
+                        AddContact(contact);
                     }
                     else
                     {
-                        kbucket.AddContact(contact, discardHead);
+                        Contact lastSeenContact = kbucket.Contacts.OrderBy(c => c.LastSeen).First();
+                        RpcError error = lastSeenContact.Protocol.Ping(ourContact);
+
+                        if (error.HasError)
+                        {
+                            // Null continuation is used because unit tests may not initialize a DHT.
+                            dht?.DelayEviction(lastSeenContact, contact);
+                        }
                     }
                 }
                 else
                 {
+                    // Bucket isn't full, so just add the contact.
                     kbucket.AddContact(contact);
                 }
             }
         }
 
-        public int GetKBucketIndex(ID otherID)
+        public KBucket GetKBucket(ID otherID)
+        {
+            return buckets[GetKBucketIndex(otherID)];
+		}
+
+        public KBucket GetKBucket(BigInteger otherID)
+        {
+            return buckets[GetKBucketIndex(otherID)];
+        }
+
+        /// <summary>
+        /// Returns true if the contact, by ID, exists in our bucket list.
+        /// </summary>
+        public bool ContactExists(Contact sender)
+        {
+            return Buckets.SelectMany(b => b.Contacts).Any(c => c.ID == sender.ID);
+        }
+
+        protected virtual bool CanSplit(KBucket kbucket)
+        {
+            return kbucket.HasInRange(ourID) || ((kbucket.Depth() % Constants.B) != 0);
+        }
+
+        protected int GetKBucketIndex(ID otherID)
+		{
+			return buckets.FindIndex(b => b.HasInRange(otherID));
+		}
+
+        protected int GetKBucketIndex(BigInteger otherID)
         {
             return buckets.FindIndex(b => b.HasInRange(otherID));
         }
 
-        public KBucket GetKBucket(ID otherID)
+        /// <summary>
+        /// Brute force distance lookup of all known contacts, sorted by distance, then we take at most k (20) of the closest.
+        /// </summary>
+        /// <param name="toFind">The ID for which we want to find close contacts.</param>
+        /// <param name="exclude">The ID to exclude (the requestor's ID)</param>
+        public List<Contact> GetCloseContacts(ID key, ID exclude)
         {
-            return buckets[buckets.FindIndex(b => b.HasInRange(otherID))];
-        }
-
-        protected bool CanSplit(KBucket kbucket)
-        {
-            return kbucket.High - kbucket.Low >= 2;
-            // return kbucket.HasInRange(ourID) || ((kbucket.Depth() % 5) != 0);
-        }
-
-		/// <summary>
-		/// Algorithm idea from https://github.com/zencoders/sambatyon/blob/master/Kademlia/Kademlia/BucketList.cs, starting on line 208.
-		/// Brute force distance lookup of all known contacts, sorted by distance, then we take at most k (20) of the closest.
-		/// </summary>
-		/// <param name="toFind">The ID for which we want to find close contacts.</param>
-		/// <param name="exclude">The ID to exclude (the requestor's ID)</param>
-		public List<Contact> GetCloseContacts(ID toFind, ID exclude)
-		{
-            /*
-            int idx = GetKBucketIndex(toFind);
-            int idxDecreasing = idx;        // we include our own bucket's contacts except the excluded ID.
-            int idxIncreasing = idx + 1;
-            bool pingpong = false;
-
-            List<Contact> contacts = new List<Contact>();
-            bool didWork = true;
-
-            while (contacts.Count < Constants.K && didWork)
-            {
-                didWork = false;
-
-                if (pingpong && idxIncreasing < buckets.Count)
-                {
-                    contacts.AddRange(buckets[idxIncreasing++].Contacts);
-                    didWork = true;
-                }
-
-                if (!pingpong && idxDecreasing >= 0)
-                {
-                    contacts.AddRange(buckets[idxDecreasing--].Contacts);
-                    didWork = true;
-                }
-
-                pingpong = !pingpong;
-            }
-
-            return contacts.ExcludeBy(c => c.NodeID.Value == exclude.Value).OrderBy(c => BigInteger.Abs(c.NodeID.Value - ourID.Value)).ToList();
-            */
-            
             var contacts = buckets.
                 SelectMany(b => b.Contacts).
-                Where(c => c.NodeID != exclude).
-                Select(c => new { contact = c, distance = c.NodeID ^ toFind }).
+                Where(c => c.ID != exclude).
+                Select(c => new { contact = c, distance = c.ID ^ key }).
                 OrderBy(d => d.distance).
                 Take(Constants.K);
 
-             return contacts.Select(c => c.contact).ToList();
-        }
-
-        /// <summary>
-        /// For unit testing...
-        /// </summary>
-        /// <returns>A list of tuples representing the bucket index and the count of contacts in each bucket.</returns>
-        public List<(int idx, int count)> GetBucketContactCounts()
-        {
-            List<(int idx, int count)> contactCounts = new List<(int idx, int count)>();
-
-            buckets.Where(b=>b.Contacts.Count > 0).ForEachWithIndex((b, n) => contactCounts.Add((n, b.Contacts.Count)));
-
-            return contactCounts;
+            return contacts.Select(c => c.contact).ToList();
         }
     }
 }

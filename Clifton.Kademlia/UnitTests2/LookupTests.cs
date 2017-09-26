@@ -1,4 +1,6 @@
-﻿using System;
+﻿// #define IGNORE_SLOW_TESTS
+
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Linq;
@@ -134,7 +136,10 @@ namespace UnitTests2
             Assert.IsTrue(router.FartherContacts.Count == Constants.K, "All contacts should be farther.");
         }
 
-        [TestMethod, Ignore]
+        [TestMethod]
+#if IGNORE_SLOW_TESTS
+        [Ignore]
+#endif
         public void GetCloserNodesTest()
         {
             // Seed with different random values
@@ -157,7 +162,10 @@ namespace UnitTests2
             });
         }
 
-        [TestMethod, Ignore]
+        [TestMethod]
+#if IGNORE_SLOW_TESTS
+        [Ignore]
+#endif
         public void LookupTest()
         {
             // Seed with different random values
@@ -191,7 +199,13 @@ namespace UnitTests2
             router = new Router(new Node(new Contact(null, ID.RandomID), new VirtualStorage()));
 
             nodes = new List<Node>();
-            100.ForEach(() => nodes.Add(new Node(new Contact(null, ID.RandomID), new VirtualStorage())));
+            100.ForEach(() =>
+            {
+                Contact contact = new Contact(new VirtualProtocol(), ID.RandomID);
+                Node node = new Node(contact, new VirtualStorage());
+                ((VirtualProtocol)contact.Protocol).Node = node;
+                nodes.Add(node);
+            });
 
             // Fixup protocols:
             nodes.ForEach(n => n.OurContact.Protocol = new VirtualProtocol(n));

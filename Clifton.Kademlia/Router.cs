@@ -1,126 +1,145 @@
-﻿using System;
+﻿// #define TRY_CLOSEST_BUCKET
+
+using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Linq;
+using System.Threading;
 
 namespace Clifton.Kademlia
 {
-    public class Router
+    public class Router : BaseRouter
     {
-		public (List<Contact> contacts, string val) Lookup(ID id, Node ourNode, Func<IAddress, Contact, IAddress, ID, ID, (List<Contact>, string)> finder)
-		{
-			BucketList bucketList = ourNode.BucketList;
+#if DEBUG   // Used for unit testing when creating the DHT.  The DHT sets the node.
+        public Router()
+        {
+        }
+#endif
 
-            // Take alpha close contacts, excluding ourselves (we should never be in our own bucket list anyways.)
-            // The first alpha contacts selected are used to create a shortlist for the search.
-            List<Contact> shortList = bucketList.GetCloseContacts(id, ourNode.OurContact.NodeID).Take(Constants.ALPHA).ToList();
-            List<Contact> allContacts = new List<Contact>(shortList);
+        public Router(Node node)
+        {
+            this.node = node;
+        }
 
-			// Some work to do?
-			if (shortList.Count > 0)
-			{
-				List<Contact> successfulContacts = new List<Contact>();
-				bool hasNewCloseContact = false;
-				ID distance;
-                distance = shortList[0].NodeID ^ id;
-                List<Contact> workingShortList = new List<Contact>(shortList);
+        public override (bool found, List<Contact> contacts, Contact foundBy, string val) Lookup(
+                    ID key,
+                    Func<ID, Contact, (List<Contact> contacts, Contact foundBy, string val)> rpcCall,
+                    bool giveMeAll = false)
+        {
+            bool haveWork = true;
+            List<Contact> ret = new List<Contact>();
+            List<Contact> contactedNodes = new List<Contact>();
+            List<Contact> closerContacts = new List<Contact>();
+            List<Contact> fartherContacts = new List<Contact>();
+            List<Contact> closerUncontactedNodes = new List<Contact>();
+            List<Contact> fartherUncontactedNodes = new List<Contact>();
 
-                do
+#if TRY_CLOSEST_BUCKET
+            // Spec: The lookup initiator starts by picking a nodes from its closest non-empty k-bucket
+            KBucket bucket = FindClosestNonEmptyKBucket(key);
+
+            // Not in spec -- sort by the closest nodes in the closest bucket.
+            List<Contact> allNodes = node.BucketList.GetCloseContacts(key, node.OurContact.ID).Take(Constants.K).ToList(); 
+            List<Contact> nodesToQuery = allNodes.Take(Constants.ALPHA).ToList();
+            fartherContacts.AddRange(allNodes.Skip(Constants.ALPHA).Take(Constants.K - Constants.ALPHA));
+#else
+#if DEBUG
+            List<Contact> allNodes = node.BucketList.GetKBucket(key).Contacts.Take(Constants.K).ToList();
+#else
+            // This is a bad way to get a list of close contacts with virtual nodes because we're always going to get the closest nodes right at the get go.
+            List<Contact> allNodes = node.BucketList.GetCloseContacts(key, node.OurContact.ID).Take(Constants.K).ToList(); 
+#endif
+            List<Contact> nodesToQuery = allNodes.Take(Constants.ALPHA).ToList();
+
+            // Also not explicitly in spec:
+            // Any closer node in the alpha list is immediately added to our closer contact list, and
+            // any farther node in the alpha list is immediately added to our farther contact list.
+            closerContacts.AddRange(nodesToQuery.Where(n => (n.ID ^ key) < (node.OurContact.ID ^ key)));
+            fartherContacts.AddRange(nodesToQuery.Where(n => (n.ID ^ key) >= (node.OurContact.ID ^ key)));
+
+            // The remaining contacts not tested yet can be put here.
+            fartherContacts.AddRange(allNodes.Skip(Constants.ALPHA).Take(Constants.K - Constants.ALPHA));
+#endif
+
+            // We're about to contact these nodes.
+            contactedNodes.AddRangeDistinctBy(nodesToQuery, (a, b) => a.ID == b.ID);
+
+            // Spec: The initiator then sends parallel, asynchronous FIND_NODE RPCS to the a nodes it has chosen, 
+            // a is a system-wide concurrency parameter, such as 3.
+
+            var queryResult = Query(key, nodesToQuery, rpcCall, closerContacts, fartherContacts);
+
+            if (queryResult.found)
+            {
+#if DEBUG       // For unit testing.
+                CloserContacts = closerContacts;
+                FartherContacts = fartherContacts;
+#endif
+                return queryResult;
+            }
+
+            // Add any new closer contacts to the list we're going to return.
+            ret.AddRangeDistinctBy(closerContacts, (a, b) => a.ID == b.ID);
+
+            // Spec: The lookup terminates when the initiator has queried and gotten responses from the k closest nodes it has seen.
+            while (ret.Count < Constants.K && haveWork)
+            {
+                closerUncontactedNodes = closerContacts.Except(contactedNodes).ToList();
+                fartherUncontactedNodes = fartherContacts.Except(contactedNodes).ToList();
+                bool haveCloser = closerUncontactedNodes.Count > 0;
+                bool haveFarther = fartherUncontactedNodes.Count > 0;
+
+                haveWork = haveCloser || haveFarther;
+
+                // Spec:  Of the k nodes the initiator has heard of closest to the target...
+                if (haveCloser)
                 {
-                    var cvals = LookupCloserContacts(id, ourNode, workingShortList, successfulContacts, finder);
 
-					if (cvals.contacts == null)
-					{
-						return (null, cvals.val);
-					}
+                    // Spec: ...it picks a that it has not yet queried and resends the FIND_NODE RPC to them. 
+                    var newNodesToQuery = closerUncontactedNodes.Take(Constants.ALPHA).ToList();
 
-					List<Contact> newContacts = cvals.contacts;
-                    allContacts.AddRangeDistinct(newContacts, (a, b) => a.NodeID == b.NodeID);
+                    // We're about to contact these nodes.
+                    contactedNodes.AddRangeDistinctBy(newNodesToQuery, (a, b) => a.ID == b.ID);
 
-                    // The node then fills the shortlist with contacts from the replies received. 
-                    shortList.AddRangeDistinct(newContacts, (a, b) => a.NodeID == b.NodeID);
-                    shortList = shortList.OrderBy(c => c.NodeID ^ id).ToList();
+                    queryResult = Query(key, newNodesToQuery, rpcCall, closerContacts, fartherContacts);
 
-                    // From the shortlist it selects another alpha contacts.
-                    workingShortList = new List<Contact>(shortList);
-
-                    // The only condition for this selection is that they have not already been contacted.
-                    workingShortList.RemoveRange(successfulContacts, (a, b) => a.NodeID == b.NodeID);
-                    workingShortList = workingShortList.OrderBy(c => c.NodeID ^ id).Take(Constants.ALPHA).ToList();         // sort by distance!
-
-                    // Each such parallel search updates closestNode, the closest node seen so far.
-                    // TODO: Make this parallel!
-                    hasNewCloseContact = (shortList[0].NodeID ^ id) < distance;
-
-                    if (hasNewCloseContact)
+                    if (queryResult.found)
                     {
-                        distance = shortList[0].NodeID ^ id;
+#if DEBUG       // For unit testing.
+                        CloserContacts = closerContacts;
+                        FartherContacts = fartherContacts;
+#endif
+                        return queryResult;
                     }
-                    else
+                }
+                else if (haveFarther)
+                {
+                    var newNodesToQuery = fartherUncontactedNodes.Take(Constants.ALPHA).ToList();
+
+                    // We're about to contact these nodes.
+                    contactedNodes.AddRangeDistinctBy(fartherUncontactedNodes, (a, b) => a.ID == b.ID);
+
+                    queryResult = Query(key, newNodesToQuery, rpcCall, closerContacts, fartherContacts);
+
+                    if (queryResult.found)
                     {
-                        // If a cycle doesn't find a closer node, if closestNode is unchanged, 
-                        // then the initiating node sends a FIND_* RPC to each of the k closest nodes that it has not already queried.
-                        workingShortList = new List<Contact>(allContacts);
-                        workingShortList.RemoveRange(successfulContacts);
-                        workingShortList = workingShortList.Take(Constants.K).ToList();
+#if DEBUG       // For unit testing.
+                        CloserContacts = closerContacts;
+                        FartherContacts = fartherContacts;
+#endif
+                        return queryResult;
                     }
+                }
+            }
 
-                    // Once again a FIND_* RPC is sent to each in parallel.
+#if DEBUG       // For unit testing.
+            CloserContacts = closerContacts;
+            FartherContacts = fartherContacts;
+#endif
 
-                    // The sequence of parallel searches is continued until either no node in the sets returned is closer 
-                    // than the closest node already seen or the initiating node has accumulated k probed 
-                    // and known to be active contacts.
-                } while ((!hasNewCloseContact || shortList.Count < Constants.K) && workingShortList.Count > 0);
-			}
-
-			// Return at most k contacts.
-			return (shortList.Take(Constants.K).ToList(), null);
-		}
-
-		protected (List<Contact> contacts, string val) LookupCloserContacts(
-			ID id, 
-			Node ourNode, 
-			List<Contact> workingShortList, 
-			List<Contact> successfulContacts, 
-			Func<IAddress, Contact, IAddress, ID, ID, (List<Contact>, string)> finder)
-		{
-			List<Contact> unsucessfulContacts = new List<Contact>();
-			string val = null;
-
-			// The known closest node is the first entry.
-			List<Contact> newContacts = new List<Contact>();
-
-			// The node then sends parallel, asynchronous FIND_* RPCs to the alpha contacts in the shortlist. 
-			// Each contact, if it is live, should normally return k triples. 
-			// If any of the alpha contacts fails to reply, it is removed from the shortlist, at least temporarily.
-			foreach(var c in workingShortList)
-			{
-				(List<Contact> contacts, string val) cval = finder(ourNode.OurContact.Address, ourNode.OurContact, c.Address, ID.RandomID(), id);
-
-				if (cval.contacts == null)
-				{
-					return (null, cval.val);
-				}
-
-				List<Contact> targetContacts = cval.contacts;
-
-				// Let's assume that failure to contact a node results in a null.
-				if (targetContacts != null)
-				{
-					successfulContacts.Add(c);
-
-					// Add the nodes it returns to the new contacts list.
-					newContacts.AddRangeDistinct(targetContacts, (a, b) => a.NodeID == b.NodeID);
-				}
-				else
-				{
-					unsucessfulContacts.Add(c);
-				}
-			};
-
-            // If any of the alpha contacts fails to reply, it is removed from the shortlist, at least temporarily.
-            workingShortList.RemoveRange(unsucessfulContacts); // These are our references
-
-            return (newContacts, val);
-		}
-    }
+            // Spec (sort of): Return max(k) closer nodes, sorted by distance.
+            // For unit testing, giveMeAll can be true so that we can match against our alternate way of getting closer contacts.
+            return (false, (giveMeAll ? ret : ret.Take(Constants.K).OrderBy(c => c.ID ^ key).ToList()), null, null);
+        }
+   }
 }

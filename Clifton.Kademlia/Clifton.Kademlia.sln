@@ -1,11 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.26430.6
+VisualStudioVersion = 15.0.26430.16
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clifton.Kademlia", "Clifton.Kademlia.csproj", "{09B2544A-C451-43CF-8BF0-7229601CF27B}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clifton.Kademlia2", "Clifton.Kademlia2\Clifton.Kademlia2.csproj", "{CACAE687-6109-41F8-A707-D35B4242CCD7}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnitTests2", "UnitTests2\UnitTests2.csproj", "{25E2A6A3-35F3-4FD2-9854-A959A3FB3EB6}"
 EndProject
@@ -20,11 +18,8 @@ Global
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{09B2544A-C451-43CF-8BF0-7229601CF27B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{09B2544A-C451-43CF-8BF0-7229601CF27B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{09B2544A-C451-43CF-8BF0-7229601CF27B}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{CACAE687-6109-41F8-A707-D35B4242CCD7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{CACAE687-6109-41F8-A707-D35B4242CCD7}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{CACAE687-6109-41F8-A707-D35B4242CCD7}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{CACAE687-6109-41F8-A707-D35B4242CCD7}.Release|Any CPU.Build.0 = Release|Any CPU
 		{25E2A6A3-35F3-4FD2-9854-A959A3FB3EB6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{25E2A6A3-35F3-4FD2-9854-A959A3FB3EB6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{25E2A6A3-35F3-4FD2-9854-A959A3FB3EB6}.Release|Any CPU.ActiveCfg = Release|Any CPU

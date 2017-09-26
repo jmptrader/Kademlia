@@ -42,21 +42,27 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BaseRouter.cs" />
     <Compile Include="BucketList.cs" />
+    <Compile Include="CommonRequest.cs" />
     <Compile Include="Constants.cs" />
     <Compile Include="Contact.cs" />
+    <Compile Include="ContactQueueItem.cs" />
     <Compile Include="Dht.cs" />
+    <Compile Include="Exceptions.cs" />
     <Compile Include="ExtensionMethods.cs" />
+    <Compile Include="FindResult.cs" />
     <Compile Include="ID.cs" />
-    <Compile Include="Implementations\InMemoryNodeAddress.cs" />
-    <Compile Include="Implementations\InMemoryStorage.cs" />
-    <Compile Include="Implementations\UdpAddress.cs" />
     <Compile Include="Interfaces.cs" />
     <Compile Include="KBucket.cs" />
     <Compile Include="Node.cs" />
-    <Compile Include="Router.cs" />
+    <Compile Include="ParallelRouter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Router.cs" />
+    <Compile Include="RpcError.cs" />
     <Compile Include="Validate.cs" />
+    <Compile Include="VirtualProtocol.cs" />
+    <Compile Include="VirtualStorage.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

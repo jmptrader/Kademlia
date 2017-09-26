@@ -53,9 +53,9 @@
     <Compile Include="TcpSubnetServer.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Clifton.Kademlia2\Clifton.Kademlia2.csproj">
-      <Project>{cacae687-6109-41f8-a707-d35b4242ccd7}</Project>
-      <Name>Clifton.Kademlia2</Name>
+    <ProjectReference Include="..\Clifton.Kademlia.csproj">
+      <Project>{09b2544a-c451-43cf-8bf0-7229601cf27b}</Project>
+      <Name>Clifton.Kademlia</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

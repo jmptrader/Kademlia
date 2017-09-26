@@ -1,83 +1,176 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Clifton.Kademlia
 {
-	public class Node
-	{
-		// TODO: Create read-only version of these or otherwise rework to avoid getters that can change the contents.
-		public Contact OurContact { get; }
-		public BucketList BucketList { get { return bucketList; } }
-		public IStorage Storage { get; set; }
+    public class Node
+    {
+        public Contact OurContact { get { return ourContact; } }
+        public BucketList BucketList { get { return bucketList; } }
+        public IStorage Storage { get { return storage; } }
+        public IStorage CacheStorage { get { return cacheStorage; } }
 
-		protected BucketList bucketList;
+        protected Contact ourContact;
+        protected BucketList bucketList;
+        protected IStorage storage;
+        protected IStorage cacheStorage;
 
-		protected Node()
-		{
-		}
-
-		public Node(Contact us)
-		{
-			OurContact = us;
-            bucketList = new BucketList(us.NodeID);
+        protected Node()
+        {
         }
 
-        public Node(IAddress address, ID nodeID) : this()
-		{
-			OurContact = new Contact() { Address = address, NodeID = nodeID };
-            bucketList = new BucketList(nodeID);
+        /// <summary>
+        /// If cache storage is not explicity provided, we use an in-memory virtual storage.
+        /// </summary>
+        public Node(Contact contact, IStorage storage, IStorage cacheStorage = null)
+        {
+            ourContact = contact;
+            bucketList = new BucketList(contact);
+            this.storage = storage;
+            this.cacheStorage = cacheStorage;
+
+            if (cacheStorage == null)
+            {
+                this.cacheStorage = new VirtualStorage();
+            }
         }
 
-        public void SimpleRegistration(Contact sender)
-		{
-			bucketList.AddContact(sender, (_) => false);
-		}
+        // ======= Server Entry Points =======
 
-		public Contact Ping(Contact sender)
-		{
-			SimpleRegistration(sender);
+        public object ServerPing(CommonRequest request)
+        {
+            Ping(new Contact(null, new ID(request.Sender)));
 
-			return OurContact;
-		}
+            return new { RandomID = request.RandomID };
+        }
 
-		public void Store(Contact sender, ID keyID, string val)
-		{
-			bucketList.AddContact(sender, (_) => false);
-			Storage.Set(keyID.ToString(), val);
-		}
+        public object ServerStore(CommonRequest request)
+        {
+            Store(new Contact(null, new ID(request.Sender)), new ID(request.Key), request.Value, request.IsCached, request.ExpirationTimeSec);
 
-		/// <summary>
-		/// From the spec: FindNode takes a 160-bit ID as an argument. The recipient of the RPC returns (IP address, UDP port, Node ID) triples 
-		/// for the k nodes it knows about closest to the target ID. These triples can come from a single k-bucket, or they may come from 
-		/// multiple k-buckets if the closest k-bucket is not full. In any case, the RPC recipient must return k items (unless there are 
-		/// fewer than k nodes in all its k-buckets combined, in which case it returns every node it knows about).
-		/// </summary>
-		/// <returns></returns>
-		public (List<Contact> nodes, string val) FindNode(Contact sender, ID toFind)
-		{
-            Validate.IsFalse(sender.NodeID == OurContact.NodeID, "sender should not be ourself!");
-			bucketList.AddContact(sender, (_) => false);
-			List<Contact> contacts = bucketList.GetCloseContacts(toFind, sender.NodeID);
+            return new { RandomID = request.RandomID };
+        }
 
-			return (contacts, null);
-		}
+        public object ServerFindNode(CommonRequest request)
+        {
+            var (contacts, val) = FindNode(new Contact(null, new ID(request.Sender)), new ID(request.Key));
 
-		/// <summary>
-		/// Returns either a list of close contacts or a the value, if the node's storage contains the value for the key.
-		/// </summary>
-		public (List<Contact> nodes, string val) FindValue(Contact sender, ID keyID)
-		{
-			List<Contact> contacts = null;
-			string val = null;
+            return new { Contacts = contacts.Select(c => c.ID.Value).ToList(), RandomID = request.RandomID };
+        }
 
-			bucketList.AddContact(sender, (_) => false);
+        public object ServerFindValue(CommonRequest request)
+        {
+            var (contacts, val) = FindValue(new Contact(null, new ID(request.Sender)), new ID(request.Key));
 
-			if (!Storage.TryGetValue(keyID.ToString(), out val))
-			{
-				contacts = bucketList.GetCloseContacts(keyID, sender.NodeID);
-			}
+            return new { Contacts = contacts?.Select(c => c.ID.Value)?.ToList(), RandomID = request.RandomID, Value = val };
+        }
 
-			return (contacts, val);
-		}
-	}
+        // ======= ======= ======= ======= =======
+
+        /// <summary>
+        /// Someone is pinging us.  Register the contact and respond.
+        /// </summary>
+        public Contact Ping(Contact sender)
+        {
+            Validate.IsFalse<SendingQueryToSelfException>(sender.ID == ourContact.ID, "Sender should not be ourself!");
+            SendKeyValuesToNewContact(sender);
+            bucketList.AddContact(sender);
+
+            return ourContact;
+        }
+
+        /// <summary>
+        /// Store a key-value pair in the republish or cache storage, updating the contact if it's not us.
+        /// </summary>
+        public void Store(Contact sender, ID key, string val, bool isCached = false, int expirationTimeSec = 0)
+        {
+            Validate.IsFalse<SendingQueryToSelfException>(sender.ID == ourContact.ID, "Sender should not be ourself!");
+
+            if (isCached)
+            {
+                cacheStorage.Set(key, val, expirationTimeSec);
+            }
+            else
+            {
+                SendKeyValuesToNewContact(sender);
+                bucketList.AddContact(sender);
+
+                storage.Set(key, val, Constants.EXPIRATION_TIME_SECONDS);
+            }
+        }
+
+        /// <summary>
+        /// From the spec: FindNode takes a 160-bit ID as an argument. The recipient of the RPC returns (IP address, UDP port, Node ID) triples 
+        /// for the k nodes it knows about closest to the target ID. These triples can come from a single k-bucket, or they may come from 
+        /// multiple k-buckets if the closest k-bucket is not full. In any case, the RPC recipient must return k items (unless there are 
+        /// fewer than k nodes in all its k-buckets combined, in which case it returns every node it knows about).
+        /// </summary>
+        /// <returns></returns>
+        public (List<Contact> contacts, string val) FindNode(Contact sender, ID key)
+        {
+            Validate.IsFalse<SendingQueryToSelfException>(sender.ID == ourContact.ID, "Sender should not be ourself!");
+            SendKeyValuesToNewContact(sender);
+            bucketList.AddContact(sender);
+
+            // Exclude sender.
+            var contacts = bucketList.GetCloseContacts(key, sender.ID);
+
+            return (contacts, null);
+        }
+
+        /// <summary>
+        /// Returns either a list of close contacts or a the value, if the node's storage contains the value for the key.
+        /// </summary>
+        public (List<Contact> contacts, string val) FindValue(Contact sender, ID key)
+        {
+            Validate.IsFalse<SendingQueryToSelfException>(sender.ID == ourContact.ID, "Sender should not be ourself!");
+            SendKeyValuesToNewContact(sender);
+            bucketList.AddContact(sender);
+
+            if (storage.Contains(key))
+            {
+                return (null, storage.Get(key));
+            }
+            else if (CacheStorage.Contains(key))
+            {
+                return (null, CacheStorage.Get(key));
+            }
+            else
+            {
+                // Exclude sender.
+                return (bucketList.GetCloseContacts(key, sender.ID), null);
+            }
+        }
+
+#if DEBUG           // For unit testing
+        public void SimpleStore(ID key, string val)
+        {
+            storage.Set(key, val);
+        }
+#endif
+
+        protected void SendKeyValuesToNewContact(Contact sender)
+        {
+            // If we have a new contact...
+            if (!bucketList.ContactExists(sender))
+            {
+                // and our distance to the key < any other contact's distance to the key...
+                storage.AsParallel().ForEach(k =>
+                {
+                    var contacts = bucketList.Buckets.SelectMany(b => b.Contacts);
+
+                    if (contacts.Count() > 0)
+                    {
+                        var distance = contacts.Min(c => k ^ c.ID);
+
+                        if ((k ^ ourContact.ID) < distance)
+                        {
+                            sender.Protocol.Store(ourContact, new ID(k), storage.Get(k));   // send it to the new contact.
+                        }
+                    }
+                });
+            }
+        }
+    }
 }
