@@ -231,7 +231,7 @@ namespace UnitTests2
             closerContactsAltComputation = new List<Contact>();
             fartherContactsAltComputation = new List<Contact>();
             theNearestContactedNode = contactsToQuery.OrderBy(n => n.ID ^ key).First();
-            distance = theNearestContactedNode.ID.Value;
+            distance = theNearestContactedNode.ID.Value ^ key.Value;
         }
 
         protected void GetAltCloseAndFar(List<Contact> contactsToQuery, List<Contact> closer, List<Contact> farther)

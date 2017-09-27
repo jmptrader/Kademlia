@@ -28,9 +28,10 @@ implemented:</p>
 	of the algorithm.</li>
 	<li>Brian Muller<sup>4 </sup>has an excellent implementation in Python based 
 	on the longer specification.&nbsp; 
-	<img border="0" src="note.png" width="24" height="32"> Note that the Python 3.5 branch should be 
-	used, the master branch contains some bugs and is written for Python 2.</li>
+	</li>
 </ol>
+<p><img border="0" src="note.png" width="24" height="32"> Note that the Python 3.5 branch should be 
+	used, the master branch contains some bugs and is written for Python 2.</p>
 <p>Rarely do I end up with multiple versions of an article.&nbsp; What started 
 off with the intent of &quot;here's the spec, let's find someone that did a decent 
 job coding it&quot; quickly became &quot;here's the spec, let's roll our own using the 
@@ -2405,7 +2406,7 @@ public (List&lt;Contact&gt; contacts, string val) FindValue(Contact sender, ID k
 <h2>The Dht Class - Discussion</h2>
 <p>We use a wrapper <code>Dht</code> class, which will 
 become the main entry point for <i>our</i> peer, for interacting with <i>other</i> 
-peers.&nbsp; The main purpose of this class is:</p>
+peers.&nbsp; The purpose of this class is:</p>
 <ol>
 	<li>When storing a value, use the lookup algorithm to find other closer 
 	peers to propagate the key-value.</li>
@@ -2416,6 +2417,9 @@ the lookup algorithm to find other closer nodes that might have the value.</li>
 	contacts.</li>
 </ol>
 <h2>The Dht Class - Implementation</h2>
+<p><font color="#FF0000">TODO - The code for FindValue must continue inspecting 
+the close nodes found (excluding ones we already found, and being distinct) to 
+attempt to locate the value.</font></p>
 <pre>public class Dht
 {
 #if DEBUG // for unit testing
@@ -3566,8 +3570,9 @@ upon receiving the reply message. Thus, the receiver of the request message is
 able to determine
 the correctness of the sender as well.&quot;</p>
 </blockquote>
-<p><font color="#FF0000">TODO</font></p>
-<p>&nbsp;</p>
+<p>We will instead rely on the error handling mechanism for evicting contacts 
+that do not respond or respond incorrectly or with errors.&nbsp; Error handling 
+is discussed later.</p>
 <h2>Persisting the Dht</h2>
 <p>The bucket lists, contacts in each bucket, and stores need to be persisted so the last known state of the Dht can be restored.&nbsp; 
 This is baked into the Dht implementation, serializing the data in a JSON file.&nbsp; 
@@ -4537,6 +4542,7 @@ n k-buckets, we can reduce the number of expected hops to log2&amp; n.</font></p
 <p>In this implementation we have bucket ranges rather than a bucket per 
 bit in the key space, therefore the accelerated lookup optimization is 
 irrelevant because the bucket ranges typically span many prefix bits.</p>
+<h2>Conclusion</h2>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
