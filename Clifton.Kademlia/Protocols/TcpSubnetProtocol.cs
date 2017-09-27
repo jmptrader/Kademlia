@@ -1,6 +1,9 @@
-﻿using System.Collections.Generic;
-using System.Numerics;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
+
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Clifton.Kademlia.Protocols
 {
@@ -9,14 +12,25 @@ namespace Clifton.Kademlia.Protocols
     public class TcpSubnetProtocol : IProtocol
     {
 #if DEBUG       // for unit tests
+        [JsonIgnore]
         public bool Responds { get; set; }
 #endif
 
-        public int Subnet { get { return subnet; } }
+        // For serialization:
+        public string Url { get { return url; } set { url = value; } }
+        public int Port { get { return port; } set { port = value; } }
+        public int Subnet { get { return subnet; } set { subnet = value; } }
 
         protected string url;
         protected int port;
         protected int subnet;
+
+        /// <summary>
+        /// For creating protocols when deserializing contacts from RPC calls.
+        /// </summary>
+        public TcpSubnetProtocol()
+        {
+        }
 
         public TcpSubnetProtocol(string url, int port, int subnet)
         {
@@ -38,7 +52,10 @@ namespace Clifton.Kademlia.Protocols
             var ret = RestCall.Post<FindNodeResponse, ErrorResponse>(url + ":" + port + "//FindNode",
                 new FindNodeRequest() { Subnet = subnet, Sender = sender.ID.Value, Key = key.Value, RandomID = id.Value }, out error, out timeoutError);
 
-            return (ret?.Contacts?.Select(val => new Contact(null, new ID(val))).ToList() ?? EmptyContactList(), GetRpcError(id, ret, timeoutError, error));
+            var contacts = ret?.Contacts?.Select(val => new Contact(InstantiateProtocol(val.Protocol, val.ProtocolName), new ID(val.Contact))).ToList();
+
+            // Return only contacts with supported protocols.
+            return (contacts?.Where(c => c.Protocol != null).ToList() ?? EmptyContactList(), GetRpcError(id, ret, timeoutError, error));
         }
 
         /// <summary>
@@ -56,7 +73,10 @@ namespace Clifton.Kademlia.Protocols
             var ret = RestCall.Post<FindValueResponse, ErrorResponse>(url + ":" + port + "//FindValue",
                 new FindValueRequest() { Subnet = subnet, Sender = sender.ID.Value, Key = key.Value, RandomID = id.Value }, out error, out timeoutError);
 
-            return (ret?.Contacts?.Select(val => new Contact(null, new ID(val))).ToList(), ret.Value, GetRpcError(id, ret, timeoutError, error));
+            var contacts = ret?.Contacts?.Select(val => new Contact(InstantiateProtocol(val.Protocol, val.ProtocolName), new ID(val.Contact))).ToList();
+
+            // Return only contacts with supported protocols.
+            return (contacts?.Where(c=>c.Protocol != null).ToList(), ret.Value, GetRpcError(id, ret, timeoutError, error));
         }
 
         public RpcError Ping(Contact sender)
@@ -100,6 +120,23 @@ namespace Clifton.Kademlia.Protocols
         protected List<Contact> EmptyContactList()
         {
             return new List<Contact>();
+        }
+
+        /// <summary>
+        /// Returns the contact's protocol or, if not supported, null.
+        /// </summary>
+        protected IProtocol InstantiateProtocol(object protocol, string protocolName)
+        {
+            IProtocol ret = null;
+            Type t = Type.GetType("Clifton.Kademlia.Protocols." + protocolName);
+
+            if (t != null)
+            {
+                JObject jobj = (JObject)protocol;
+                ret = (IProtocol)JsonConvert.DeserializeObject(protocol.ToString(), t);
+            }
+
+            return ret;
         }
     }
 }

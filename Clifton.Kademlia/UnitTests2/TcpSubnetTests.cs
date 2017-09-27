@@ -74,7 +74,7 @@ namespace UnitTests2
 
             // Node 2 knows about another contact, that isn't us (because we're excluded.)
             ID otherPeer = ID.RandomID;
-            n2.BucketList.Buckets[0].Contacts.Add(new Contact(null, otherPeer));
+            n2.BucketList.Buckets[0].Contacts.Add(new Contact(new TcpSubnetProtocol(localIP, port, 3), otherPeer));
 
             server.RegisterProtocol(p1.Subnet, n1);
             server.RegisterProtocol(p2.Subnet, n2);

@@ -56,14 +56,14 @@ namespace Clifton.Kademlia
         {
             var (contacts, val) = FindNode(new Contact(null, new ID(request.Sender)), new ID(request.Key));
 
-            return new { Contacts = contacts.Select(c => c.ID.Value).ToList(), RandomID = request.RandomID };
+            return new { Contacts = contacts.Select(c => new { Contact = c.ID.Value, Protocol = c.Protocol, ProtocolName = c.Protocol.GetType().Name }).ToList(), RandomID = request.RandomID };
         }
 
         public object ServerFindValue(CommonRequest request)
         {
             var (contacts, val) = FindValue(new Contact(null, new ID(request.Sender)), new ID(request.Key));
 
-            return new { Contacts = contacts?.Select(c => c.ID.Value)?.ToList(), RandomID = request.RandomID, Value = val };
+            return new { Contacts = contacts?.Select(c => new { Contact = c.ID.Value, Protocol = c.Protocol, ProtocolName=c.Protocol.GetType().Name })?.ToList(), RandomID = request.RandomID, Value = val };
         }
 
         // ======= ======= ======= ======= =======
@@ -152,24 +152,27 @@ namespace Clifton.Kademlia
 
         protected void SendKeyValuesToNewContact(Contact sender)
         {
-            // If we have a new contact...
-            if (!bucketList.ContactExists(sender))
+            lock (bucketList)
             {
-                // and our distance to the key < any other contact's distance to the key...
-                storage.AsParallel().ForEach(k =>
+                // If we have a new contact...
+                if (!bucketList.ContactExists(sender))
                 {
-                    var contacts = bucketList.Buckets.SelectMany(b => b.Contacts);
-
-                    if (contacts.Count() > 0)
+                    // and our distance to the key < any other contact's distance to the key...
+                    storage.AsParallel().ForEach(k =>
                     {
-                        var distance = contacts.Min(c => k ^ c.ID);
+                        var contacts = bucketList.Buckets.SelectMany(b => b.Contacts);
 
-                        if ((k ^ ourContact.ID) < distance)
+                        if (contacts.Count() > 0)
                         {
-                            sender.Protocol.Store(ourContact, new ID(k), storage.Get(k));   // send it to the new contact.
+                            var distance = contacts.Min(c => k ^ c.ID);
+
+                            if ((k ^ ourContact.ID) < distance)
+                            {
+                                sender.Protocol.Store(ourContact, new ID(k), storage.Get(k));   // send it to the new contact.
                         }
-                    }
-                });
+                        }
+                    });
+                }
             }
         }
     }

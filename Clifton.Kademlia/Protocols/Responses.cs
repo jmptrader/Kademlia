@@ -13,14 +13,21 @@ namespace Clifton.Kademlia.Protocols
         public string ErrorMessage { get; set; }
     }
 
+    public class ContactResponse
+    {
+        public BigInteger Contact { get; set; }
+        public object Protocol { get; set; }
+        public string ProtocolName { get; set; }
+    }
+
     public class FindNodeResponse : BaseResponse
     {
-        public List<BigInteger> Contacts { get; set; }
+        public List<ContactResponse> Contacts { get; set; }
     }
 
     public class FindValueResponse : BaseResponse
     {
-        public List<BigInteger> Contacts { get; set; }
+        public List<ContactResponse> Contacts { get; set; }
         public string Value { get; set; }
     }
 

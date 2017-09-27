@@ -29,7 +29,6 @@ namespace Clifton.Kademlia
         /// <summary>
         /// Initialize the bucket list with our host ID and create a single bucket for the full ID range.
         /// </summary>
-        /// <param name="ourID"></param>
         public BucketList(Contact ourContact)
         {
             this.ourContact = ourContact;
@@ -91,12 +90,18 @@ namespace Clifton.Kademlia
 
         public KBucket GetKBucket(ID otherID)
         {
-            return buckets[GetKBucketIndex(otherID)];
+            lock (this)
+            {
+                return buckets[GetKBucketIndex(otherID)];
+            }
 		}
 
         public KBucket GetKBucket(BigInteger otherID)
         {
-            return buckets[GetKBucketIndex(otherID)];
+            lock (this)
+            {
+                return buckets[GetKBucketIndex(otherID)];
+            }
         }
 
         /// <summary>
@@ -104,22 +109,34 @@ namespace Clifton.Kademlia
         /// </summary>
         public bool ContactExists(Contact sender)
         {
-            return Buckets.SelectMany(b => b.Contacts).Any(c => c.ID == sender.ID);
+            lock (this)
+            {
+                return Buckets.SelectMany(b => b.Contacts).Any(c => c.ID == sender.ID);
+            }
         }
 
         protected virtual bool CanSplit(KBucket kbucket)
         {
-            return kbucket.HasInRange(ourID) || ((kbucket.Depth() % Constants.B) != 0);
+            lock (this)
+            {
+                return kbucket.HasInRange(ourID) || ((kbucket.Depth() % Constants.B) != 0);
+            }
         }
 
         protected int GetKBucketIndex(ID otherID)
 		{
-			return buckets.FindIndex(b => b.HasInRange(otherID));
+            lock (this)
+            {
+                return buckets.FindIndex(b => b.HasInRange(otherID));
+            }
 		}
 
         protected int GetKBucketIndex(BigInteger otherID)
         {
-            return buckets.FindIndex(b => b.HasInRange(otherID));
+            lock (this)
+            {
+                return buckets.FindIndex(b => b.HasInRange(otherID));
+            }
         }
 
         /// <summary>
@@ -129,14 +146,17 @@ namespace Clifton.Kademlia
         /// <param name="exclude">The ID to exclude (the requestor's ID)</param>
         public List<Contact> GetCloseContacts(ID key, ID exclude)
         {
-            var contacts = buckets.
-                SelectMany(b => b.Contacts).
-                Where(c => c.ID != exclude).
-                Select(c => new { contact = c, distance = c.ID ^ key }).
-                OrderBy(d => d.distance).
-                Take(Constants.K);
+            lock (this)
+            {
+                var contacts = buckets.
+                    SelectMany(b => b.Contacts).
+                    Where(c => c.ID != exclude).
+                    Select(c => new { contact = c, distance = c.ID ^ key }).
+                    OrderBy(d => d.distance).
+                    Take(Constants.K);
 
-            return contacts.Select(c => c.contact).ToList();
+                return contacts.Select(c => c.contact).ToList();
+            }
         }
     }
 }
