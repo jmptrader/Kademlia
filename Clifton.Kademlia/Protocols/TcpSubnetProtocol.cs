@@ -52,10 +52,17 @@ namespace Clifton.Kademlia.Protocols
             var ret = RestCall.Post<FindNodeResponse, ErrorResponse>(url + ":" + port + "//FindNode",
                 new FindNodeRequest() { Subnet = subnet, Sender = sender.ID.Value, Key = key.Value, RandomID = id.Value }, out error, out timeoutError);
 
-            var contacts = ret?.Contacts?.Select(val => new Contact(InstantiateProtocol(val.Protocol, val.ProtocolName), new ID(val.Contact))).ToList();
+            try
+            {
+                var contacts = ret?.Contacts?.Select(val => new Contact(InstantiateProtocol(val.Protocol, val.ProtocolName), new ID(val.Contact))).ToList();
 
-            // Return only contacts with supported protocols.
-            return (contacts?.Where(c => c.Protocol != null).ToList() ?? EmptyContactList(), GetRpcError(id, ret, timeoutError, error));
+                // Return only contacts with supported protocols.
+                return (contacts?.Where(c => c.Protocol != null).ToList() ?? EmptyContactList(), GetRpcError(id, ret, timeoutError, error));
+            }
+            catch (Exception ex)
+            {
+                return (null, null, new RpcError() { ProtocolError = true, ProtocolErrorMessage = ex.Message });
+            }
         }
 
         /// <summary>
@@ -73,10 +80,17 @@ namespace Clifton.Kademlia.Protocols
             var ret = RestCall.Post<FindValueResponse, ErrorResponse>(url + ":" + port + "//FindValue",
                 new FindValueRequest() { Subnet = subnet, Sender = sender.ID.Value, Key = key.Value, RandomID = id.Value }, out error, out timeoutError);
 
-            var contacts = ret?.Contacts?.Select(val => new Contact(InstantiateProtocol(val.Protocol, val.ProtocolName), new ID(val.Contact))).ToList();
+            try
+            {
+                var contacts = ret?.Contacts?.Select(val => new Contact(InstantiateProtocol(val.Protocol, val.ProtocolName), new ID(val.Contact))).ToList();
 
-            // Return only contacts with supported protocols.
-            return (contacts?.Where(c=>c.Protocol != null).ToList(), ret.Value, GetRpcError(id, ret, timeoutError, error));
+                // Return only contacts with supported protocols.
+                return (contacts?.Where(c => c.Protocol != null).ToList(), ret.Value, GetRpcError(id, ret, timeoutError, error));
+            }
+            catch (Exception ex)
+            {
+                return (null, null, new RpcError() { ProtocolError = true, ProtocolErrorMessage = ex.Message });
+            }
         }
 
         public RpcError Ping(Contact sender)
@@ -86,7 +100,7 @@ namespace Clifton.Kademlia.Protocols
             bool timeoutError;
 
             var ret = RestCall.Post<FindValueResponse, ErrorResponse>(url + ":" + port + "//Ping",
-                new PingRequest() { Subnet = subnet, Sender = sender.ID.Value, RandomID = id.Value}, out error, out timeoutError);
+                new PingRequest() { Subnet = subnet, Sender = sender.ID.Value, RandomID = id.Value }, out error, out timeoutError);
 
             return GetRpcError(id, ret, timeoutError, error);
         }

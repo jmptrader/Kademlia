@@ -7,8 +7,10 @@
 </head>
 
 <body>
+<!-- INSERT contents -->
 
-<p>Implementing the Kademlia Peer-to-Peer Distributed Hash Table</p>
+
+<p>Implementing the Kademlia Peer-to-Peer Distributed Hash Table - A Deep Dive</p>
 <h2>Introduction</h2>
 <p>Kademlia, according to a paper<sup>1</sup> published in 2015 by Xing Shi Cai 
 and Luc Devoyre, &quot;is the defacto standard searching algorithm for P2P 
@@ -183,8 +185,7 @@ https://www.gov.uk/government/uploads/system/uploads/attachment_data/file/492972
 	Perhaps you're running an IoT device with limited storage?</li>
 	<li>Registering multiple peer ID's from the same network address - this is 
 	of particular concern because you can use this to degrade the performance of 
-	a peer, as discussed
-	<a href="#Breaking_Kademlia">here</a>.</li>
+	a peer, as discussed in the section "Degrading a Kademlia Peer."</li>
 	<li>Our peer tampering with a value when it propagates the value to other 
 	peers.&nbsp; This can be remedied by including a public key to ensure the 
 	value hasn't been changed.&nbsp; And while it's strange to say &quot;our peer&quot;, 
@@ -985,7 +986,7 @@ a contact or not, you will receive back &quot;nearby&quot; peers.&nbsp; Any time
 contact those peers (to store a value, for example) all the peers that you 
 contact will try to add your contact.&nbsp; When one succeeds, your contact ID 
 will be disseminated slowly through the network. </p>
-<h3><a name="Breaking_Kademlia">Degrading a Kademlia</a> Peer</h3>
+<h3>Degrading a Kademlia Peer</h3>
 <p>Given a peer with both an ID and a single contact ID of less than 2<sup>159</sup>, 
 it 
 will initially split once for 20 contacts that are added having ID's greater than 2<sup>159</sup>.&nbsp; 
@@ -2417,9 +2418,6 @@ the lookup algorithm to find other closer nodes that might have the value.</li>
 	contacts.</li>
 </ol>
 <h2>The Dht Class - Implementation</h2>
-<p><font color="#FF0000">TODO - The code for FindValue must continue inspecting 
-the close nodes found (excluding ones we already found, and being distinct) to 
-attempt to locate the value.</font></p>
 <pre>public class Dht
 {
 #if DEBUG // for unit testing
@@ -3965,6 +3963,57 @@ public class CommonRequest
 }</pre>
 <p>As the comment states, the common request simplifies the server 
 implementation by having RPC handler methods with the same parameter.</p>
+<h3>Request Handlers</h3>
+<p>The request handlers extract the pertinent pieces of the CommonRequest and 
+call the appropriate method of the Node class.&nbsp; The important part here is 
+that the contact protocol must be returned as part of the FindNode and FindValue 
+response.&nbsp; Note that the returns are anonymous objects:</p>
+<pre>public object ServerPing(CommonRequest request)
+{
+  Ping(new Contact(null, new ID(request.Sender)));
+
+  return new { RandomID = request.RandomID };
+}
+
+public object ServerStore(CommonRequest request)
+{
+  Store(new Contact(null, new ID(request.Sender)), new ID(request.Key), request.Value, request.IsCached, request.ExpirationTimeSec);
+
+  return new { RandomID = request.RandomID };
+}
+
+public object ServerFindNode(CommonRequest request)
+{
+  var (contacts, val) = FindNode(new Contact(null, new ID(request.Sender)), new ID(request.Key));
+
+  return new 
+  { 
+    Contacts = contacts.Select(c =&gt; 
+      new 
+      { 
+        Contact = c.ID.Value, 
+        Protocol = c.Protocol, ProtocolName = c.Protocol.GetType().Name 
+      }).ToList(), 
+      RandomID = request.RandomID 
+  };
+}
+
+public object ServerFindValue(CommonRequest request)
+{
+  var (contacts, val) = FindValue(new Contact(null, new ID(request.Sender)), new ID(request.Key));
+
+  return new 
+  { 
+    Contacts = contacts?.Select(c =&gt; 
+    new 
+    { 
+      Contact = c.ID.Value, 
+      Protocol = c.Protocol, ProtocolName=c.Protocol.GetType().Name 
+    })?.ToList(), 
+    RandomID = request.RandomID, 
+    Value = val 
+  };
+}</pre>
 <h3>Responses</h3>
 <p>JSON responses are deserialized into the following classes:</p>
 <pre>public abstract class BaseResponse
@@ -4051,7 +4100,9 @@ used to route the request to the specific node associated with the subnet:</p>
 </pre>
 <h3>The TCP Subnet Protocol</h3>
 <p>The protocol implements the four RPC calls, issuing HTTP POST's to the 
-server.</p>
+server.&nbsp; Notice how the protocol is instantiated from the JSON return, and 
+if the protocol isn't supported, the contact is removed from the contacts 
+returned by FindNode and FindValue.&nbsp; </p><p> The RPC calls:</p>
 <pre>public (List&lt;Contact&gt; contacts, RpcError error) FindNode(Contact sender, ID key)
 {
   ErrorResponse error;
@@ -4059,9 +4110,19 @@ server.</p>
   bool timeoutError;
 
   var ret = RestCall.Post&lt;FindNodeResponse, ErrorResponse&gt;(url + &quot;:&quot; + port + &quot;//FindNode&quot;,
-  new FindNodeRequest() { Subnet = subnet, Sender = sender.ID.Value, Key = key.Value, RandomID = id.Value }, out error, out timeoutError);
+    new FindNodeRequest() { Subnet = subnet, Sender = sender.ID.Value, Key = key.Value, RandomID = id.Value }, out error, out timeoutError);
 
-  return (ret?.Contacts?.Select(val =&gt; new Contact(null, new ID(val))).ToList() ?? EmptyContactList(), GetRpcError(id, ret, timeoutError, error));
+  try
+  {
+    var contacts = ret?.Contacts?.Select(val =&gt; new Contact(InstantiateProtocol(val.Protocol, val.ProtocolName), new ID(val.Contact))).ToList();
+
+    // Return only contacts with supported protocols.
+    return (contacts?.Where(c =&gt; c.Protocol != null).ToList() ?? EmptyContactList(), GetRpcError(id, ret, timeoutError, error));
+  }
+  catch (Exception ex)
+  {
+    return (null, new RpcError() { ProtocolError = true, ProtocolErrorMessage = ex.Message });
+  }
 }
 
 /// &lt;summary&gt;
@@ -4077,10 +4138,19 @@ public (List&lt;Contact&gt; contacts, string val, RpcError error) FindValue(Cont
   bool timeoutError;
 
   var ret = RestCall.Post&lt;FindValueResponse, ErrorResponse&gt;(url + &quot;:&quot; + port + &quot;//FindValue&quot;,
-  new FindValueRequest() { Subnet = subnet, Sender = sender.ID.Value, Key = key.Value, RandomID = id.Value }, out error, out timeoutError);
+    new FindValueRequest() { Subnet = subnet, Sender = sender.ID.Value, Key = key.Value, RandomID = id.Value }, out error, out timeoutError);
 
-  return (ret?.Contacts?.Select(val =&gt; new Contact(null, new ID(val))).ToList(), ret.Value, GetRpcError(id, ret, timeoutError, error));
-}
+  try
+  {
+    var contacts = ret?.Contacts?.Select(val =&gt; new Contact(InstantiateProtocol(val.Protocol, val.ProtocolName), new ID(val.Contact))).ToList();
+
+    // Return only contacts with supported protocols.
+    return (contacts?.Where(c=&gt;c.Protocol != null).ToList(), ret.Value, GetRpcError(id, ret, timeoutError, error));
+  }
+  catch (Exception ex)
+  {
+    return (null, null, new RpcError() { ProtocolError = true, ProtocolErrorMessage = ex.Message });
+  }
 
 public RpcError Ping(Contact sender)
 {
@@ -4124,6 +4194,28 @@ protected List&lt;Contact&gt; EmptyContactList()
 {
   return new List&lt;Contact&gt;();
 }</pre>
+<p>Newtonsoft.Json is a great serializer, as illustrated in the 
+<code>InstantiateProtocol</code> method:</p>
+<pre>/// &lt;summary&gt;
+/// Returns the contact's protocol or, if not supported, null.
+/// &lt;/summary&gt;
+protected IProtocol InstantiateProtocol(object protocol, string protocolName)
+{
+  IProtocol ret = null;
+  Type t = Type.GetType(&quot;Clifton.Kademlia.Protocols.&quot; + protocolName);
+
+  if (t != null)
+  {
+    JObject jobj = (JObject)protocol;
+    ret = (IProtocol)JsonConvert.DeserializeObject(protocol.ToString(), t);
+  }
+
+  return ret;
+}</pre>
+<p><img border="0" src="note.png" width="24" height="32"> Notice the namespace 
+prefixed to the protocol name.&nbsp; A different implementation (say in Python) 
+would only need to specify the protocol name, and as long as the type matches 
+the C# type with the namespace prefix, we should be good to go. </p>
 <h3>Error Reporting</h3>
 <p>Note how the protocol has been refactored to return any errors from the RPC 
 call.&nbsp; This is handled by the <code>RpcResponse</code> class:</p>
@@ -4150,7 +4242,7 @@ call.&nbsp; This is handled by the <code>RpcResponse</code> class:</p>
 <p>Error handling will be discussed in the next major section, RPC Error 
 Handling.</p>
 <h3>TCP Subnet Unit Testing</h3>
-<p><img border="0" src="unittest.png" width="14" height="32"> The following unit 
+<p>The following unit 
 tests validate the round trip calls, exercising the protocol calls and the 
 server.&nbsp; Each test initializes the server and then tears it down:</p>
 <pre>protected string localIP = &quot;http://127.0.0.1&quot;;
@@ -4169,7 +4261,10 @@ public void TestCleanup()
   server.Stop();
 }</pre>
 <p>The unit tests exercise each of the four RPC calls as well as a timeout 
-error:</p>
+error.</p>
+<h4>PingRouteTest</h4>
+<p><img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
+verifies the Ping RPC call.</p>
 <pre>[TestMethod]
 public void PingRouteTest()
 {
@@ -4184,9 +4279,11 @@ public void PingRouteTest()
   server.Start();
 
   p2.Ping(c1);
-}
-
-[TestMethod]
+}</pre>
+<h4> StoreRouteTest</h4>
+<p> <img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
+verifies the Store RPC call;</p>
+<pre>[TestMethod]
 public void StoreRouteTest()
 {
   TcpSubnetProtocol p1 = new TcpSubnetProtocol(localIP, port, 1);
@@ -4205,9 +4302,12 @@ public void StoreRouteTest()
   p2.Store(sender, testID, testValue);
   Assert.IsTrue(n2.Storage.Contains(testID), &quot;Expected remote peer to have value.&quot;);
   Assert.IsTrue(n2.Storage.Get(testID) == testValue, &quot;Expected remote peer to contain stored value.&quot;);
-}
+}</pre>
+<h4> FindNodesRouteTest</h4>
+<p> <img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
+verifies the FindNodes RPC call:</p>
 
-[TestMethod]
+<pre>[TestMethod]
 public void FindNodesRouteTest()
 {
   TcpSubnetProtocol p1 = new TcpSubnetProtocol(localIP, port, 1);
@@ -4230,9 +4330,12 @@ public void FindNodesRouteTest()
 
   Assert.IsTrue(ret.Count == 1, &quot;Expected 1 contact.&quot;);
   Assert.IsTrue(ret[0].ID == otherPeer, &quot;Expected contact to the other peer (not us).&quot;);
-}
+}</pre>
+<h4> FindValueRouteTest</h4>
+<p> <img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
+verifies the FindValueRouteTest:</p>
 
-[TestMethod]
+<pre>[TestMethod]
 public void FindValueRouteTest()
 {
   TcpSubnetProtocol p1 = new TcpSubnetProtocol(localIP, port, 1);
@@ -4257,9 +4360,11 @@ public void FindValueRouteTest()
 
   Assert.IsTrue(ret.contacts == null, &quot;Expected to find value.&quot;);
   Assert.IsTrue(ret.val == testValue, &quot;Value does not match expected value from peer.&quot;);
-}
-
-[TestMethod]
+}</pre>
+<h4> UnresponsiveNodeTest</h4>
+<p> <img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
+verifies that an unresponsive node results in a timeout error.</p>
+<pre>[TestMethod]
 public void UnresponsiveNodeTest()
 {
   TcpSubnetProtocol p1 = new TcpSubnetProtocol(localIP, port, 1);
@@ -4480,7 +4585,7 @@ this drawing!</p>
 <h3>Bucket Refresh</h3>
 <p>To illustrate bucket refresh, let's start with a smaller set of peers (25) 
 and draw their bootstrapped connections in grey:</p>
-<p><img border="0" src="bucketrefresh1.png" width="466" height="474"></p>
+<p><img border="0" src="bucketRefresh1.png" width="466" height="474"></p>
 <p>A bucket refresh calls FindNode all the contacts in each bucket:</p>
 <pre>#if DEBUG
 public void PerformBucketRefresh()
@@ -4503,7 +4608,7 @@ protected void RefreshBucket(KBucket bucket)
 <p>The method <code>PerformBucketRefresh</code> is available only in debug mode for testing 
 and the demo.&nbsp; This updates the contacts for each peer based on the <i>k</i> closest 
 contacts returned by the contact:</p>
-<p><img border="0" src="bucketrefresh2.png" width="460" height="463">&nbsp; </p>
+<p><img border="0" src="bucketRefresh2.png" width="460" height="463">&nbsp; </p>
 <p>The newly discovered contacts are drawn in purple.&nbsp; In a small network 
 like this, just about every peer learns about every other peer -- another 
 iteration of bucket refreshing results in only a couple more contacts being 
@@ -4543,11 +4648,6 @@ n k-buckets, we can reduce the number of expected hops to log2&amp; n.</font></p
 bit in the key space, therefore the accelerated lookup optimization is 
 irrelevant because the bucket ranges typically span many prefix bits.</p>
 <h2>Conclusion</h2>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
-<p>&nbsp;</p>
-<h2>&nbsp;</h2>
 <h2>References</h2>
 <p>[1] -
 <a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
@@ -4591,8 +4691,6 @@ https://en.wikipedia.org/wiki/Kademlia</a> </p>
 
 [16] - <a href="https://forum.emule-project.net/index.php?showtopic=32335">
 https://forum.emule-project.net/index.php?showtopic=32335</a>
-
-</font>
 
 <p>[17] - <a href="http://www.emule-project.net/home/perl/general.cgi?l=1">
 http://www.emule-project.net/home/perl/general.cgi?l=1</a> </p>
