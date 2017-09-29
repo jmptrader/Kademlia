@@ -61,7 +61,7 @@ namespace Clifton.Kademlia.Protocols
             }
             catch (Exception ex)
             {
-                return (null, null, new RpcError() { ProtocolError = true, ProtocolErrorMessage = ex.Message });
+                return (null, new RpcError() { ProtocolError = true, ProtocolErrorMessage = ex.Message });
             }
         }
 

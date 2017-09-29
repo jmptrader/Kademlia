@@ -87,7 +87,12 @@ namespace Clifton.Kademlia
             }
         }
 
-        // TODO: Change the equalityComparer to a KeySelector for the these extension methods:
+        public static bool ContainsBy<T, TKey>(this List<T> list, T item, Func<T, TKey> keySelector)
+        {
+            TKey itemKey = keySelector(item);
+
+            return list.Any(n => keySelector(n).Equals(itemKey));
+        }
 
         public static void AddDistinctBy<T, TKey>(this List<T> list, T item, Func<T, TKey> keySelector)
         {
@@ -100,6 +105,7 @@ namespace Clifton.Kademlia
             }
         }
 
+        // TODO: Change the equalityComparer to a KeySelector for the these extension methods:
         public static void AddRangeDistinctBy<T>(this List<T> target, IEnumerable<T> src, Func<T, T, bool> equalityComparer)
         {
             src.ForEach(item =>

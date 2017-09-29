@@ -7,12 +7,12 @@
 </head>
 
 <body>
-<!-- INSERT contents -->
-
+<img border="0" src="file:///C:/projects/Kademlia/docs/bucketRefresh2.png" width="460" height="463">
 
 <p>Implementing the Kademlia Peer-to-Peer Distributed Hash Table - A Deep Dive</p>
 
-<img border="0" src="file:///C:/projects/Kademlia/docs/bucketRefresh2.png" width="460" height="463">
+<!-- INSERT contents -->
+
 
 <h2>Introduction</h2>
 <p>Kademlia, according to a paper<sup>1</sup> published in 2015 by Xing Shi Cai 
@@ -158,6 +158,9 @@ http://www.tm.uka.de/doc/SKademlia_2007.pdf</a></p>
 <p>Improving Lookup Performance over a Widely-Deployed DHT:
 <a href="http://www.barsoom.org/papers/infocom-2006-kad.pdf">
 http://www.barsoom.org/papers/infocom-2006-kad.pdf</a> </p>
+<p>Review on Detection and Mitigation of Sybil attack in the network, Procedia 
+Computer Science 78 (2016) 395-401:
+<a href="https://tinyurl.com/y9a7ekzy">https://tinyurl.com/y9a7ekzy</a> </p>
 <h4>Distributed Ledgers</h4>
 <p>Flowchain: A Case Study on Building a Blockchain for the IoT:
 <a href="http://schd.ws/hosted_files/lc3china2017/43/Flowchain-LC3_2017_Beijing-20170614.pdf">
@@ -230,7 +233,13 @@ course.</p>
 <p>Also, most of these unit tests are really system-level tests, or at least 
 partial system tests.&nbsp; Actual unit tests of specific code sections in a 
 particular method, well, it gets inane rather quickly.&nbsp; So you'll see a lot 
-of setup stuff being done in the higher level tests. </p>
+of setup stuff being done in the higher level tests.</p>
+<h3>A Note About the Code&nbsp; </h3>
+<p>The code presented here is incremental, meaning that as additional features 
+are discussed and added, code is updated to reflect those new features and their 
+unit tests.&nbsp; Not every refactoring is included in the code here, therefore 
+its strongly recommended if you're interested in a particular method, use the 
+final implementation in the actual code base.</p>
 <h2>Key Concepts</h2>
 <p>The Kademlia specification essentially consists of several sub-algorithms:</p>
 <ol>
@@ -2242,7 +2251,7 @@ operations are implemented in terms of the above lookup procedure.</font>&quot;&
 When we're performing a lookup, the initiator will be using the lookup call for 
 both finding nodes and finding values.&nbsp; If it's finding values, it needs to 
 stop if/when the value is found.&nbsp; </p>
-<h3>Ambiguity #12</h3>
+<h3>Ambiguity #11</h3>
 <p>&nbsp;This statement: <font color="#FF00FF">For caching purposes, once a 
 lookup succeeds, the requesting node stores the (key,value) pair at the closest node it 
 observed to the key that did not return the value.</font> can be ambiguous -- 
@@ -2480,6 +2489,12 @@ the lookup algorithm to find other closer nodes that might have the value.</li>
     return ret;
   }
 }</pre>
+<h3>Ambiguity #12</h3>
+<p>What exactly should the sender do when a value is not found?&nbsp; The DHT 
+returns the nearest nodes, but given that the lookup failed to find the value, 
+we know these nodes also do not have the value.&nbsp; As far as I've been able 
+to determine, neither the spec nor a cursory search of the web indicates what to 
+do.</p>
 <h2>The Dht Class - Unit Tests</h2>
 <h3>LocalStoreFoundValueTest</h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> To get started, let's just make sure we can set/get values in our local store 
@@ -2992,7 +3007,7 @@ which there are no lookups for a particular ID range, each node refreshes any
 bucket to which it has not performed a node lookup in the past hour. Refreshing 
 means picking a random ID in the bucket’s range and performing a node search for 
 that ID.</font></p>
-<h4>Ambiguity #11</h4>
+<h4>Ambiguity #13</h4>
 <p>The phrase &quot;any bucket to which it has not performed a node lookup&quot; is 
 subject to interpretation.&nbsp; One way to interpret this is possibly &quot;the 
 bucket whose range contains the key in the key-value pair for a Store or 
@@ -3148,6 +3163,54 @@ public void Store(Contact sender, ID key, string val, bool isCached = false, int
     storage.Set(key, val, Constants.EXPIRATION_TIME_SECONDS);
   }
 }</pre>
+<h3>Republishing Key-Values</h3>
+<p>Key-values in the republish store are republished at a particular time 
+interval, typically every hour:</p>
+<pre>/// &lt;summary&gt;
+/// Replicate key values if the key-value hasn't been touched within the republish interval.
+/// Also don't do a FindNode lookup if the bucket containing the key has been refreshed within the refresh interval.
+/// &lt;/summary&gt;
+protected void KeyValueRepublishElapsed(object sender, ElapsedEventArgs e)
+{
+  DateTime now = DateTime.Now;
+
+  republishStorage.Where(k =&gt; (now - republishStorage.GetTimeStamp(k)).TotalMilliseconds &gt;= Constants.KEY_VALUE_REPUBLISH_INTERVAL).ForEach(k=&gt;
+  {
+    ID key = new ID(k);
+    StoreOnCloserContacts(key, republishStorage.Get(key));
+    republishStorage.Touch(k); 
+  });
+}</pre>
+<p><img border="0" src="note.png" width="24" height="32"> Note how a lookup is 
+only performed if the bucket containing the key hasn't itself been refreshed 
+recently (within the last hour):</p>
+<pre>/// &lt;summary&gt;
+/// Perform a lookup if the bucket containing the key has not been refreshed, 
+/// otherwise just get the contacts the k closest contacts we know about.
+/// &lt;/summary&gt;
+protected void StoreOnCloserContacts(ID key, string val)
+{
+  DateTime now = DateTime.Now;
+
+  KBucket kbucket = node.BucketList.GetKBucket(key);
+  List&lt;Contact&gt; contacts;
+
+  if ((now - kbucket.TimeStamp).TotalMilliseconds &lt; Constants.BUCKET_REFRESH_INTERVAL)
+  {
+    // Bucket has been refreshed recently, so don't do a lookup as we have the k closes contacts.
+    contacts = node.BucketList.GetCloseContacts(key, node.OurContact.ID);
+  }
+  else
+  {
+    contacts = router.Lookup(key, router.RpcFindNodes).contacts;
+  }
+
+  contacts.ForEach(c =&gt;
+  {
+    RpcError error = c.Protocol.Store(node.OurContact, key, val);
+    HandleError(error, c);
+  });
+}</pre>
 <h3>Expiring Key-Value Pairs</h3>
 <p>Expire the key-values are removed from the republish and cache storage, 
 which happens in the <code>Dht</code> class:</p>
@@ -3209,7 +3272,7 @@ pair if it’s own ID is closer to the key than are the IDs of other nodes.</font>
 	<li>the key XOR'd with the bootstrapping node's ID &lt; (closer than) the key 
 	XOR'd the ID's of other nodes.</li>
 </ol>
-<h4>Ambiguity #13</h4>
+<h4>Ambiguity #14</h4>
 <p>What does &quot;other nodes&quot; mean?&nbsp; Are these all other 
 contacts the bootstrapping node knows about, or just the <i>k</i> closest 
 contacts in the joining node's bucket, or some other determination?&nbsp; We 
@@ -3231,31 +3294,66 @@ calls.</p>
 Implementation</h3>
 <pre>protected void SendKeyValuesToNewContact(Contact sender)
 {
-  // If we have a new contact...
-  if (!bucketList.ContactExists(sender))
+  List&lt;Contact&gt; contacts = new List&lt;Contact&gt;();
+
+  if (IsNewContact(sender))
   {
-    // and our distance to the key &lt; any other contact's distance to the key...
-    storage.AsParallel.ForEach(k =&gt;
+    lock (bucketList)
     {
-      var contacts = bucketList.Buckets.SelectMany(b =&gt; b.Contacts);
+      // Clone so we can release the lock.
+      contacts = new List&lt;Contact&gt;(bucketList.Buckets.SelectMany(b =&gt; b.Contacts));
+    }
 
-      if (contacts.Count() &gt; 0)
+    if (contacts.Count() &gt; 0)
+    {
+      // and our distance to the key &lt; any other contact's distance to the key...
+      storage.AsParallel().ForEach(k =&gt;
       {
-        var distance = contacts.Min(c =&gt; k ^ c.ID.Value);
+        // our min distance to the contact.
+        var distance = contacts.Min(c =&gt; k ^ c.ID);
 
-        if ((k ^ ourContact.ID.Value) &lt; distance)
+        // If our contact is closer, store the contact on its node.
+        if ((k ^ ourContact.ID) &lt; distance)
         {
-          sender.Protocol.Store(ourContact, new ID(k), storage.Get(k)); // send it to the new contact.
+          var error = sender.Protocol.Store(ourContact, new ID(k), storage.Get(k));
+          dht?.HandleError(error, sender);
         }
-      }
-    });
+      });
+    }
   }
 }</pre>
 <p>Annoyingly, for every 
 stored value, there just isn't any way to not perform the XOR computation on 
-every contact.&nbsp; This could get expensive and is optimized using Linq's 
+every contact.&nbsp; This could get expensive and is currently optimized using Linq's 
 parallel feature.</p>
-<p>&nbsp;</p>
+<p>Determining whether a contact is new is slightly more complicated than one 
+would think.&nbsp; We need to check not only whether the contact exists in any 
+of our buckets, but also whether it's a pending contact -- one that wasn't 
+placed in a bucket because the bucket was full, but none-the-less has already 
+received any closer keys:</p>
+<pre>/// &lt;summary&gt;
+/// Returns true if the contact isn't in the bucket list or the pending contacts list.
+/// &lt;/summary&gt;
+protected bool IsNewContact(Contact sender)
+{
+  bool ret;
+
+  lock (bucketList)
+  {
+    // If we have a new contact...
+    ret = bucketList.ContactExists(sender);
+  }
+
+  if (dht != null) // for unit testing, dht may be null
+  {
+    lock (dht.PendingContacts)
+    {
+      ret |= dht.PendingContacts.ContainsBy(sender, c =&gt; c.ID);
+    }
+  }
+
+  return !ret;
+}</pre>
 <h3>Storing Key-Values Onto the new Node When a new Node Registers - Unit Test</h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> There's a lot of 
 setup here to for creating two existing contacts and two key-values and their 
@@ -3483,7 +3581,7 @@ to the key ID.</font></p>
 more nodes that are between the current node and the closest node.</p>
 <p>&quot;Exponentially inversely proportional&quot; - meaning the expiration time is <i>a lot 
 shorter</i> the more nodes that are between the current node and closest node.</p>
-<h4>Ambiguity #14</h4>
+<h4>Ambiguity #15</h4>
 <p>The specification provides no guidance for what the calculation for 
 &quot;exponentially inversely proportional&quot; should actually be.&nbsp; It's also 
 undefined as to what the time constants are -- what is a baseline time for which 
@@ -3495,7 +3593,7 @@ where the value of <i>b </i>comes from.&nbsp; In this implementation, where we
 have bucket ranges, rather than a bucket per bit in the key space, the 
 accelerated lookup optimization is irrelevant, so we'll use b==5 which is the 
 spec's recommended value for that optimization. </p>
-<h4>Ambiguity #15</h4>
+<h4>Ambiguity #16</h4>
 <p>Who does the computation &quot;between the current node and the node whose ID is 
 closest to the key ID?&quot;&nbsp; Is the &quot;current node:&quot;</p>
 <ol>
@@ -3504,7 +3602,7 @@ closest to the key ID?&quot;&nbsp; Is the &quot;current node:&quot;</p>
 	<li>The receiver that is handling the store request, and counts the number 
 	of nodes between itself and the sender node?</li>
 </ol>
-<h4>Ambiguity #16</h4>
+<h4>Ambiguity #17</h4>
 <p>As discussed earlier, the entire concept of having a separate stores 
 (originator, republished, cached) is never discussed in the Kademlia 
 specification.&nbsp; Without understanding these three different stores, trying 
@@ -3579,6 +3677,7 @@ is discussed later.</p>
 This is baked into the Dht implementation, serializing the data in a JSON file.&nbsp; 
 The persistence of key-values is handled separately and is defined by the 
 specific implementation needs.</p>
+<p><font color="#FF0000">TODO</font></p>
 <h2>Considerations for an Asynchronous Implementation</h2>
 <h3>Thread Safety</h3>
 <p>The entry points to the node:</p>
@@ -3617,7 +3716,7 @@ timeout delays from failed nodes.&nbsp; Waiting for at least some of the nodes
 to respond in each batch of 3 closest nodes gives the system a chance to get 
 even closer nodes to those first set of close nodes with the hope of acquiring
 <i>k</i> closer contacts without having to explore farther contacts.&nbsp;&nbsp;&nbsp; </p>
-<h4>Ambiguity #17</h4>
+<h4>Ambiguity #18</h4>
 <p>It's not particularly clear why all the <i>k</i> closer contacts aren't 
 queried in parallel to start with.&nbsp; Maybe the idea is that you want to try 
 to get closer contacts from already close contacts.&nbsp; Certainly all the 
@@ -4388,7 +4487,8 @@ public void UnresponsiveNodeTest()
 
   Assert.IsTrue(error.TimeoutError, &quot;Expected timeout.&quot;);
 }</pre>
-<h2>RPC Error Handling and Delayed Eviction - Discussion</h2>
+<h2>RPC Error Handling and Delayed Eviction</h2>
+<h3>Discussion</h3>
 <p>One of the optimizations in the Kademlia protocol can now be implemented -- 
 delayed eviction:</p>
 <p><font color="#FF00FF">When a Kademlia node receives an RPC 
@@ -4399,12 +4499,12 @@ contacts in the k-bucket, any unresponsive ones can be evicted and replaced with
 entries in the replacement cache. The replacement cache is kept sorted by time 
 last seen, with the most recently seen entry having the highest priority as a 
 replacement candidate.</font></p>
-<h3>Ambiguity #18</h3>
+<h4>Ambiguity #19</h4>
 <p>What happens when the peer throws an exception or the random ID that the peer 
 responds with doesn't match what was sent?&nbsp; To make matters simple, in this 
 implementation we'll handle all error conditions, including timeouts, in the 
 same way.</p>
-<h2>RPC Error Handling and Delayed Eviction - Implementation</h2>
+<h3>Implementation</h3>
 <p>The implementation for handling evictions and replacing them with contacts 
 waiting to be added to the bucket is handled in the Dht.&nbsp; First, the error 
 handler:</p>
@@ -4518,7 +4618,7 @@ protected void ReplaceWithPendingContact(KBucket bucket)
     }
   }
 }</pre>
-<h2>RPC Error Handling and Delayed Eviction - Unit Tests</h2>
+<h3>Unit Tests</h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> We can now modify the existing test for a non-responding contact by checking 
 the pending buffer and eviction count dictionary.&nbsp; The assertions change to 
 this:</p>
@@ -4538,6 +4638,7 @@ Assert.IsFalse(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nonRes
 Assert.IsTrue(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nextNewContact), &quot;Expected bucket to contain new contact.&quot;);
 Assert.IsTrue(dht.EvictionCount.Count == 0, &quot;Expected no contacts to be pending eviction.&quot;);</pre>
 <h2>Putting It Together - A Demo</h2>
+<p><img border="0" src="demo1.png" width="191" height="324"></p>
 <p>As usual, there's nothing like a visual demo to see what is happening.&nbsp; 
 This demo uses <a href="https://www.codeproject.com/Articles/1136050/FlowSharp">
 FlowSharp</a> as the drawing canvas.&nbsp; 
@@ -4582,12 +4683,11 @@ protected void InitializeKnownPeers()
   DrawDhts();
 }</pre>
 <p>After each peer bootstraps with one of the known peers (randomly selected) the peer network is established:</p>
-<p><img border="0" src="bootstrap.png" width="617" height="482"></p>
+<p><img border="0" src="bootstrap.png" width="592" height="474"></p>
 <p>The directionality of the connection is not shown -- arrows would get lost in 
 this drawing!</p>
 <h3>Bucket Refresh</h3>
-<p>To illustrate bucket refresh, let's start with a smaller set of peers (25) 
-and draw their bootstrapped connections in grey:</p>
+<p>To illustrate bucket refresh, let's start with a smaller set of peers (25):</p>
 <p><img border="0" src="bucketRefresh1.png" width="466" height="474"></p>
 <p>A bucket refresh calls FindNode all the contacts in each bucket:</p>
 <pre>#if DEBUG
@@ -4616,6 +4716,37 @@ contacts returned by the contact:</p>
 like this, just about every peer learns about every other peer -- another 
 iteration of bucket refreshing results in only a couple more contacts being 
 discovered.</p>
+<h3>Store Value</h3>
+<p>When a non-cached value is stored to a peer, it is republished to close 
+peers.&nbsp; We can see this by coloring the originator with yellow, the 
+immediate peer we're storing the value to in blue, and the peers to which the 
+value is republished in orange:</p>
+<pre> /// &lt;summary&gt;
+/// Color the originator with yellow
+/// the immediate peer we're storing the value to in blue
+/// and the peers to which the value is republished in orange:
+/// &lt;/summary&gt;
+private void btnPublish_Click(object sender, EventArgs e)
+{
+  firstContacts = new List&lt;Dht&gt;();
+  ID key = ID.RandomID;
+  Dht originatorDht = dhts[(int)nudPeerNumber.Value];
+  originatorDht.Store(key, &quot;Test&quot;);
+  UpdatePeerColors();
+  DrawDhts();
+}</pre>
+<p>In a small network, because the store gets published to <i>k</i> peers, most of the 
+peers are involved:</p>
+<p><img border="0" src="publish1.png" width="467" height="465"></p>
+<h3>Store Republish</h3>
+<p>When we force an immediate store republish, we see that one node, that is a 
+closer contact, getting the republished key-value:</p>
+<p><img border="0" src="publish2.png" width="459" height="462"></p>
+<p>In a larger network, this becomes more obvious (nodes have been moved to the 
+topmost in the rendering):</p>
+<p><img border="0" src="publish3.png" width="596" height="474"></p>
+<p>Remember that key-values are republished only on <i>k</i> closer contacts, so 
+not every peer gets the republished key-value.</p>
 <h2>Not Implemented</h2>
 <h3>UDP Drop Outs</h3>
 <p><font color="#FF00FF">A related problem is that because Kademlia uses UDP, 
@@ -4643,14 +4774,69 @@ ensures, among other things, that if a node’s own network connection goes down
 temporarily, the node won’t completely void all of its k-buckets.</font>
 <p><font color="#FF00FF">Another optimization in the implementation is to 
 achieve fewer hops per lookup by increasing the routing table size. 
-Conceptually, this is done by considering IDs 6 bits at a time instead of just 
+Conceptually, this is done by considering IDs <i>b</i> bits at a time instead of just 
 one bit at a time. As previously described, the expected number of hops per 
-lookup is log2 n. By increasing the routing table’s size to an expected 2b log2t 
-n k-buckets, we can reduce the number of expected hops to log2&amp; n.</font></p>
+lookup is log<sub>2</sub>n. By increasing the routing table’s size to an expected 2<sup>b</sup> log<sub>2</sub><sup>b</sup>
+<i>n</i> <i>k</i>-buckets, we can reduce the number of expected hops to log<sub>2</sub><sup>b</sup>
+<i>n</i>.</font></p>
 <p>In this implementation we have bucket ranges rather than a bucket per 
-bit in the key space, therefore the accelerated lookup optimization is 
+prefix bits in the key space, therefore the accelerated lookup optimization is 
 irrelevant because the bucket ranges typically span many prefix bits.</p>
+<h3>Sybil Attacks</h3>
+<p>Peer-to-peer networks are vulnerable to Sybil attacks: </p>
+<blockquote>
+	<p>&quot;In a Sybil attack, the attacker subverts the reputation system of a 
+	peer-to-peer network by creating a large number of pseudonymous identities, 
+	using them to gain a disproportionately large influence. A reputation 
+	system's vulnerability to a Sybil attack depends on how cheaply identities 
+	can be generated, the degree to which the reputation system accepts inputs 
+	from entities that do not have a chain of trust linking them to a trusted 
+	entity, and whether the reputation system treats all entities identically.&quot;<sup>21</sup></p>
+</blockquote>
+<p>In the current implementation, if the peer network is already well populated 
+(most k-buckets are full) a Sybil attack would not replace &quot;good&quot; known peers -- 
+the attack would simply place the attempt into the DHT's pending contact buffer.&nbsp; 
+In a mostly unpopulated network (most k-buckets have room for more peers) the 
+subsequent failure to get a response from a peer would result in its eventual 
+eviction.&nbsp; The piggyback ping approach is also a means for the recipient of 
+the RPC call to verify the sender.</p>
 <h2>Conclusion</h2>
+<p>How does one write a conclusion to an article that is over 120 pages in Word?&nbsp; 
+Petar Maymounkov wrote &quot;...my opinion is that Kademlia is so simple, that with a 
+modern language like Go, a good implementation of Kademlia (the algorithm) is no 
+more than 100 lines of code.&quot;<sup>20</sup>&nbsp; Perhaps when looking at just 
+the algorithm, the router in particular, this may be true, but there is a 
+tremendous amount of detail that has to go into the architecture and 
+implementation of the Kademlia protocol.&nbsp; As one dives deep into the spec, 
+there are contradictions between the two versions of the spec, between 
+implementations out there in the wild and the spec, and numerous ambiguities 
+that must be resolved by carefully understanding the spec and carefully 
+inspecting other implementations and descriptions of the protocol.&nbsp; Anyone 
+adopting a library that implements the Kademlia protocol should have a thorough 
+understanding of these contradictions and ambiguities, and also must go through 
+any implementation with a fine tooth comb to see how these are addressed, if 
+they are addressed at all.&nbsp; In particular, when looking at other 
+implementations, does the implementation (in no particular order of importance):</p>
+<ul>
+	<li>Address delayed eviction?</li>
+	<li>Create fixed buckets (one per prefix) or dynamic buckets?</li>
+	<li>Improve performance with asynchronous behavior?</li>
+	<li>Handle not just non-responsive peers, but exceptions that peers 
+	generate, etc.?</li>
+	<li>Provide reasonable enough documentation to associate the code with the 
+	spec?</li>
+<li>Address the difference between local store, cache store, and remote store 
+updates?</li>
+	<li>Allow for different protocols?</li>
+<li>Address Sybil attacks?</li>
+	<li>Provide detailed unit testing and analysis of the implementation and its 
+	performance?</li>
+</ul>
+<p>These are some of the issues that one should look for.&nbsp; Even in the 
+initial release of this implementation, I have not adequately addressed all 
+these concerns.&nbsp; Regardless, if you made it this far through the document, 
+I suspect you have a much better understanding of the Kademlia protocol, which 
+also gives you some tools to look at other P2P protocols.</p>
 <h2>References</h2>
 <p>[1] -
 <a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
@@ -4702,6 +4888,11 @@ http://www.emule-project.net/home/perl/general.cgi?l=1</a> </p>
 https://forum.emule-project.net/index.php?showtopic=32335&amp;view=findpost&amp;p=214837</a> </p>
 <p>[19] - <a href="http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf">
 http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf</a> </p>
+<p>[20] - <a href="http://www.maymounkov.org/kademlia">
+http://www.maymounkov.org/kademlia</a> </p>
+
+<p>[21] - <a href="https://en.wikipedia.org/wiki/Sybil_attack">
+https://en.wikipedia.org/wiki/Sybil_attack</a></p>
 <p>&nbsp;</p>
 
 </body>

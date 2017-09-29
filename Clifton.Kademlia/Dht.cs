@@ -9,12 +9,13 @@ namespace Clifton.Kademlia
 {
     public class Dht
     {
-#if DEBUG       // for unit testing
+#if DEBUG       // for unit testing and demo
         public BaseRouter Router { get { return router; } }
-        public List<Contact> PendingContacts { get { return pendingContacts; } }
         public ConcurrentDictionary<BigInteger, int> EvictionCount { get { return evictionCount; } }
+        public IStorage RepublishStorage { get { return republishStorage; } }
 #endif
 
+        public List<Contact> PendingContacts { get { return pendingContacts; } }
         public Node Node { get { return node; } }
         public Contact Contact { get { return ourContact; } }
         public ID ID { get { return ourId; } }
@@ -127,7 +128,6 @@ namespace Clifton.Kademlia
             else
             {
                 var lookup = router.Lookup(key, router.RpcFindValue);
-                TouchBucketWithKey(key);
 
                 if (lookup.found)
                 {
@@ -148,13 +148,23 @@ namespace Clifton.Kademlia
             return ret;
         }
 
-#if DEBUG
+#if DEBUG       // For demo and unit testing.
         public void PerformBucketRefresh()
         {
             // Get current bucket list in a separate collection because the bucket list might be modified
             // as the result of a bucket split.
             List<KBucket> currentBuckets = new List<KBucket>(node.BucketList.Buckets);
             currentBuckets.ForEach(b => RefreshBucket(b));
+        }
+
+        public void PerformStoreRepublish()
+        {
+            republishStorage.ForEach(k =>
+            {
+                ID key = new ID(k);
+                StoreOnCloserContacts(key, republishStorage.Get(key));
+                republishStorage.Touch(k);
+            });
         }
 #endif
 
@@ -174,6 +184,14 @@ namespace Clifton.Kademlia
             }
         }
 
+        public void AddToPending(Contact pending)
+        {
+            lock (pendingContacts)
+            {
+                pendingContacts.AddDistinctBy(pending, c => c.ID);
+            }
+        }
+
         /// <summary>
         ///  The contact that did not respond (or had an error) gets n tries before being evicted
         ///  and replaced with the most recently contact that wants to go into the non-responding contact's kbucket.
@@ -185,6 +203,7 @@ namespace Clifton.Kademlia
             // Non-concurrent list needs locking.
             lock (pendingContacts)
             {
+                // Add only if it's a new pending contact.
                 pendingContacts.AddDistinctBy(toReplace, c=>c.ID);
             }
 
@@ -271,6 +290,7 @@ namespace Clifton.Kademlia
             ourId = id;
             ourContact = new Contact(protocol, id);
             node = new Node(ourContact, republishStorage, cacheStorage);
+            node.Dht = this;
             node.BucketList.Dht = this;
             this.router = router;
             this.router.Node = node;
@@ -385,7 +405,8 @@ namespace Clifton.Kademlia
         }
 
         /// <summary>
-        /// Perform a lookup if the bucket containing the key has not been refreshed, otherwise, just get the contacts the k closest contacts we know about.
+        /// Perform a lookup if the bucket containing the key has not been refreshed, 
+        /// otherwise just get the contacts the k closest contacts we know about.
         /// </summary>
         protected void StoreOnCloserContacts(ID key, string val)
 		{
@@ -401,9 +422,7 @@ namespace Clifton.Kademlia
 			}
 			else
 			{
-				// Do a lookup and touch the bucket since we just did a lookup.
 				contacts = router.Lookup(key, router.RpcFindNodes).contacts;
-				TouchBucketWithKey(key);
 			}
 
             contacts.ForEach(c =>

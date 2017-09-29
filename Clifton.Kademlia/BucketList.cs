@@ -46,10 +46,10 @@ namespace Clifton.Kademlia
         public void AddContact(Contact contact)
         {
             Validate.IsFalse<OurNodeCannotBeAContactException>(ourID == contact.ID, "Cannot add ourselves as a contact!");
+            contact.Touch();            // Update the LastSeen to now.
 
             lock (this)
             {
-                contact.Touch();            // Update the LastSeen to now.
                 KBucket kbucket = GetKBucket(contact.ID);
 
                 if (kbucket.Contains(contact.ID))
@@ -66,6 +66,8 @@ namespace Clifton.Kademlia
                         int idx = GetKBucketIndex(contact.ID);
                         buckets[idx] = k1;
                         buckets.Insert(idx + 1, k2);
+                        buckets[idx].Touch();
+                        buckets[idx + 1].Touch();
                         AddContact(contact);
                     }
                     else
@@ -77,6 +79,11 @@ namespace Clifton.Kademlia
                         {
                             // Null continuation is used because unit tests may not initialize a DHT.
                             dht?.DelayEviction(lastSeenContact, contact);
+                        }
+                        else
+                        {
+                            // Still can't add the contact, so put it into the pending list.
+                            dht?.AddToPending(contact);
                         }
                     }
                 }

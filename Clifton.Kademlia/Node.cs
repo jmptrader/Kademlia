@@ -10,11 +10,13 @@ namespace Clifton.Kademlia
         public BucketList BucketList { get { return bucketList; } }
         public IStorage Storage { get { return storage; } }
         public IStorage CacheStorage { get { return cacheStorage; } }
+        public Dht Dht { get { return dht; } set { dht = value; } }
 
         protected Contact ourContact;
         protected BucketList bucketList;
         protected IStorage storage;
         protected IStorage cacheStorage;
+        protected Dht dht;
 
         protected Node()
         {
@@ -56,14 +58,35 @@ namespace Clifton.Kademlia
         {
             var (contacts, val) = FindNode(new Contact(null, new ID(request.Sender)), new ID(request.Key));
 
-            return new { Contacts = contacts.Select(c => new { Contact = c.ID.Value, Protocol = c.Protocol, ProtocolName = c.Protocol.GetType().Name }).ToList(), RandomID = request.RandomID };
+            return new
+            {
+                Contacts = contacts.Select(c =>
+                    new
+                    {
+                        Contact = c.ID.Value,
+                        Protocol = c.Protocol,
+                        ProtocolName = c.Protocol.GetType().Name
+                    }).ToList(),
+                RandomID = request.RandomID
+            };
         }
 
         public object ServerFindValue(CommonRequest request)
         {
             var (contacts, val) = FindValue(new Contact(null, new ID(request.Sender)), new ID(request.Key));
 
-            return new { Contacts = contacts?.Select(c => new { Contact = c.ID.Value, Protocol = c.Protocol, ProtocolName=c.Protocol.GetType().Name })?.ToList(), RandomID = request.RandomID, Value = val };
+            return new
+            {
+                Contacts = contacts?.Select(c =>
+                new
+                {
+                    Contact = c.ID.Value,
+                    Protocol = c.Protocol,
+                    ProtocolName = c.Protocol.GetType().Name
+                })?.ToList(),
+                RandomID = request.RandomID,
+                Value = val
+            };
         }
 
         // ======= ======= ======= ======= =======
@@ -74,18 +97,19 @@ namespace Clifton.Kademlia
         public Contact Ping(Contact sender)
         {
             Validate.IsFalse<SendingQueryToSelfException>(sender.ID == ourContact.ID, "Sender should not be ourself!");
-            SendKeyValuesToNewContact(sender);
+            SendKeyValuesIfNewContact(sender);
             bucketList.AddContact(sender);
 
             return ourContact;
         }
 
         /// <summary>
-        /// Store a key-value pair in the republish or cache storage, updating the contact if it's not us.
+        /// Store a key-value pair in the republish or cache storage.
         /// </summary>
         public void Store(Contact sender, ID key, string val, bool isCached = false, int expirationTimeSec = 0)
         {
             Validate.IsFalse<SendingQueryToSelfException>(sender.ID == ourContact.ID, "Sender should not be ourself!");
+            bucketList.AddContact(sender);
 
             if (isCached)
             {
@@ -93,9 +117,7 @@ namespace Clifton.Kademlia
             }
             else
             {
-                SendKeyValuesToNewContact(sender);
-                bucketList.AddContact(sender);
-
+                SendKeyValuesIfNewContact(sender);
                 storage.Set(key, val, Constants.EXPIRATION_TIME_SECONDS);
             }
         }
@@ -110,7 +132,7 @@ namespace Clifton.Kademlia
         public (List<Contact> contacts, string val) FindNode(Contact sender, ID key)
         {
             Validate.IsFalse<SendingQueryToSelfException>(sender.ID == ourContact.ID, "Sender should not be ourself!");
-            SendKeyValuesToNewContact(sender);
+            SendKeyValuesIfNewContact(sender);
             bucketList.AddContact(sender);
 
             // Exclude sender.
@@ -125,7 +147,7 @@ namespace Clifton.Kademlia
         public (List<Contact> contacts, string val) FindValue(Contact sender, ID key)
         {
             Validate.IsFalse<SendingQueryToSelfException>(sender.ID == ourContact.ID, "Sender should not be ourself!");
-            SendKeyValuesToNewContact(sender);
+            SendKeyValuesIfNewContact(sender);
             bucketList.AddContact(sender);
 
             if (storage.Contains(key))
@@ -150,30 +172,62 @@ namespace Clifton.Kademlia
         }
 #endif
 
-        protected void SendKeyValuesToNewContact(Contact sender)
+        /// <summary>
+        /// For a new contact, we store values to that contact whose keys ^ ourContact are less than stored keys ^ [otherContacts].
+        /// </summary>
+        protected void SendKeyValuesIfNewContact(Contact sender)
         {
-            lock (bucketList)
+            List<Contact> contacts = new List<Contact>();
+
+            if (IsNewContact(sender))
             {
-                // If we have a new contact...
-                if (!bucketList.ContactExists(sender))
+                lock (bucketList)
+                {
+                    // Clone so we can release the lock.
+                    contacts = new List<Contact>(bucketList.Buckets.SelectMany(b => b.Contacts));
+                }
+
+                if (contacts.Count() > 0)
                 {
                     // and our distance to the key < any other contact's distance to the key...
                     storage.AsParallel().ForEach(k =>
                     {
-                        var contacts = bucketList.Buckets.SelectMany(b => b.Contacts);
+                    // our min distance to the contact.
+                    var distance = contacts.Min(c => k ^ c.ID);
 
-                        if (contacts.Count() > 0)
+                    // If our contact is closer, store the contact on its node.
+                    if ((k ^ ourContact.ID) < distance)
                         {
-                            var distance = contacts.Min(c => k ^ c.ID);
-
-                            if ((k ^ ourContact.ID) < distance)
-                            {
-                                sender.Protocol.Store(ourContact, new ID(k), storage.Get(k));   // send it to the new contact.
-                        }
+                            var error = sender.Protocol.Store(ourContact, new ID(k), storage.Get(k));
+                            dht?.HandleError(error, sender);
                         }
                     });
                 }
             }
+        }
+
+        /// <summary>
+        /// Returns true if the contact isn't in the bucket list or the pending contacts list.
+        /// </summary>
+        protected bool IsNewContact(Contact sender)
+        {
+            bool ret;
+
+            lock (bucketList)
+            {
+                // If we have a new contact...
+                ret = bucketList.ContactExists(sender);
+            }
+
+            if (dht != null)            // for unit testing, dht may be null
+            {
+                lock (dht.PendingContacts)
+                {
+                    ret |= dht.PendingContacts.ContainsBy(sender, c => c.ID);
+                }
+            }
+
+            return !ret;
         }
     }
 }

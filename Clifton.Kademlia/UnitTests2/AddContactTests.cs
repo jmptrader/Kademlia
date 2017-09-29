@@ -1,4 +1,4 @@
-﻿// #define IGNORE_SLOW_TESTS
+﻿#define IGNORE_SLOW_TESTS
 
 using System;
 using System.Collections.Generic;
