@@ -9,4 +9,3 @@ Kademlia implementation in C#
 
 # License
 [The Code Project Open License (CPOL) 1.02](http://htmlpreview.github.io/?http://www.codeproject.com/info/cpol10.aspx)
-
