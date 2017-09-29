@@ -7,6 +7,12 @@
 </head>
 
 <body>
+<h1>Implementing the Kademlia Peer-to-Peer Distributed Hash Table</h1>
+<p>
+<img border="0" src="file:///C:/projects/Kademlia/docs/bucketRefresh2.png" width="460" height="463">
+
+</p>
+
 <h1>Contents</h1><ul>
 <li><a href="#Introduction0">Introduction</a></li>
 <ul>
@@ -26,272 +32,279 @@
 <li><a href="#WhatisAccomplishedHere12">What is Accomplished Here</a></li>
 <li><a href="#Notation13">Notation</a></li>
 <li><a href="#AWordAbouttheUnitTests14">A Word About the Unit Tests</a></li>
+<li><a href="#ANoteAbouttheCode&nbsp;15">A Note About the Code&nbsp; </a></li>
 </ul>
-<li><a href="#KeyConcepts15">Key Concepts</a></li>
+<li><a href="#KeyConcepts16">Key Concepts</a></li>
 <ul>
-<li><a href="#GeneralTerminology16">General Terminology</a></li>
+<li><a href="#GeneralTerminology17">General Terminology</a></li>
 <ul>
-<li><a href="#OverlayNetwork17">Overlay Network</a></li>
+<li><a href="#OverlayNetwork18">Overlay Network</a></li>
 </ul>
-<li><a href="#KademliaTerminology18">Kademlia Terminology</a></li>
+<li><a href="#KademliaTerminology19">Kademlia Terminology</a></li>
 <ul>
-<li><a href="#Node19">Node</a></li>
-<li><a href="#NodeID20">Node ID</a></li>
-<li><a href="#k-Bucket21">k-Bucket</a></li>
-<li><a href="#Key-Value22">Key-Value</a></li>
-<li><a href="#Router23">Router</a></li>
-<li><a href="#Distance/&quot;Closeness&quot;24">Distance / &quot;Closeness&quot;</a></li>
-<li><a href="#Prefix25">Prefix</a></li>
-<li><a href="#Depth26">Depth</a></li>
-<li><a href="#BucketSplit27">Bucket Split</a></li>
+<li><a href="#Node20">Node</a></li>
+<li><a href="#NodeID21">Node ID</a></li>
+<li><a href="#k-Bucket22">k-Bucket</a></li>
+<li><a href="#Key-Value23">Key-Value</a></li>
+<li><a href="#Router24">Router</a></li>
+<li><a href="#Distance/&quot;Closeness&quot;25">Distance / &quot;Closeness&quot;</a></li>
+<li><a href="#Prefix26">Prefix</a></li>
+<li><a href="#Depth27">Depth</a></li>
+<li><a href="#BucketSplit28">Bucket Split</a></li>
 </ul>
-<li><a href="#CommunicationProtocol28">Communication Protocol</a></li>
+<li><a href="#CommunicationProtocol29">Communication Protocol</a></li>
 <ul>
-<li><a href="#Ping29">Ping</a></li>
-<li><a href="#Store30">Store</a></li>
-<li><a href="#FindNode31">Find Node</a></li>
-<li><a href="#FindValue32">Find Value</a></li>
+<li><a href="#Ping30">Ping</a></li>
+<li><a href="#Store31">Store</a></li>
+<li><a href="#FindNode32">Find Node</a></li>
+<li><a href="#FindValue33">Find Value</a></li>
 </ul>
-<li><a href="#OtherConsiderations33">Other Considerations</a></li>
+<li><a href="#OtherConsiderations34">Other Considerations</a></li>
 <ul>
-<li><a href="#ExpirationTime34">Expiration Time</a></li>
-<li><a href="#Over-caching35">Over-caching</a></li>
-<li><a href="#BucketRefreshes36">Bucket Refreshes</a></li>
-<li><a href="#JoiningaNetwork37">Joining a Network</a></li>
+<li><a href="#ExpirationTime35">Expiration Time</a></li>
+<li><a href="#Over-caching36">Over-caching</a></li>
+<li><a href="#BucketRefreshes37">Bucket Refreshes</a></li>
+<li><a href="#JoiningaNetwork38">Joining a Network</a></li>
 </ul>
 </ul>
-<li><a href="#NodeRequirements38">Node Requirements</a></li>
+<li><a href="#NodeRequirements39">Node Requirements</a></li>
 <ul>
-<li><a href="#TheBigIntegerClass39">The BigInteger Class</a></li>
-<li><a href="#TheNodeSpecification40">The Node Specification</a></li>
+<li><a href="#TheBigIntegerClass40">The BigInteger Class</a></li>
+<li><a href="#TheNodeSpecification41">The Node Specification</a></li>
 <ul>
-<li><a href="#Ambiguity#141">Ambiguity #1</a></li>
-<li><a href="#Contradiction#142">Contradiction #1</a></li>
-<li><a href="#Artifact#143">Artifact #1</a></li>
+<li><a href="#Ambiguity#142">Ambiguity #1</a></li>
+<li><a href="#Contradiction#143">Contradiction #1</a></li>
+<li><a href="#Artifact#144">Artifact #1</a></li>
 </ul>
 </ul>
-<li><a href="#InitialID,Router,Contact,KBucket,BucketList,Node,andDhtImplementations44">Initial ID, Router, Contact, KBucket, BucketList, Node, and Dht Implementations</a></li>
+<li><a href="#InitialID,Router,Contact,KBucket,BucketList,Node,andDhtImplementations45">Initial ID, Router, Contact, KBucket, BucketList, Node, and Dht Implementations</a></li>
 <ul>
-<li><a href="#TheIDClass45">The ID Class</a></li>
+<li><a href="#TheIDClass46">The ID Class</a></li>
 <ul>
-<li><a href="#UnitTests46">Unit Tests</a></li>
+<li><a href="#UnitTests47">Unit Tests</a></li>
 </ul>
-<li><a href="#TheRouterClass47">The Router Class</a></li>
-<li><a href="#TheContactClass48">The Contact Class</a></li>
-<li><a href="#TheKBucketClass49">The KBucket Class</a></li>
+<li><a href="#TheRouterClass48">The Router Class</a></li>
+<li><a href="#TheContactClass49">The Contact Class</a></li>
+<li><a href="#TheKBucketClass50">The KBucket Class</a></li>
 <ul>
-<li><a href="#UnitTest50">Unit Test</a></li>
+<li><a href="#UnitTest51">Unit Test</a></li>
 </ul>
-<li><a href="#TheBucketListClass51">The BucketList Class</a></li>
-<li><a href="#TheNodeClass52">The Node Class</a></li>
-<li><a href="#TheDhtClass53">The Dht Class</a></li>
+<li><a href="#TheBucketListClass52">The BucketList Class</a></li>
+<li><a href="#TheNodeClass53">The Node Class</a></li>
+<li><a href="#TheDhtClass54">The Dht Class</a></li>
 </ul>
-<li><a href="#AddingContacts-Discussion54">Adding Contacts - Discussion</a></li>
+<li><a href="#AddingContacts-Discussion55">Adding Contacts - Discussion</a></li>
 <ul>
-<li><a href="#Contradiction#255">Contradiction #2</a></li>
+<li><a href="#Contradiction#256">Contradiction #2</a></li>
 <ul>
-<li><a href="#Terminology56">Terminology</a></li>
+<li><a href="#Terminology57">Terminology</a></li>
 </ul>
-<li><a href="#Contradiction#357">Contradiction #3</a></li>
+<li><a href="#Contradiction#358">Contradiction #3</a></li>
 <ul>
-<li><a href="#Terminology58">Terminology</a></li>
+<li><a href="#Terminology59">Terminology</a></li>
 </ul>
-<li><a href="#Contradiction#459">Contradiction #4</a></li>
+<li><a href="#Contradiction#460">Contradiction #4</a></li>
 <ul>
-<li><a href="#Terminology60">Terminology</a></li>
+<li><a href="#Terminology61">Terminology</a></li>
 </ul>
-<li><a href="#Ambiguity#261">Ambiguity #2</a></li>
-<li><a href="#WhatistheBucketSplittingAlgorithmActuallyDoing62">What is the Bucket Splitting Algorithm Actually Doing?</a></li>
-<li><a href="#FailingtoaddYourselftoaPeer-SelfCorrecting63">Failing to add Yourself to a Peer - Self Correcting</a></li>
-<li><a href="#DegradingaKademliaPeer64">Degrading a Kademlia Peer</a></li>
+<li><a href="#Ambiguity#262">Ambiguity #2</a></li>
+<li><a href="#WhatistheBucketSplittingAlgorithmActuallyDoing63">What is the Bucket Splitting Algorithm Actually Doing?</a></li>
+<li><a href="#FailingtoaddYourselftoaPeer-SelfCorrecting64">Failing to add Yourself to a Peer - Self Correcting</a></li>
+<li><a href="#DegradingaKademliaPeer65">Degrading a Kademlia Peer</a></li>
 </ul>
-<li><a href="#AddingContacts-Implementation65">Adding Contacts - Implementation</a></li>
+<li><a href="#AddingContacts-Implementation66">Adding Contacts - Implementation</a></li>
 <ul>
-<li><a href="#BasicUnitTests66">Basic Unit Tests</a></li>
+<li><a href="#BasicUnitTests67">Basic Unit Tests</a></li>
 </ul>
-<li><a href="#AddingContacts-DistributionTestsRevealImportanceofRandomness67">Adding Contacts - Distribution Tests Reveal Importance of Randomness</a></li>
+<li><a href="#AddingContacts-DistributionTestsRevealImportanceofRandomness68">Adding Contacts - Distribution Tests Reveal Importance of Randomness</a></li>
 <ul>
-<li><a href="#DistributionTests68">Distribution Tests</a></li>
+<li><a href="#DistributionTests69">Distribution Tests</a></li>
 <ul>
-<li><a href="#TheQuestionofRandomness69">The Question of Randomness</a></li>
+<li><a href="#TheQuestionofRandomness70">The Question of Randomness</a></li>
 </ul>
-<li><a href="#HowaContactIDAffectsDistribution70">How a Contact ID Affects Distribution</a></li>
-<li><a href="#Terminology71">Terminology</a></li>
-<li><a href="#Ambiguity#372">Ambiguity #3</a></li>
-<li><a href="#Ambiguity#473">Ambiguity #4</a></li>
-<li><a href="#Ambiguity#574">Ambiguity #5</a></li>
-<li><a href="#Ambiguity#675">Ambiguity #6</a></li>
-<li><a href="#Ambiguity#776">Ambiguity #7</a></li>
-<li><a href="#Ambiguity#877">Ambiguity #8</a></li>
-<li><a href="#Ambiguity#978">Ambiguity #9</a></li>
-<li><a href="#Ambiguity#1079">Ambiguity #10</a></li>
-<li><a href="#TheConceptofCloseness80">The Concept of Closeness</a></li>
+<li><a href="#HowaContactIDAffectsDistribution71">How a Contact ID Affects Distribution</a></li>
+<li><a href="#Terminology72">Terminology</a></li>
+<li><a href="#Ambiguity#373">Ambiguity #3</a></li>
+<li><a href="#Ambiguity#474">Ambiguity #4</a></li>
+<li><a href="#Ambiguity#575">Ambiguity #5</a></li>
+<li><a href="#Ambiguity#676">Ambiguity #6</a></li>
+<li><a href="#Ambiguity#777">Ambiguity #7</a></li>
+<li><a href="#Ambiguity#878">Ambiguity #8</a></li>
+<li><a href="#Ambiguity#979">Ambiguity #9</a></li>
+<li><a href="#Ambiguity#1080">Ambiguity #10</a></li>
+<li><a href="#TheConceptofCloseness81">The Concept of Closeness</a></li>
 </ul>
-<li><a href="#NodeLookup-Implementation81">Node Lookup - Implementation</a></li>
+<li><a href="#NodeLookup-Implementation82">Node Lookup - Implementation</a></li>
 <ul>
-<li><a href="#FindClosestNonEmptyKBucket82">FindClosestNonEmptyKBucket</a></li>
-<li><a href="#GetClosestNodes83">GetClosestNodes</a></li>
-<li><a href="#RpcFindNodes84">RpcFindNodes</a></li>
-<li><a href="#GetCloserNodes85">GetCloserNodes</a></li>
-<li><a href="#Lookup86">Lookup</a></li>
-<li><a href="#ExtensionMethods87">Extension Methods</a></li>
+<li><a href="#FindClosestNonEmptyKBucket83">FindClosestNonEmptyKBucket</a></li>
+<li><a href="#GetClosestNodes84">GetClosestNodes</a></li>
+<li><a href="#RpcFindNodes85">RpcFindNodes</a></li>
+<li><a href="#GetCloserNodes86">GetCloserNodes</a></li>
+<li><a href="#Lookup87">Lookup</a></li>
+<li><a href="#ExtensionMethods88">Extension Methods</a></li>
 <ul>
-<li><a href="#AddRangeDistinctBy88">AddRangeDistinctBy</a></li>
-<li><a href="#ExceptBy89">ExceptBy</a></li>
+<li><a href="#AddRangeDistinctBy89">AddRangeDistinctBy</a></li>
+<li><a href="#ExceptBy90">ExceptBy</a></li>
 </ul>
 </ul>
-<li><a href="#NodeLookup-UnitTests90">Node Lookup - Unit Tests</a></li>
+<li><a href="#NodeLookup-UnitTests91">Node Lookup - Unit Tests</a></li>
 <ul>
-<li><a href="#VirtualNode/Protocol91">Virtual Node/Protocol</a></li>
-<li><a href="#MissingImplementationNeedstobeAddedNow92">Missing Implementation Needs to be Added Now</a></li>
-<li><a href="#GetCloseContactsTest93">GetCloseContacts Test</a></li>
-<li><a href="#NoNodesToQueryTest94">NoNodesToQuery Test</a></li>
-<li><a href="#GetCloserNodesTest95">GetCloserNodes Test</a></li>
-<li><a href="#LookupUnitTest96">Lookup Unit Test</a></li>
-<li><a href="#SimpleCloserContactsTest97">Simple Closer Contacts Test</a></li>
-<li><a href="#SimpleFartherContactsTest98">Simple Farther Contacts Test</a></li>
+<li><a href="#VirtualNode/Protocol92">Virtual Node/Protocol</a></li>
+<li><a href="#MissingImplementationNeedstobeAddedNow93">Missing Implementation Needs to be Added Now</a></li>
+<li><a href="#GetCloseContactsTest94">GetCloseContacts Test</a></li>
+<li><a href="#NoNodesToQueryTest95">NoNodesToQuery Test</a></li>
+<li><a href="#GetCloserNodesTest96">GetCloserNodes Test</a></li>
+<li><a href="#LookupUnitTest97">Lookup Unit Test</a></li>
+<li><a href="#SimpleCloserContactsTest98">Simple Closer Contacts Test</a></li>
+<li><a href="#SimpleFartherContactsTest99">Simple Farther Contacts Test</a></li>
 </ul>
-<li><a href="#ValueLookup-Discussion99">Value Lookup - Discussion</a></li>
+<li><a href="#ValueLookup-Discussion100">Value Lookup - Discussion</a></li>
 <ul>
-<li><a href="#Ambiguity#12100">Ambiguity #12</a></li>
-<li><a href="#Refactorings101">Refactorings</a></li>
+<li><a href="#Ambiguity#11101">Ambiguity #11</a></li>
+<li><a href="#Refactorings102">Refactorings</a></li>
 <ul>
-<li><a href="#RefactoringtheRouter.LookupMethod102">Refactoring the Router.Lookup Method</a></li>
-<li><a href="#RefactoringtheGetCloserNodesMethod103">Refactoring the GetCloserNodes Method</a></li>
-<li><a href="#RefactoringtheRpcFindNodesMethod104">Refactoring the RpcFindNodes Method</a></li>
+<li><a href="#RefactoringtheRouter.LookupMethod103">Refactoring the Router.Lookup Method</a></li>
+<li><a href="#RefactoringtheGetCloserNodesMethod104">Refactoring the GetCloserNodes Method</a></li>
+<li><a href="#RefactoringtheRpcFindNodesMethod105">Refactoring the RpcFindNodes Method</a></li>
 </ul>
-<li><a href="#AddingtheRpcFindValueMethod105">Adding the RpcFindValue Method</a></li>
+<li><a href="#AddingtheRpcFindValueMethod106">Adding the RpcFindValue Method</a></li>
 </ul>
-<li><a href="#ValueLookup-Implementation106">Value Lookup - Implementation</a></li>
+<li><a href="#ValueLookup-Implementation107">Value Lookup - Implementation</a></li>
 <ul>
-<li><a href="#TheStoreImplementation107">The Store Implementation</a></li>
-<li><a href="#TheFindValueImplementation108">The FindValue Implementation</a></li>
+<li><a href="#TheStoreImplementation108">The Store Implementation</a></li>
+<li><a href="#TheFindValueImplementation109">The FindValue Implementation</a></li>
 </ul>
-<li><a href="#TheDhtClass-Discussion109">The Dht Class - Discussion</a></li>
-<li><a href="#TheDhtClass-Implementation110">The Dht Class - Implementation</a></li>
-<li><a href="#TheDhtClass-UnitTests111">The Dht Class - Unit Tests</a></li>
+<li><a href="#TheDhtClass-Discussion110">The Dht Class - Discussion</a></li>
+<li><a href="#TheDhtClass-Implementation111">The Dht Class - Implementation</a></li>
 <ul>
-<li><a href="#LocalStoreFoundValueTest112">LocalStoreFoundValueTest</a></li>
-<li><a href="#ValueStoredInCloserNodeTest113">ValueStoredInCloserNodeTest</a></li>
-<li><a href="#ValueFoundInFartherNodeTest114">ValueFoundInFartherNodeTest</a></li>
-<li><a href="#ValueStoredGetsPropagatedTest115">ValueStoredGetsPropagatedTest</a></li>
-<li><a href="#GetValuePropagatesToCloserNodeTest116">GetValuePropagatesToCloserNodeTest</a></li>
+<li><a href="#Ambiguity#12112">Ambiguity #12</a></li>
 </ul>
-<li><a href="#TheDht-BootstrappingDiscussion117">The Dht - Bootstrapping Discussion</a></li>
-<li><a href="#TheDht-BootstrappingImplementation118">The Dht - Bootstrapping Implementation</a></li>
+<li><a href="#TheDhtClass-UnitTests113">The Dht Class - Unit Tests</a></li>
 <ul>
-<li><a href="#RandomIDWithinBucket119">RandomIDWithinBucket</a></li>
-<li><a href="#Bootstrap120">Bootstrap</a></li>
+<li><a href="#LocalStoreFoundValueTest114">LocalStoreFoundValueTest</a></li>
+<li><a href="#ValueStoredInCloserNodeTest115">ValueStoredInCloserNodeTest</a></li>
+<li><a href="#ValueFoundInFartherNodeTest116">ValueFoundInFartherNodeTest</a></li>
+<li><a href="#ValueStoredGetsPropagatedTest117">ValueStoredGetsPropagatedTest</a></li>
+<li><a href="#GetValuePropagatesToCloserNodeTest118">GetValuePropagatesToCloserNodeTest</a></li>
 </ul>
-<li><a href="#TheDht-BootstrappingUnitTests121">The Dht - Bootstrapping Unit Tests</a></li>
+<li><a href="#TheDht-BootstrappingDiscussion119">The Dht - Bootstrapping Discussion</a></li>
+<li><a href="#TheDht-BootstrappingImplementation120">The Dht - Bootstrapping Implementation</a></li>
 <ul>
-<li><a href="#RandomWithinBucketTests122">RandomWithinBucketTests</a></li>
-<li><a href="#BootstrapWithinBootstrappingBucketTest123">BootstrapWithinBootstrappingBucketTest</a></li>
-<li><a href="#BootstrapOutsideBootstrappingBucketTest124">BootstrapOutsideBootstrappingBucketTest</a></li>
+<li><a href="#RandomIDWithinBucket121">RandomIDWithinBucket</a></li>
+<li><a href="#Bootstrap122">Bootstrap</a></li>
 </ul>
-<li><a href="#BucketManagement125">Bucket Management</a></li>
+<li><a href="#TheDht-BootstrappingUnitTests123">The Dht - Bootstrapping Unit Tests</a></li>
 <ul>
-<li><a href="#EvictingUnresponsiveContactsInFullBuckets126">Evicting Unresponsive Contacts In Full Buckets</a></li>
-<li><a href="#BucketRefresh-Discussion127">Bucket Refresh - Discussion</a></li>
+<li><a href="#RandomWithinBucketTests124">RandomWithinBucketTests</a></li>
+<li><a href="#BootstrapWithinBootstrappingBucketTest125">BootstrapWithinBootstrappingBucketTest</a></li>
+<li><a href="#BootstrapOutsideBootstrappingBucketTest126">BootstrapOutsideBootstrappingBucketTest</a></li>
+</ul>
+<li><a href="#BucketManagement127">Bucket Management</a></li>
 <ul>
-<li><a href="#Ambiguity#11128">Ambiguity #11</a></li>
-</ul>
-<li><a href="#BucketRefresh-Implementation129">Bucket Refresh - Implementation</a></li>
-</ul>
-<li><a href="#Key-ValueManagement130">Key-Value Management</a></li>
+<li><a href="#EvictingUnresponsiveContactsInFullBuckets128">Evicting Unresponsive Contacts In Full Buckets</a></li>
+<li><a href="#BucketRefresh-Discussion129">Bucket Refresh - Discussion</a></li>
 <ul>
-<li><a href="#OriginalPublisherStore131">Original Publisher Store</a></li>
-<li><a href="#RepublishedStore132">Republished Store</a></li>
-<li><a href="#CachedStore133">Cached Store</a></li>
-<li><a href="#StorageMechanismsintheDhtClass134">Storage Mechanisms in the Dht Class</a></li>
-<li><a href="#ExpiringKey-ValuePairs135">Expiring Key-Value Pairs</a></li>
-<li><a href="#OriginatorRepublishing-Discussion136">Originator Republishing - Discussion</a></li>
-<li><a href="#OriginatorRepublishing-Implementation137">Originator Republishing - Implementation</a></li>
-<li><a href="#StoringKey-ValuesOntothenewNodeWhenanewNodeRegisters-Discussion138">Storing Key-Values Onto the new Node When a new Node Registers - Discussion</a></li>
+<li><a href="#Ambiguity#13130">Ambiguity #13</a></li>
+</ul>
+<li><a href="#BucketRefresh-Implementation131">Bucket Refresh - Implementation</a></li>
+</ul>
+<li><a href="#Key-ValueManagement132">Key-Value Management</a></li>
 <ul>
-<li><a href="#Interpretation139">Interpretation</a></li>
-<li><a href="#Ambiguity#13140">Ambiguity #13</a></li>
-</ul>
-<li><a href="#StoringKey-ValuesOntothenewNodeWhenanewNodeRegisters-UnitTest141">Storing Key-Values Onto the new Node When a new Node Registers - Unit Test</a></li>
-<li><a href="#KeyRepublishing-Discussion142">Key Republishing - Discussion</a></li>
+<li><a href="#OriginalPublisherStore133">Original Publisher Store</a></li>
+<li><a href="#RepublishedStore134">Republished Store</a></li>
+<li><a href="#CachedStore135">Cached Store</a></li>
+<li><a href="#StorageMechanismsintheDhtClass136">Storage Mechanisms in the Dht Class</a></li>
+<li><a href="#RepublishingKey-Values137">Republishing Key-Values</a></li>
+<li><a href="#ExpiringKey-ValuePairs138">Expiring Key-Value Pairs</a></li>
+<li><a href="#OriginatorRepublishing-Discussion139">Originator Republishing - Discussion</a></li>
+<li><a href="#OriginatorRepublishing-Implementation140">Originator Republishing - Implementation</a></li>
+<li><a href="#StoringKey-ValuesOntothenewNodeWhenanewNodeRegisters-Discussion141">Storing Key-Values Onto the new Node When a new Node Registers - Discussion</a></li>
 <ul>
-<li><a href="#FirstOptimization143">First Optimization</a></li>
-<li><a href="#SecondOptimization144">Second Optimization</a></li>
+<li><a href="#Interpretation142">Interpretation</a></li>
+<li><a href="#Ambiguity#14143">Ambiguity #14</a></li>
 </ul>
-<li><a href="#KeyRepublishing-Implementation145">Key Republishing - Implementation</a></li>
-<li><a href="#Over-Caching-Discussion146">Over-Caching - Discussion</a></li>
+<li><a href="#StoringKey-ValuesOntothenewNodeWhenanewNodeRegisters-UnitTest144">Storing Key-Values Onto the new Node When a new Node Registers - Unit Test</a></li>
+<li><a href="#KeyRepublishing-Discussion145">Key Republishing - Discussion</a></li>
 <ul>
-<li><a href="#Ambiguity#14147">Ambiguity #14</a></li>
-<li><a href="#Ambiguity#15148">Ambiguity #15</a></li>
-<li><a href="#Ambiguity#16149">Ambiguity #16</a></li>
+<li><a href="#FirstOptimization146">First Optimization</a></li>
+<li><a href="#SecondOptimization147">Second Optimization</a></li>
 </ul>
-<li><a href="#Over-Caching-Implementation150">Over-Caching - Implementation</a></li>
-<li><a href="#NeverExpiringRepublishedKey-Values151">Never Expiring Republished Key-Values</a></li>
-</ul>
-<li><a href="#Ping152">Ping</a></li>
+<li><a href="#KeyRepublishing-Implementation148">Key Republishing - Implementation</a></li>
+<li><a href="#Over-Caching-Discussion149">Over-Caching - Discussion</a></li>
 <ul>
-<li><a href="#Piggy-BackedPing153">Piggy-Backed Ping</a></li>
+<li><a href="#Ambiguity#15150">Ambiguity #15</a></li>
+<li><a href="#Ambiguity#16151">Ambiguity #16</a></li>
+<li><a href="#Ambiguity#17152">Ambiguity #17</a></li>
 </ul>
-<li><a href="#PersistingtheDht154">Persisting the Dht</a></li>
-<li><a href="#ConsiderationsforanAsynchronousImplementation155">Considerations for an Asynchronous Implementation</a></li>
+<li><a href="#Over-Caching-Implementation153">Over-Caching - Implementation</a></li>
+<li><a href="#NeverExpiringRepublishedKey-Values154">Never Expiring Republished Key-Values</a></li>
+</ul>
+<li><a href="#Ping155">Ping</a></li>
 <ul>
-<li><a href="#ThreadSafety156">Thread Safety</a></li>
-<li><a href="#ParallelQueries-Discussion157">Parallel Queries - Discussion</a></li>
+<li><a href="#Piggy-BackedPing156">Piggy-Backed Ping</a></li>
+</ul>
+<li><a href="#PersistingtheDht157">Persisting the Dht</a></li>
+<li><a href="#ConsiderationsforanAsynchronousImplementation158">Considerations for an Asynchronous Implementation</a></li>
 <ul>
-<li><a href="#Ambiguity#17158">Ambiguity #17</a></li>
-</ul>
-<li><a href="#ParallelQueries-Implementation159">Parallel Queries - Implementation</a></li>
+<li><a href="#ThreadSafety159">Thread Safety</a></li>
+<li><a href="#ParallelQueries-Discussion160">Parallel Queries - Discussion</a></li>
 <ul>
-<li><a href="#TheBaseRouter160">The BaseRouter</a></li>
-<li><a href="#TheParallelRouter161">The ParallelRouter</a></li>
+<li><a href="#Ambiguity#18161">Ambiguity #18</a></li>
 </ul>
-</ul>
-<li><a href="#SomeEnhancements162">Some Enhancements</a></li>
+<li><a href="#ParallelQueries-Implementation162">Parallel Queries - Implementation</a></li>
 <ul>
-<li><a href="#OperatorOverloadingoftheIDClass163">Operator Overloading of the ID Class</a></li>
+<li><a href="#TheBaseRouter163">The BaseRouter</a></li>
+<li><a href="#TheParallelRouter164">The ParallelRouter</a></li>
 </ul>
-<li><a href="#ABasicTCPSubnetProtocol164">A Basic TCP Subnet Protocol</a></li>
+</ul>
+<li><a href="#SomeEnhancements165">Some Enhancements</a></li>
 <ul>
-<li><a href="#RequestMessages165">Request Messages</a></li>
-<li><a href="#RequestHandlers166">Request Handlers</a></li>
-<li><a href="#Responses167">Responses</a></li>
-<li><a href="#ServerImplementation168">Server Implementation</a></li>
-<li><a href="#TheTCPSubnetProtocol169">The TCP Subnet Protocol</a></li>
-<li><a href="#ErrorReporting170">Error Reporting</a></li>
-<li><a href="#TCPSubnetUnitTesting171">TCP Subnet Unit Testing</a></li>
+<li><a href="#OperatorOverloadingoftheIDClass166">Operator Overloading of the ID Class</a></li>
+</ul>
+<li><a href="#ABasicTCPSubnetProtocol167">A Basic TCP Subnet Protocol</a></li>
 <ul>
-<li><a href="#PingRouteTest172">PingRouteTest</a></li>
-<li><a href="#StoreRouteTest173"> StoreRouteTest</a></li>
-<li><a href="#FindNodesRouteTest174"> FindNodesRouteTest</a></li>
-<li><a href="#FindValueRouteTest175"> FindValueRouteTest</a></li>
-<li><a href="#UnresponsiveNodeTest176"> UnresponsiveNodeTest</a></li>
-</ul>
-</ul>
-<li><a href="#RPCErrorHandlingandDelayedEviction-Discussion177">RPC Error Handling and Delayed Eviction - Discussion</a></li>
+<li><a href="#RequestMessages168">Request Messages</a></li>
+<li><a href="#RequestHandlers169">Request Handlers</a></li>
+<li><a href="#Responses170">Responses</a></li>
+<li><a href="#ServerImplementation171">Server Implementation</a></li>
+<li><a href="#TheTCPSubnetProtocol172">The TCP Subnet Protocol</a></li>
+<li><a href="#ErrorReporting173">Error Reporting</a></li>
+<li><a href="#TCPSubnetUnitTesting174">TCP Subnet Unit Testing</a></li>
 <ul>
-<li><a href="#Ambiguity#18178">Ambiguity #18</a></li>
+<li><a href="#PingRouteTest175">PingRouteTest</a></li>
+<li><a href="#StoreRouteTest176"> StoreRouteTest</a></li>
+<li><a href="#FindNodesRouteTest177"> FindNodesRouteTest</a></li>
+<li><a href="#FindValueRouteTest178"> FindValueRouteTest</a></li>
+<li><a href="#UnresponsiveNodeTest179"> UnresponsiveNodeTest</a></li>
 </ul>
-<li><a href="#RPCErrorHandlingandDelayedEviction-Implementation179">RPC Error Handling and Delayed Eviction - Implementation</a></li>
-<li><a href="#RPCErrorHandlingandDelayedEviction-UnitTests180">RPC Error Handling and Delayed Eviction - Unit Tests</a></li>
-<li><a href="#PuttingItTogether-ADemo181">Putting It Together - A Demo</a></li>
+</ul>
+<li><a href="#RPCErrorHandlingandDelayedEviction180">RPC Error Handling and Delayed Eviction</a></li>
 <ul>
-<li><a href="#Bootstrapping182">Bootstrapping</a></li>
-<li><a href="#BucketRefresh183">Bucket Refresh</a></li>
-</ul>
-<li><a href="#NotImplemented184">Not Implemented</a></li>
+<li><a href="#Discussion181">Discussion</a></li>
 <ul>
-<li><a href="#UDPDropOuts185">UDP Drop Outs</a></li>
-<li><a href="#AcceleratedLookups186">Accelerated Lookups</a></li>
+<li><a href="#Ambiguity#19182">Ambiguity #19</a></li>
 </ul>
-<li><a href="#Conclusion187">Conclusion</a></li>
-<li><a href="#References188">References</a></li>
+<li><a href="#Implementation183">Implementation</a></li>
+<li><a href="#UnitTests184">Unit Tests</a></li>
+</ul>
+<li><a href="#PuttingItTogether-ADemo185">Putting It Together - A Demo</a></li>
+<ul>
+<li><a href="#Bootstrapping186">Bootstrapping</a></li>
+<li><a href="#BucketRefresh187">Bucket Refresh</a></li>
+<li><a href="#StoreValue188">Store Value</a></li>
+<li><a href="#StoreRepublish189">Store Republish</a></li>
+</ul>
+<li><a href="#NotImplemented190">Not Implemented</a></li>
+<ul>
+<li><a href="#UDPDropOuts191">UDP Drop Outs</a></li>
+<li><a href="#AcceleratedLookups192">Accelerated Lookups</a></li>
+<li><a href="#SybilAttacks193">Sybil Attacks</a></li>
+</ul>
+<li><a href="#Conclusion194">Conclusion</a></li>
+<li><a href="#References195">References</a></li>
 </ul>
 
 
-
-<p>Implementing the Kademlia Peer-to-Peer Distributed Hash Table - A Deep Dive</p>
-
-<img border="0" src="file:///C:/projects/Kademlia/docs/bucketRefresh2.png" width="460" height="463">
 
 <h2><a name="Introduction0">Introduction</a></h2>
 <p>Kademlia, according to a paper<sup>1</sup> published in 2015 by Xing Shi Cai 
@@ -437,6 +450,9 @@ http://www.tm.uka.de/doc/SKademlia_2007.pdf</a></p>
 <p>Improving Lookup Performance over a Widely-Deployed DHT:
 <a href="http://www.barsoom.org/papers/infocom-2006-kad.pdf">
 http://www.barsoom.org/papers/infocom-2006-kad.pdf</a> </p>
+<p>Review on Detection and Mitigation of Sybil attack in the network, Procedia 
+Computer Science 78 (2016) 395-401:
+<a href="https://tinyurl.com/y9a7ekzy">https://tinyurl.com/y9a7ekzy</a> </p>
 <h4><a name="DistributedLedgers10">Distributed Ledgers</a></h4>
 <p>Flowchain: A Case Study on Building a Blockchain for the IoT:
 <a href="http://schd.ws/hosted_files/lc3china2017/43/Flowchain-LC3_2017_Beijing-20170614.pdf">
@@ -509,8 +525,14 @@ course.</p>
 <p>Also, most of these unit tests are really system-level tests, or at least 
 partial system tests.&nbsp; Actual unit tests of specific code sections in a 
 particular method, well, it gets inane rather quickly.&nbsp; So you'll see a lot 
-of setup stuff being done in the higher level tests. </p>
-<h2><a name="KeyConcepts15">Key Concepts</a></h2>
+of setup stuff being done in the higher level tests.</p>
+<h3><a name="ANoteAbouttheCode&nbsp;15">A Note About the Code&nbsp; </a></h3>
+<p>The code presented here is incremental, meaning that as additional features 
+are discussed and added, code is updated to reflect those new features and their 
+unit tests.&nbsp; Not every refactoring is included in the code here, therefore 
+its strongly recommended if you're interested in a particular method, use the 
+final implementation in the actual code base.</p>
+<h2><a name="KeyConcepts16">Key Concepts</a></h2>
 <p>The Kademlia specification essentially consists of several sub-algorithms:</p>
 <ol>
 	<li>Registering new peers.</li>
@@ -523,39 +545,39 @@ of setup stuff being done in the higher level tests. </p>
 this involves some magic numbers based on the authors' research into the 
 performance of other networks as Chord<sup>10</sup> and Pasty<sup>11</sup> and 
 the behavior of peers in those networks.</p>
-<h3><a name="GeneralTerminology16">General Terminology</a></h3>
+<h3><a name="GeneralTerminology17">General Terminology</a></h3>
 <p>There are several terms used in general discussions of P2P systems.</p>
-<h4><a name="OverlayNetwork17">Overlay Network</a></h4>
+<h4><a name="OverlayNetwork18">Overlay Network</a></h4>
 <p>An overlay network is one in which each node keeps a (usually partial) list 
 of other nodes participating in the network.</p>
-<h3><a name="KademliaTerminology18">Kademlia Terminology</a></h3>
+<h3><a name="KademliaTerminology19">Kademlia Terminology</a></h3>
 <p>Terms used specifically in the Kademlia specification are described here.</p>
-<h4><a name="Node19">Node</a></h4>
+<h4><a name="Node20">Node</a></h4>
 <p>A node (also known as a contact) is a peer in the network.</p>
-<h4><a name="NodeID20">Node ID</a></h4>
+<h4><a name="NodeID21">Node ID</a></h4>
 <p>This is a 160 bit node identifier, obtained from a SHA1 hash.</p>
-<h4><a name="k-Bucket21">k-Bucket</a></h4>
+<h4><a name="k-Bucket22">k-Bucket</a></h4>
 <p>A collection of at most <i>k</i> nodes (or contacts.)&nbsp; Also simply 
 	called a bucket.&nbsp; Each node handles up to <i>k</i> contacts within a 
 range of ID's.&nbsp; Initially, the ID range is the entire spectrum from 0 &lt;= id 
 &lt;= 2<sup>160</sup> - 1.</p>
-<h4><a name="Key-Value22">Key-Value</a></h4>
+<h4><a name="Key-Value23">Key-Value</a></h4>
 <p>Peers store values based on 160 bit SHA1 hashed keys.&nbsp; Each stored entry 
 consists of a key-value pair.</p>
-<h4><a name="Router23">Router</a></h4>
+<h4><a name="Router24">Router</a></h4>
 <p>The router manages the collection of k-buckets and also determines into which 
 nodes a key-value should be stored.</p>
-<h4><a name="Distance/&quot;Closeness&quot;24">Distance / &quot;Closeness&quot;</a></h4>
+<h4><a name="Distance/&quot;Closeness&quot;25">Distance / &quot;Closeness&quot;</a></h4>
 <p>The distance between a host and the key is an XOR computation of the host's 
 ID with the key.&nbsp; </p>
-<h4><a name="Prefix25">Prefix</a></h4>
+<h4><a name="Prefix26">Prefix</a></h4>
 <p>A prefix is the term used to describe the <i>n</i> most significant bits (MSB) of an ID.&nbsp; </p>
-<h4><a name="Depth26">Depth</a></h4>
+<h4><a name="Depth27">Depth</a></h4>
 <p>The depth of a bucket is defined as the shared prefix of a bucket.&nbsp; 
 Since buckets are associated with ranges from 2<sup>i</sup> to 2<sup>i+1</sup> - 
 1 where 0 &lt;= i &lt; 160, one could say that the depth of a bucket is 160 - i.&nbsp; 
 We'll see later that this may not be the case.</p>
-<h4><a name="BucketSplit27">Bucket Split</a></h4>
+<h4><a name="BucketSplit28">Bucket Split</a></h4>
 <p>A bucket split is something potentially happens when a node's k-bucket is 
 full -- meaning it has <i>k</i> contacts -- and a new contact wants to register 
 within the bucket's range.&nbsp; At this point, an algorithm kicks in that:</p>
@@ -567,7 +589,7 @@ within the bucket's range.&nbsp; At this point, an algorithm kicks in that:</p>
 </ol>
 <p>If the bucket can't be split, there is a third fallback that replaces an old 
 contact that is no longer responding with the new contact.</p>
-<h3><a name="CommunicationProtocol28">Communication Protocol</a></h3>
+<h3><a name="CommunicationProtocol29">Communication Protocol</a></h3>
 <p>The Kademlia protocol consists of four Remote Procedure Calls (RPC's).&nbsp; 
 All RPC's require that the sender provides a random RPC ID which must be echoed 
 by the recipient: <font color="#FF00FF">In all RPCs, the recipient must echo a 
@@ -577,18 +599,18 @@ additional assurance of the senderï¿½s network address.</font></p>
 <p>Any time a peer is contacted with any of the four RPC's, it goes through the 
 process of adding/updating the contact in its own list.&nbsp; In the description 
 below, the concept of &quot;closeness&quot; will be discussed in detail later.</p>
-<h4><a name="Ping29">Ping</a></h4>
+<h4><a name="Ping30">Ping</a></h4>
 <p><font color="#FF00FF">The PING RPC probes a node to see if it is online.</font>&nbsp; 
 This is considered a &quot;primitive&quot; function, in that it just returns the random 
 RPC ID that accompanied the Ping request.</p>
-<h4><a name="Store30">Store</a></h4>
+<h4><a name="Store31">Store</a></h4>
 <p>STORE instructs a node to store a (key, value) pair for later retrieval.&nbsp; 
 This is also considered a &quot;primitive&quot; function, as it again just returns the 
 random RPC ID that accompanied the Store request.&nbsp; <font color="#FF00FF">To 
 store a (key,value) pair, a participant locates the k closest nodes to the key 
 and sends them STORE RPCS.</font>&nbsp; The participant does this by inspecting 
 its own k closest nodes to the key.</p>
-<h4><a name="FindNode31">Find Node</a></h4>
+<h4><a name="FindNode32">Find Node</a></h4>
 <p><font color="#FF00FF">FIND_NODE takes a 160-bit ID as an argument. The 
 recipient of a the RPC returns (IP address, UDP port, Node ID) triples for the k 
 nodes it knows about closest to the target ID. These triples can come from a 
@@ -620,7 +642,7 @@ purely my own enhancement.</p>
 	list of &quot;close&quot; peers.</li>
 <li>A peer may issue this RPC to discover other peers on the network.</li>
 </ul>
-<h4><a name="FindValue32">Find Value</a></h4>
+<h4><a name="FindValue33">Find Value</a></h4>
 <p><font color="#FF00FF">FIND_VALUE behaves like FIND_NODE - returning (IP 
 address, UDP port, Node ID) triples - with one exception. If the RPC recipient 
 has received a STORE RPC for the key, it just returns the stored value.</font></p>
@@ -633,8 +655,8 @@ use FIND_VALUE rather than FIND_NODE RPCS. Moreover, the procedure halts
 immediately when any node returns the value. For caching purposes, once a lookup 
 succeeds, the requesting node stores the (key,value) pair at the closest node it 
 observed to the key that did not return the value.</font></p>
-<h3><a name="OtherConsiderations33">Other Considerations</a></h3>
-<h4><a name="ExpirationTime34">Expiration Time</a></h4>
+<h3><a name="OtherConsiderations34">Other Considerations</a></h3>
+<h4><a name="ExpirationTime35">Expiration Time</a></h4>
 <p><font color="#FF00FF">Additionally, each node re-publishes (key,value) pairs 
 as necessary to keep them alive, as described later in Section 2.5. This ensures 
 persistence (as we show in our proof sketch) of the (key,value) pair with very 
@@ -647,7 +669,7 @@ times may be appropriate.</font></p>
 <p>If we want to consider using Kademlia in a distributed ledger 
 implementation, it would seem necessary that key-values never expire, otherwise 
 this would result in an integrity loss of the ledger data.</p>
-<h4><a name="Over-caching35">Over-caching</a></h4>
+<h4><a name="Over-caching36">Over-caching</a></h4>
 <p><font color="#FF00FF">Because of the uni-directionality of the topology, 
 future searches for the same key are likely to hit cached entries before 
 querying the closest node. During times of high popularity for a certain key, 
@@ -658,23 +680,23 @@ node and the node whose ID is closest to the key ID. While simple LRU eviction
 would result in a similar lifetime distribution, there is no natural way of 
 choosing the cache size, since nodes have no a priori knowledge of how many 
 values the system will store.</font></p>
-<h4><a name="BucketRefreshes36">Bucket Refreshes</a></h4>
+<h4><a name="BucketRefreshes37">Bucket Refreshes</a></h4>
 <p><font color="#FF00FF">Buckets are generally kept fresh by the traffic of 
 requests traveling through nodes. To handle pathological cases in which there 
 are no lookups for a particular ID range, each node refreshes any bucket to 
 which it has not performed a node lookup in the past hour. Refreshing means 
 picking a random ID in the bucketï¿½s range and performing a node search for that 
 ID.</font></p>
-<h4><a name="JoiningaNetwork37">Joining a Network</a></h4>
+<h4><a name="JoiningaNetwork38">Joining a Network</a></h4>
 <p><font color="#FF00FF">To join the network, a node <i>u</i> must have a 
 contact to an already participating node <i>w</i>. <i>u</i> inserts <i>w</i> 
 into the appropriate k-bucket. <i>u</i> then performs a node lookup for its own 
 node ID. Finally, <i>u</i> refreshes all k-buckets further away than its closest 
 neighbor. During the refreshes, <i>u</i> both populates its own k-buckets and 
 inserts itself into other nodesï¿½ k-buckets as necessary.</font></p>
-<h2><a name="NodeRequirements38">Node Requirements</a></h2>
+<h2><a name="NodeRequirements39">Node Requirements</a></h2>
 <p>Let's cover some basic implementation requirements for a node first.&nbsp; </p>
-<h3><a name="TheBigIntegerClass39">The BigInteger Class</a></h3>
+<h3><a name="TheBigIntegerClass40">The BigInteger Class</a></h3>
 <p>We could write our own byte array manipulation and comparison operators, 
 which is what zencoders did, or we could use the <code>BigInteger</code> class to handle the 
 range of ID's from 0 &lt;= id &lt;= 2<sup>160</sup> - 1.&nbsp; In ended up using 
@@ -683,10 +705,10 @@ impressed with Python's ability to handle these values without any special
 classes:</p>
 <pre>&gt;&gt;&gt; 2 ** 160
 1461501637330902918203684832716283019655932542976L</pre>
-<h3><a name="TheNodeSpecification40">The Node Specification</a></h3>
+<h3><a name="TheNodeSpecification41">The Node Specification</a></h3>
 <p> <font color="#FF00FF">Participating computers each have a node ID in the 
 160-bit key space </font>(Introduction) which is simple enough.&nbsp; </p>
-<h4><a name="Ambiguity#141">Ambiguity #1</a></h4>
+<h4><a name="Ambiguity#142">Ambiguity #1</a></h4>
 <p>But then there's this:&nbsp; <font color="#FF00FF">Kademlia nodes store 
 contact information about each other to route query messages. For each 0 &lt; i &lt; 
 160, every node keeps a list of [contacts] of distance between 2<sup>i</sup> and 
@@ -697,7 +719,7 @@ of each other (for example k = 20). </font>
 How is this distance defined?&nbsp; Is this the XOR distance or the integer 
 distance?&nbsp; And when the spec says &quot;distance from itself&quot;, what two values 
 are being compared?&nbsp; Why even make this comparison?</p>
-<h4><a name="Contradiction#142">Contradiction #1</a></h4>
+<h4><a name="Contradiction#143">Contradiction #1</a></h4>
 <p><font color="#FF00FF">Initially, a node uï¿½s routing tree has a single nodeï¿½ 
 one k-bucket covering the entire ID space.</font>&nbsp; (Section 2.4)&nbsp; So 
 from Section 2.2, we have each node contain 159 k-buckets (0 &lt; i &lt; 160) covering 
@@ -737,10 +759,10 @@ hard-wired in the zencoders implementation.</p>
 <p>Here, a single bucket is created spanning the ID space.&nbsp; The Python code 
 is correct because it also implements bucket splitting, which is in the second 
 version of the specification.</p>
-<h4><a name="Artifact#143">Artifact #1</a></h4>
+<h4><a name="Artifact#144">Artifact #1</a></h4>
 <p>In the former specification, this limits the total number of contacts that 
 your server can handle to 160 * 20, or 3200 contacts.</p>
-<h2><a name="InitialID,Router,Contact,KBucket,BucketList,Node,andDhtImplementations44">Initial ID, Router, Contact, KBucket, BucketList, Node, and Dht Implementations</a></h2>
+<h2><a name="InitialID,Router,Contact,KBucket,BucketList,Node,andDhtImplementations45">Initial ID, Router, Contact, KBucket, BucketList, Node, and Dht Implementations</a></h2>
 <p>After resolving the ambiguity and contradiction, we can implement most of the 
 relevant classes.&nbsp; Note that some of the properties in the following 
 implementation will be discussed later.</p>
@@ -753,7 +775,7 @@ model:</p>
 	<li>Green - value type fields</li>
 </ul>
 <p align="center"><img border="0" src="classmodel.png" width="793" height="673"></p>
-<h3><a name="TheIDClass45">The ID Class</a></h3>
+<h3><a name="TheIDClass46">The ID Class</a></h3>
 <pre>using System.Numerics;
 
 namespace Clifton.Kademlia
@@ -810,7 +832,7 @@ public static byte[] Append0(this byte[] b)
 	<li value="2">The byte array is in little-endian order, meaning that the 
 	least significant value is stored first.</li>
 </ol>
-<h4><a name="UnitTests46">Unit Tests</a></h4>
+<h4><a name="UnitTests47">Unit Tests</a></h4>
 <p><img border="0" src="unittest.png" width="14" height="32"></p>
 <pre>[TestMethod]
 public void LittleEndianTest()
@@ -834,7 +856,7 @@ public void BadIDTest()
   byte[] test = new byte[21];
   new ID(test);
 }</pre>
-<h3><a name="TheRouterClass47">The Router Class</a></h3>
+<h3><a name="TheRouterClass48">The Router Class</a></h3>
 <p>At the moment, the router simply manages the host's node:</p>
 <pre>namespace Clifton.Kademlia
 {
@@ -852,7 +874,7 @@ public void BadIDTest()
     }
   }
 }</pre>
-<h3><a name="TheContactClass48">The Contact Class</a></h3>
+<h3><a name="TheContactClass49">The Contact Class</a></h3>
 <p>The contact class manages the contact's ID, last seen, and network 
 connectivity.&nbsp; Because I want to abstract the way network protocols are 
 handled, such that it is easy to test nodes in a virtual (in-memory) network, or 
@@ -892,7 +914,7 @@ namespace Clifton.Kademlia
     }
   }
 }</pre>
-<h3><a name="TheKBucketClass49">The KBucket Class</a></h3>
+<h3><a name="TheKBucketClass50">The KBucket Class</a></h3>
 <p>Each k-bucket maintains a list of up to <i>k</i> contacts.</p>
 <pre>using System.Collections.Generic;
 using System.Numerics;
@@ -942,7 +964,7 @@ namespace Clifton.Kademlia
     }
   }
 }</pre>
-<h4><a name="UnitTest50">Unit Test</a></h4>
+<h4><a name="UnitTest51">Unit Test</a></h4>
 <p><img border="0" src="unittest.png" width="14" height="32"></p>
 <pre>[TestMethod, ExpectedException(typeof(TooManyContactsException))]
 public void TooManyContactsTest()
@@ -955,7 +977,7 @@ public void TooManyContactsTest()
   // Add one more.
   kbucket.AddContact(new Contact(null, new ID(21)));
 }</pre>
-<h3><a name="TheBucketListClass51">The BucketList Class</a></h3>
+<h3><a name="TheBucketListClass52">The BucketList Class</a></h3>
 <p>The bucket list class is a high level singleton container for buckets and operations 
 that manipulate buckets.&nbsp; For the moment, most of this is stubbed with 
 minimal behavior:</p>
@@ -991,7 +1013,7 @@ namespace Clifton.Kademlia
     }
   }
 }</pre>
-<h3><a name="TheNodeClass52">The Node Class</a></h3>
+<h3><a name="TheNodeClass53">The Node Class</a></h3>
 <p>The node class is another high level singleton container for handling the Kademlia 
 commands sent over the wire.&nbsp; This is mostly stubbed for now:</p>
 <pre>using System.Collections.Generic;
@@ -1060,7 +1082,7 @@ namespace Clifton.Kademlia
 }</pre>
 <p><img border="0" src="note.png" width="24" height="32"> Of note here is the interface <code>IStorage</code> which abstracts the storage mechanism 
 for key-value pairs.</p>
-<h3><a name="TheDhtClass53">The Dht Class</a></h3>
+<h3><a name="TheDhtClass54">The Dht Class</a></h3>
 <p>The Dht class is the &quot;server&quot; - the entry point for instantiating our peer.&nbsp; At the moment, the Dht class is simply a container for the Router:</p>
 <pre>using System;
 
@@ -1075,7 +1097,7 @@ namespace Clifton.Kademlia
     protected Router router;
   }
 }</pre>
-<h2><a name="AddingContacts-Discussion54">Adding Contacts - Discussion</a></h2>
+<h2><a name="AddingContacts-Discussion55">Adding Contacts - Discussion</a></h2>
 <p>Version 2, Section 2.2 of the specification initially states this simple 
 algorithm for dealing adding contacts:</p>
 <p><font color="#FF00FF">When a Kademlia node receives any message (request or 
@@ -1114,7 +1136,7 @@ k-buckets when old nodes leave the system.</font></p>
 <p>We also observe that this has nothing to do with binary trees, which is 
 something version 2 of the spec introduced.&nbsp; This is basically a hang-over 
 from version 1 of the spec.</p>
-<h3><a name="Contradiction#255">Contradiction #2</a></h3>
+<h3><a name="Contradiction#256">Contradiction #2</a></h3>
 <p>Section 2.4 states something slightly different:</p>
 <p><font color="#FF00FF">Nodes in the routing tree are allocated dynamically, as 
 needed. Initially, a node uï¿½s routing tree has a single nodeï¿½ one k-bucket 
@@ -1124,7 +1146,7 @@ new contact is simply inserted. Otherwise, if the k-bucketï¿½s range includes uï
 own node ID, then the bucket is split into two new buckets, the old contents 
 divided between the two, and the insertion attempt repeated. If a k-bucket with 
 a different range is full, the new contact is simply dropped.</font></p>
-<h4><a name="Terminology56">Terminology</a></h4>
+<h4><a name="Terminology57">Terminology</a></h4>
 <ul>
 	<li>&quot;u's routing tree&quot; - the host's bucket list.</li>
 	<li>&quot;if a k-bucket with a different range is full&quot; - meaning, a k-bucket 
@@ -1137,7 +1159,7 @@ difference (more on this whole XOR thing later.)</p>
 <p>So this algorithm looks like this:</p>
 <p align="center"><img border="0" src="addContact2.png" width="761" height="625"></p>
 <p>What happened to pinging the least seen contact and replacing it?&nbsp; </p>
-<h3><a name="Contradiction#357">Contradiction #3</a></h3>
+<h3><a name="Contradiction#358">Contradiction #3</a></h3>
 <p>But the spec then goes on to say:</p>
 <p><font color="#FF00FF">One complication arises in highly unbalanced trees.&nbsp; 
 Suppose node <i>u</i> joins the system and is the only node whose ID begins 000. 
@@ -1148,7 +1170,7 @@ nodes.&nbsp; To avoid this problem, Kademlia nodes keep all valid contacts in a
 subtree of size at least k nodes, even if this requires splitting buckets in 
 which the nodeï¿½s own ID does not reside. Figure 5 illustrates these additional 
 splits.</font></p>
-<h4><a name="Terminology58">Terminology</a></h4>
+<h4><a name="Terminology59">Terminology</a></h4>
 <ul>
 	<li>&quot;a subtree of size at least k nodes&quot; - ok, we can vaguely see that a 
 	subtree contains other subtrees where the total number of contacts is 
@@ -1189,7 +1211,7 @@ I present in full here:</p>
 <p>So my decision, given the lack of clarity and by the authors of the spec, is 
 to ignore this, because, as you will see next, there is yet another version of 
 how contacts are added.</p>
-<h3><a name="Contradiction#459">Contradiction #4</a></h3>
+<h3><a name="Contradiction#460">Contradiction #4</a></h3>
 <p>In Section 4.2, on Accelerated Lookups, we have a different specification for 
 how contacts are added:</p>
 <p><font color="#FF00FF">Section 2.4 describes how a Kademlia node splits a 
@@ -1200,7 +1222,7 @@ the nodeï¿½s ID gets split once (into two ranges); if b = 3, it gets split at tw
 levels into a maximum of four ranges, etc. The general splitting rule is that a 
 node splits a full k-bucket if the bucketï¿½s range contains the nodeï¿½s own ID or 
 the depth d of the k-bucket in the routing tree satisfies d&nbsp; (mod b) != 0.</font></p>
-<h4><a name="Terminology60">Terminology</a></h4>
+<h4><a name="Terminology61">Terminology</a></h4>
 <ul>
 	<li>depth - According to the spec: <font color="#FF00FF">The depth is just 
 	the length of the prefix shared by all nodes in the k-bucketï¿½s range. </font>
@@ -1210,7 +1232,7 @@ the depth d of the k-bucket in the routing tree satisfies d&nbsp; (mod b) != 0.<
 	depth of <i>a k-bucket</i>, the 
 	latter the depth of <i>the node</i>.</li>
 </ul>
-<h3><a name="Ambiguity#261">Ambiguity #2</a></h3>
+<h3><a name="Ambiguity#262">Ambiguity #2</a></h3>
 <p>With regards to the definition of depth, does this mean &quot;the length of prefix 
 shared by <i>any</i> node that would <i>reside in the k-bucket's range</i>&quot; or 
 does it mean &quot;the length of a prefix shared by <i>all</i> nodes <i>currently in the k-bucket</i>?&quot;</p>
@@ -1227,7 +1249,7 @@ def sharedPrefix(args):
     i += 1
   return args[0][:i]</pre>
 <p>Here, the depth is determined by the shared prefixes in the nodes.</p>
-<h3><a name="WhatistheBucketSplittingAlgorithmActuallyDoing62">What is the Bucket Splitting Algorithm Actually Doing?</a></h3>
+<h3><a name="WhatistheBucketSplittingAlgorithmActuallyDoing63">What is the Bucket Splitting Algorithm Actually Doing?</a></h3>
 <p>So, when we use the following algorithm to determine whether a bucket can be 
 split:</p>
 <pre>kbucket.HasInRange(ourID) || ((kbucket.Depth() % Constants.B) != 0)</pre>
@@ -1257,7 +1279,7 @@ the bucket when split, will result in less &quot;room&quot; for new contacts.&nb
 Eventually, when the bucket range becomes narrow enough, the number of bits 
 shared in the prefix of the contacts in the bucket reaches the threshold <i>b</i> 
 which the spec says should be 5.</p>
-<h3><a name="FailingtoaddYourselftoaPeer-SelfCorrecting63">Failing to add Yourself to a Peer - Self Correcting</a></h3>
+<h3><a name="FailingtoaddYourselftoaPeer-SelfCorrecting64">Failing to add Yourself to a Peer - Self Correcting</a></h3>
 <p>Let's say your a new node and you want to register yourself with a known 
 peer, but that peer is basically maxed out for the number of contacts that it 
 can hold in the particular bucket for your ID -- the depth is <i>b</i>.&nbsp; In 
@@ -1268,7 +1290,7 @@ a contact or not, you will receive back &quot;nearby&quot; peers.&nbsp; Any time
 contact those peers (to store a value, for example) all the peers that you 
 contact will try to add your contact.&nbsp; When one succeeds, your contact ID 
 will be disseminated slowly through the network. </p>
-<h3><a name="DegradingaKademliaPeer64">Degrading a Kademlia Peer</a></h3>
+<h3><a name="DegradingaKademliaPeer65">Degrading a Kademlia Peer</a></h3>
 <p>Given a peer with both an ID and a single contact ID of less than 2<sup>159</sup>, 
 it 
 will initially split once for 20 contacts that are added having ID's greater than 2<sup>159</sup>.&nbsp; 
@@ -1362,7 +1384,7 @@ providing a unique ID in its contact request.</li>
 	allow the depth for bucket splitting to be greater than the recommended <i>b</i> 
 	= 5.</li>
 </ol>
-<h2><a name="AddingContacts-Implementation65">Adding Contacts - Implementation</a></h2>
+<h2><a name="AddingContacts-Implementation66">Adding Contacts - Implementation</a></h2>
 <p>This is the flowchart of what we're implementing:</p>
 <p align="center">
 <img border="0" src="addContact3.png" width="664" height="838"></p>
@@ -1529,7 +1551,7 @@ public static IEnumerable&lt;bool&gt; Bits(this byte[] bytes)
 
   return bytes.SelectMany(GetBits);
 }</pre>
-<h3><a name="BasicUnitTests66">Basic Unit Tests</a></h3>
+<h3><a name="BasicUnitTests67">Basic Unit Tests</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> A few basic unit tests:</p>
 <pre>[TestMethod]
 public void UniqueIDAddTest()
@@ -1559,12 +1581,12 @@ public void BucketSplitTest()
   bucketList.AddContact(new Contact(null, ID.RandomID));
   Assert.IsTrue(bucketList.Buckets.Count &gt; 1, &quot;Bucket should have split into two or more buckets.&quot;);
 }</pre>
-<h2><a name="AddingContacts-DistributionTestsRevealImportanceofRandomness67">Adding Contacts - Distribution Tests Reveal Importance of Randomness</a></h2>
+<h2><a name="AddingContacts-DistributionTestsRevealImportanceofRandomness68">Adding Contacts - Distribution Tests Reveal Importance of Randomness</a></h2>
 <p>Some very interesting things are revealed with the above implementation.&nbsp; 
 Let's write a unit test that runs the process of adding 3200 contacts, and we do 
 this 100 times, to get some results about the number of contacts that are 
 actually added:</p>
-<h3><a name="DistributionTests68">Distribution Tests</a></h3>
+<h3><a name="DistributionTests69">Distribution Tests</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"></p>
 <pre>[TestMethod]
 public void RandomIDDistributionTest()
@@ -1602,7 +1624,7 @@ succeed at adding around 720 contacts.</li>
 	<li>If we increase <i>b </i>we can affect this number.&nbsp; For example, 
 	increasing b to 6 (from 5) doubles the number of contacts that are added.</li>
 </ol>
-<h4><a name="TheQuestionofRandomness69">The Question of Randomness</a></h4>
+<h4><a name="TheQuestionofRandomness70">The Question of Randomness</a></h4>
 <p>As noted above, the ID was determined by a random value of 0-255 for each 
 byte in the 20 bytes ID space.&nbsp; What happens instead if we randomize the ID 
 based instead on its prefix?&nbsp; Meaning that the distribution of ID's, based 
@@ -1691,7 +1713,7 @@ public void RandomPrefixDistributionTest()
 <p>Notice how 
 large the standard deviation is -- there is something go on here, which we'll 
 explore next.</p>
-<h3><a name="HowaContactIDAffectsDistribution70">How a Contact ID Affects Distribution</a></h3>
+<h3><a name="HowaContactIDAffectsDistribution71">How a Contact ID Affects Distribution</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> Let's look at what happens when we assign a node ID as one of 2<sup>i</sup> 
 where 0 &lt;= i &lt; 160 and add 3200 integer random contact ID's.&nbsp; Here's the unit test, which outputs the count of 
 contacts added to each node ID in the set of <i>i</i>:</p>
@@ -1775,13 +1797,13 @@ has the flexibility of choosing any one of k nodes to forward a request to.</fon
 </ol>
 <p align="center"><img border="0" src="lookup1.png" width="784" height="983"></p>
 <p>Got it?</p>
-<h3><a name="Terminology71">Terminology</a></h3>
+<h3><a name="Terminology72">Terminology</a></h3>
 <ul>
 	<li>The lookup initiator - this is your own peer wanting to make a store or 
 retrieve call to other peers.&nbsp; The node lookup is performed before you 
 	store or retrieve a value so that your peer has a reasonable.</li>
 </ul>
-<h3><a name="Ambiguity#372">Ambiguity #3</a></h3>
+<h3><a name="Ambiguity#373">Ambiguity #3</a></h3>
 <p>Given &quot;<font color="#FF00FF">To 
 store a (key,value) pair, a participant locates the k closest nodes to the key 
 and sends them STORE RPCS.</font>&quot; here the term &quot;locates&quot; actually means 
@@ -1820,14 +1842,14 @@ async def set_digest(self, dkey, value):
   nearest = self.protocol.router.findNeighbors(node)
   ...</pre>
 <p>where <code>findNeighbors</code> is the lookup algorithm described in the specification.</p>
-<h3><a name="Ambiguity#473">Ambiguity #4</a></h3>
+<h3><a name="Ambiguity#474">Ambiguity #4</a></h3>
 <p>What does &quot;<font color="#FF00FF">Nodes that fail to respond quickly&quot; </font>
 mean?&nbsp; Particularly, the term &quot;quickly?&quot;</p>
-<h3><a name="Ambiguity#574">Ambiguity #5</a></h3>
+<h3><a name="Ambiguity#575">Ambiguity #5</a></h3>
 <p>What if the peer you yourself don't have peers in any k-buckets?&nbsp; That 
 shouldn't happen (you should at least have the peer you are contacting) but if 
 that peer only has you in its k-buckets, then there's nothing to return.</p>
-<h3><a name="Ambiguity#675">Ambiguity #6</a></h3>
+<h3><a name="Ambiguity#676">Ambiguity #6</a></h3>
 <p>In &quot;<font color="#FF00FF"> from its closest non-empty k-bucket&quot;</font>, what 
 does &quot;closest&quot; mean?&nbsp; I am assuming here that it is the XOR distance 
 metric, but then the question is, what do we use as the &quot;key&quot; for a bucket with 
@@ -1839,7 +1861,7 @@ key resides.&nbsp; This more matches the other condition &quot;<font color="#FF0
 if that bucket has fewer than <i>a</i> entries, it just takes 
 the <i>a</i> closest nodes it knows of</font>&quot; which implies searching for all 
 <i>a</i> closest nodes across all buckets.</p>
-<h3><a name="Ambiguity#776">Ambiguity #7</a></h3>
+<h3><a name="Ambiguity#777">Ambiguity #7</a></h3>
 <p>In &quot;<font color="#FF00FF">The lookup initiator starts by picking <i>a</i> 
 nodes</font>&quot; what does &quot;picking&quot; mean?&nbsp; Does this mean additionally 
 sorting the contacts in the &quot;closest bucket&quot; also by closeness?&nbsp; It's 
@@ -1867,7 +1889,7 @@ if we want to exercise the algorithm, this is better:</p>
 
   List&lt;Contact&gt; nodesToQuery = allNodes.Take(Constants.ALPHA).ToList();</pre>
 <p>This actually leads to the next ambiguity.</p>
-<h3><a name="Ambiguity#877">Ambiguity #8</a></h3>
+<h3><a name="Ambiguity#878">Ambiguity #8</a></h3>
 <p>In the initial acquisition of a contacts as per the code above, should 
 contacts (I'm using &quot;contact&quot; and &quot;node&quot; rather interchangeably) that are closer 
 at this point be added to the list of closer contacts?&nbsp; The spec doesn't 
@@ -1884,7 +1906,7 @@ described above -- the <i>a</i> closest contacts we have are added to the
 // any farther node in the alpha list is immediately added to our farther contact list.
 closerContacts.AddRange(nodesToQuery.Where(n =&gt; (n.ID.Value ^ key.Value) &lt; (node.OurContact.ID.Value ^ key.Value)));
 fartherContacts.AddRange(nodesToQuery.Where(n =&gt; (n.ID.Value ^ key.Value) &gt;= (node.OurContact.ID.Value ^ key.Value)));</pre>
-<h3><a name="Ambiguity#978">Ambiguity #9</a></h3>
+<h3><a name="Ambiguity#979">Ambiguity #9</a></h3>
 <p>What do we do with the contacts outside of <i>a</i>?&nbsp; Given this: &quot;<font color="#FF00FF">If 
 a round of FIND_NODES fails to return a node any closer than the closest already 
 seen, the initiator resends the FIND_NODE to all of the <i>k</i> closest nodes 
@@ -1892,11 +1914,11 @@ it has not already queried.&quot; </font>does it apply to the first query of <i>
 nodes, or only to the set of nodes returned after the query?&nbsp; I'm going to 
 assume that it applies to the remainder of the <i>a</i> nodes not queried in the 
 first query, which will be a maximum of <i>k</i>-<i>a</i> contacts.</p>
-<h3><a name="Ambiguity#1079">Ambiguity #10</a></h3>
+<h3><a name="Ambiguity#1080">Ambiguity #10</a></h3>
 <p>The spec says this: &quot;<font color="#FF00FF">Most operations are implemented in 
 terms of the above lookup procedure.</font>&quot;&nbsp; What operations, and when?&nbsp; 
 We'll have to address this later.</p>
-<h3><a name="TheConceptofCloseness80">The Concept of Closeness</a></h3>
+<h3><a name="TheConceptofCloseness81">The Concept of Closeness</a></h3>
 <p><font color="#FF00FF">Many of Kademliaï¿½s benefits result from its use of a 
 novel XOR metric for distance between points in the key space. XOR is symmetric, 
 allowing Kademlia participants to receive lookup queries from precisely the same 
@@ -1927,7 +1949,7 @@ Stack Overflow<sup>13 </sup>:</p>
 <p>The author of that post provides an implementation<sup>14</sup> that doesn't 
 require a full table scan, but in my implementation, we'll just do a full scan 
 of the bucket list contacts.</p>
-<h2><a name="NodeLookup-Implementation81">Node Lookup - Implementation</a></h2>
+<h2><a name="NodeLookup-Implementation82">Node Lookup - Implementation</a></h2>
 <p>Let's start with a baseline implementation that for the moment:</p>
 <ol>
 	<li>Doesn't deal with the issue of parallelism.</li>
@@ -1941,7 +1963,7 @@ the basic algorithm, then add the parallelism and <i>a</i> concept later, and
 our unit tests should still pass.</p>
 <p>Also, the methods here are all marked as <code>virtual</code> in case you want to override 
 the implementation.&nbsp; First, some helper methods:</p>
-<h3><a name="FindClosestNonEmptyKBucket82">FindClosestNonEmptyKBucket</a></h3>
+<h3><a name="FindClosestNonEmptyKBucket83">FindClosestNonEmptyKBucket</a></h3>
 <pre>/// &lt;summary&gt;
 /// Using the k-bucket's key (it's high value), find the closest 
 /// k-bucket the given key that isn't empty.
@@ -1958,7 +1980,7 @@ the implementation.&nbsp; First, some helper methods:</p>
   return closest;
 }
 </pre>
-<h3><a name="GetClosestNodes83">GetClosestNodes</a></h3>
+<h3><a name="GetClosestNodes84">GetClosestNodes</a></h3>
 <pre>/// &lt;summary&gt;
 /// Get sorted list of closest nodes to the given key.
 /// &lt;/summary&gt;
@@ -1970,7 +1992,7 @@ the implementation.&nbsp; First, some helper methods:</p>
 {
   return bucket.Contacts.OrderBy(c =&gt; c.ID.Value ^ key.Value).ToList();
 }</pre>
-<h3><a name="RpcFindNodes84">RpcFindNodes</a></h3>
+<h3><a name="RpcFindNodes85">RpcFindNodes</a></h3>
 <pre>/// &lt;summary&gt;
 /// For each contact, call the FindNodes and return all the nodes whose contacts responded
 /// within a &quot;reasonable&quot; period of time.
@@ -1982,7 +2004,7 @@ protected List&lt;Contact&gt; RpcFindNodes(ID key, List&lt;Contact&gt; contacts)
 
   return nodes;
 }</pre>
-<h3><a name="GetCloserNodes85">GetCloserNodes</a></h3>
+<h3><a name="GetCloserNodes86">GetCloserNodes</a></h3>
 <p><img border="0" src="note.png" width="24" height="32"> Note that we always 
 exclude our own node and the nodes we're contacting.</p>
 <pre>/// &lt;summary&gt;
@@ -2010,7 +2032,7 @@ protected void GetCloserNodes(ID key, List&lt;Contact&gt; nodesToQuery, List&lt;
       Where(p =&gt; (p.ID.Value ^ key.Value) &gt;= nearestNodeDistance),
       (a, b) =&gt; a.ID.Value == b.ID.Value);
 }</pre>
-<h3><a name="Lookup86">Lookup</a></h3>
+<h3><a name="Lookup87">Lookup</a></h3>
 <p>This flowchart all comes together here:</p>
 <pre>public virtual List&lt;Contact&gt; Lookup(ID key, bool giveMeAll = false)
 {
@@ -2095,9 +2117,9 @@ KBucket bucket = FindClosestNonEmptyKBucket(key);
 <p><img border="0" src="note.png" width="24" height="32"> This algorithm is 
 iteration, not recursion, as the specification states.&nbsp; Every 
 implementation I've seen uses iteration.</p>
-<h3><a name="ExtensionMethods87">Extension Methods</a></h3>
+<h3><a name="ExtensionMethods88">Extension Methods</a></h3>
 <p>A few extension methods that are used:</p>
-<h4><a name="AddRangeDistinctBy88">AddRangeDistinctBy</a></h4>
+<h4><a name="AddRangeDistinctBy89">AddRangeDistinctBy</a></h4>
 <pre>public static void AddRangeDistinctBy&lt;T&gt;(this List&lt;T&gt; target, IEnumerable&lt;T&gt; src, Func&lt;T, T, bool&gt; equalityComparer)
 {
   src.ForEach(item =&gt;
@@ -2109,7 +2131,7 @@ implementation I've seen uses iteration.</p>
     }
   });
 }</pre>
-<h4><a name="ExceptBy89">ExceptBy</a></h4>
+<h4><a name="ExceptBy90">ExceptBy</a></h4>
 <pre>public static IEnumerable&lt;T&gt; ExceptBy&lt;T, TKey&gt;(this IEnumerable&lt;T&gt; src, T item, Func&lt;T, TKey&gt; keySelector)
 {
   TKey itemKey = keySelector(item);
@@ -2143,10 +2165,10 @@ public static IEnumerable&lt;T&gt; ExceptBy&lt;T, TKey&gt;(this IEnumerable&lt;T
     }
   }
 }</pre>
-<h2><a name="NodeLookup-UnitTests90">Node Lookup - Unit Tests</a></h2>
+<h2><a name="NodeLookup-UnitTests91">Node Lookup - Unit Tests</a></h2>
 <p>Before Getting Into Unit Tests we need to be able to create virtual nodes, which means implementing a 
 minimal virtual protocol:</p>
-<h3><a name="VirtualNode/Protocol91">Virtual Node/Protocol</a></h3>
+<h3><a name="VirtualNode/Protocol92">Virtual Node/Protocol</a></h3>
 <pre>public class VirtualProtocol : IProtocol
 {
   public Node Node { get { return node; } set { node = value; } }
@@ -2176,7 +2198,7 @@ minimal virtual protocol:</p>
     return node.FindNode(sender, key).contacts;
   }
 }</pre>
-<h3><a name="MissingImplementationNeedstobeAddedNow92">Missing Implementation Needs to be Added Now</a></h3>
+<h3><a name="MissingImplementationNeedstobeAddedNow93">Missing Implementation Needs to be Added Now</a></h3>
 <p>We also have to implement FindNode in the Node class:</p>
 <pre>/// &lt;summary&gt;
 /// From the spec: FindNode takes a 160-bit ID as an argument. The recipient of the RPC returns (IP address, UDP port, Node ID) triples 
@@ -2216,7 +2238,7 @@ public List&lt;Contact&gt; GetCloseContacts(ID toFind, ID exclude)
   // Spec (sort of): Return max(k) closer nodes, sorted by distance.
   return ret.Take(Constants.K).OrderBy(c=&gt;c.ID.Value ^ key.Value).ToList();
 }</pre>
-<h3><a name="GetCloseContactsTest93">GetCloseContacts Test</a></h3>
+<h3><a name="GetCloseContactsTest94">GetCloseContacts Test</a></h3>
 <p>This tests the 
 sorting and the maximum number of contacts returned limit.&nbsp; Note that it's 
 probably not the most ideal situation that I'm using all random ID's, however, 
@@ -2259,7 +2281,7 @@ public void GetCloseContactsOrderedTest()
   var others = node.BucketList.Buckets.SelectMany(b =&gt; b.Contacts.Except(closest)).Where(c =&gt; (c.ID.Value ^ key.Value) &lt; lastDistance);
   Assert.IsTrue(others.Count() == 0, &quot;Expected no other contacts with a smaller distance than the greatest distance to exist.&quot;);
 }</pre>
-<h3><a name="NoNodesToQueryTest94">NoNodesToQuery Test</a></h3>
+<h3><a name="NoNodesToQueryTest95">NoNodesToQuery Test</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> This test simply 
 verifies that we get no new nodes to query given that all the nodes we're 
 contacting are already being contacted.</p>
@@ -2297,7 +2319,7 @@ public void NoNodesToQueryTest()
   Assert.IsTrue(closerContacts.Count == 0, &quot;No new nodes expected.&quot;);
   Assert.IsTrue(fartherContacts.Count == 0, &quot;No new nodes expected.&quot;);
 }</pre>
-<h3><a name="GetCloserNodesTest95">GetCloserNodes Test</a></h3>
+<h3><a name="GetCloserNodesTest96">GetCloserNodes Test</a></h3>
 <p>Getting the system to exercise the different paths in the flowchart is an 
 interesting exercise.&nbsp; Again, note that it's probably not the most ideal 
 situation that I'm using all random ID's.&nbsp; Let's start with one of the first more complicated 
@@ -2391,7 +2413,7 @@ the system, and interestingly, as a result of these two different approaches, I 
 -- so much for &quot;it's not practical testing all the simple methods.&quot;&nbsp; As a 
 side note, it's interesting to see how much shorter the Linq for the code that 
 obtains the close and far contacts.</p>
-<h3><a name="LookupUnitTest96">Lookup Unit Test</a></h3>
+<h3><a name="LookupUnitTest97">Lookup Unit Test</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> Ironically, there really is no alternative way of getting these nodes, 
 particularly with regards to the <code>while</code> loop in the <code>Lookup</code> method.&nbsp; 
 So without beating my head over the issue, I implemented this test:</p>
@@ -2422,7 +2444,7 @@ public void LookupTest()
     closerContactsAltComputation.ForEach(c =&gt; Assert.IsTrue(closeContacts.Contains(c)));
   });
 }</pre>
-<h3><a name="SimpleCloserContactsTest97">Simple Closer Contacts Test</a></h3>
+<h3><a name="SimpleCloserContactsTest98">Simple Closer Contacts Test</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> This test, and the 
 next one, essentially exercises the part of the <code>Lookup</code> algorithm before the 
 <code>while</code> loop.&nbsp;
@@ -2463,7 +2485,7 @@ public void SimpleAllCloserContacts()
   Assert.IsTrue(router.CloserContacts.Count == Constants.K, &quot;All contacts should be closer.&quot;);
   Assert.IsTrue(router.FartherContacts.Count == 0, &quot;Did not expected farther contacts.&quot;);
 }</pre>
-<h3><a name="SimpleFartherContactsTest98">Simple Farther Contacts Test</a></h3>
+<h3><a name="SimpleFartherContactsTest99">Simple Farther Contacts Test</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32">
 <img border="0" src="note.png" width="24" height="32"> Again note how the bucket 
 and ID's 
@@ -2503,7 +2525,7 @@ public void SimpleAllFartherContacts()
   Assert.IsTrue(router.CloserContacts.Count == 0, &quot;Did not expected closer contacts.&quot;);
   Assert.IsTrue(router.FartherContacts.Count == Constants.K, &quot;All contacts should be farther.&quot;);
 }</pre>
-<h2><a name="ValueLookup-Discussion99">Value Lookup - Discussion</a></h2>
+<h2><a name="ValueLookup-Discussion100">Value Lookup - Discussion</a></h2>
 <p>From the spec: <font color="#FF00FF">FIND_VALUE behaves like FIND_NODE - 
 returning (IP address, UDP port, Node ID) triples - with one exception. If the 
 RPC recipient has received a STORE RPC for the key, it just returns the stored 
@@ -2521,7 +2543,7 @@ operations are implemented in terms of the above lookup procedure.</font>&quot;&
 When we're performing a lookup, the initiator will be using the lookup call for 
 both finding nodes and finding values.&nbsp; If it's finding values, it needs to 
 stop if/when the value is found.&nbsp; </p>
-<h3><a name="Ambiguity#12100">Ambiguity #12</a></h3>
+<h3><a name="Ambiguity#11101">Ambiguity #11</a></h3>
 <p>&nbsp;This statement: <font color="#FF00FF">For caching purposes, once a 
 lookup succeeds, the requesting node stores the (key,value) pair at the closest node it 
 observed to the key that did not return the value.</font> can be ambiguous -- 
@@ -2529,10 +2551,10 @@ what does &quot;requesting node&quot; mean?&nbsp; Is it the requesting performin
 lookup, or the node that made the GetValue request?&nbsp; It would seem to be 
 the former, because &quot;it observed to the key that did not return the value&quot; would 
 otherwise not make any sense.</p>
-<h3><a name="Refactorings101">Refactorings</a></h3>
+<h3><a name="Refactorings102">Refactorings</a></h3>
 <p>We need to some refactoring to pass in 
 the RPC call that we want to make, and how we handle a found value for the FindValue RPC call.</p>
-<h4><a name="RefactoringtheRouter.LookupMethod102">Refactoring the Router.Lookup Method</a></h4>
+<h4><a name="RefactoringtheRouter.LookupMethod103">Refactoring the Router.Lookup Method</a></h4>
 <p>We have some major refactoring to do to how lookups are performed.&nbsp; The 
 signature of the Lookup method changes so that:</p>
 <ol>
@@ -2556,7 +2578,7 @@ be true for when the RPC call is for finding values):</p>
 <p>This stops the lookup immediately when a value is found.&nbsp; There are 
 other refactoring's in the router's <code>Lookup</code> method (for example the method 
 signature) that I'm omitting.</p>
-<h4><a name="RefactoringtheGetCloserNodesMethod103">Refactoring the GetCloserNodes Method</a></h4>
+<h4><a name="RefactoringtheGetCloserNodesMethod104">Refactoring the GetCloserNodes Method</a></h4>
 <p>The signature changes:</p>
 <pre>public bool GetCloserNodes(
   ID key, 
@@ -2572,7 +2594,7 @@ val = foundVal;
 List&lt;Contact&gt; peersNodes = contacts.ExceptBy(node.OurContact, c =&gt; c.ID.Value).ExceptBy(nodesToQuery, c =&gt; c.ID.Value).ToList();
 ...
 return val != null;</pre>
-<h4><a name="RefactoringtheRpcFindNodesMethod104">Refactoring the RpcFindNodes Method</a></h4>
+<h4><a name="RefactoringtheRpcFindNodesMethod105">Refactoring the RpcFindNodes Method</a></h4>
 <p>A minor change here (also handling something we haven't talked about yet), in that we know we're finding only nodes, but we need a 
 unified return with <code>RpcFindValue</code>.&nbsp; Notice the method is now 
 public so that the Dht (discussed later) and our unit tests can specify the 
@@ -2585,7 +2607,7 @@ appropriate RPC call.</p>
   return (nodes, null, null);
 }
 </pre>
-<h3><a name="AddingtheRpcFindValueMethod105">Adding the RpcFindValue Method</a></h3>
+<h3><a name="AddingtheRpcFindValueMethod106">Adding the RpcFindValue Method</a></h3>
 <p>The <code>foundBy</code> tuple field will be illustrated later when we talk about the Dht 
 class.</p>
 <pre> /// &lt;summary&gt;
@@ -2625,7 +2647,7 @@ structural.)&nbsp; </p>
 <p><img border="0" src="note.png" width="24" height="32"> Discussing value 
 lookup tests doesn't make sense outside of the context of the <code>Dht</code> wrapper, so 
 the unit tests for the value lookup will be done in the <code>Dht</code> testing.</p>
-<h2><a name="ValueLookup-Implementation106">Value Lookup - Implementation</a></h2>
+<h2><a name="ValueLookup-Implementation107">Value Lookup - Implementation</a></h2>
 <p>First, we need to implement a simple virtual (in memory) storage mechanism:</p>
 <pre>public class VirtualStorage : IStorage
 {
@@ -2653,7 +2675,7 @@ the unit tests for the value lookup will be done in the <code>Dht</code> testing
 }</pre>
 <p>We can get away with using <code>BigInteger</code> as the key to the dictionary as it is a 
 <code>struct</code>.</p>
-<h3><a name="TheStoreImplementation107">The Store Implementation</a></h3>
+<h3><a name="TheStoreImplementation108">The Store Implementation</a></h3>
 <p>In the <code>Node</code> class:</p>
 <pre>/// &lt;summary&gt;
 /// Store a key-value pair in our storage space, updating the contact if it's not us.
@@ -2666,7 +2688,7 @@ public void Store(Contact sender, ID key, string val)
   storage.Set(key, val);
 }
 </pre>
-<h3><a name="TheFindValueImplementation108">The FindValue Implementation</a></h3>
+<h3><a name="TheFindValueImplementation109">The FindValue Implementation</a></h3>
 <p>In the <code>Node</code> class:</p>
 <pre>/// &lt;summary&gt;
 /// Returns either a list of close contacts or a the value, if the node's storage contains the value for the key.
@@ -2686,7 +2708,7 @@ public (List&lt;Contact&gt; contacts, string val) FindValue(Contact sender, ID k
     return (bucketList.GetCloseContacts(key, sender.ID), null);
   }
 }</pre>
-<h2><a name="TheDhtClass-Discussion109">The Dht Class - Discussion</a></h2>
+<h2><a name="TheDhtClass-Discussion110">The Dht Class - Discussion</a></h2>
 <p>We use a wrapper <code>Dht</code> class, which will 
 become the main entry point for <i>our</i> peer, for interacting with <i>other</i> 
 peers.&nbsp; The purpose of this class is:</p>
@@ -2699,7 +2721,7 @@ the lookup algorithm to find other closer nodes that might have the value.</li>
 	another peer and initializes our bucket list with that peer's closest 
 	contacts.</li>
 </ol>
-<h2><a name="TheDhtClass-Implementation110">The Dht Class - Implementation</a></h2>
+<h2><a name="TheDhtClass-Implementation111">The Dht Class - Implementation</a></h2>
 <pre>public class Dht
 {
 #if DEBUG // for unit testing
@@ -2759,8 +2781,14 @@ the lookup algorithm to find other closer nodes that might have the value.</li>
     return ret;
   }
 }</pre>
-<h2><a name="TheDhtClass-UnitTests111">The Dht Class - Unit Tests</a></h2>
-<h3><a name="LocalStoreFoundValueTest112">LocalStoreFoundValueTest</a></h3>
+<h3><a name="Ambiguity#12112">Ambiguity #12</a></h3>
+<p>What exactly should the sender do when a value is not found?&nbsp; The DHT 
+returns the nearest nodes, but given that the lookup failed to find the value, 
+we know these nodes also do not have the value.&nbsp; As far as I've been able 
+to determine, neither the spec nor a cursory search of the web indicates what to 
+do.</p>
+<h2><a name="TheDhtClass-UnitTests113">The Dht Class - Unit Tests</a></h2>
+<h3><a name="LocalStoreFoundValueTest114">LocalStoreFoundValueTest</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> To get started, let's just make sure we can set/get values in our local store 
 with an empty bucket list.</p>
 <pre>[TestMethod]
@@ -2775,7 +2803,7 @@ public void LocalStoreFoundValueTest()
   string retval = dht.FindValue(key).val;
   Assert.IsTrue(retval == val, &quot;Expected to get back what we stored&quot;);
 }</pre>
-<h3><a name="ValueStoredInCloserNodeTest113">ValueStoredInCloserNodeTest</a></h3>
+<h3><a name="ValueStoredInCloserNodeTest115">ValueStoredInCloserNodeTest</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> This test creates a single contact and stores the value in that contact.&nbsp; 
 We set up the ID's so that the contact's ID is less (XOR metric) than our peer's 
 ID, and we use a key of ID.Zero to prevent further complexities when computing 
@@ -2825,7 +2853,7 @@ public void SimpleStore(ID key, string val)
 }
 #endif
 </pre>
-<h3><a name="ValueFoundInFartherNodeTest114">ValueFoundInFartherNodeTest</a></h3>
+<h3><a name="ValueFoundInFartherNodeTest116">ValueFoundInFartherNodeTest</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> We can change the setup of the ID's and verify that the we find the value in 
 a farther node.</p>
 <pre>[TestMethod]
@@ -2863,7 +2891,7 @@ public void ValueStoredInFartherNodeTest()
   Assert.IsTrue(retval == val, &quot;Expected to get back what we stored&quot;);
   Assert.IsTrue(store1.Contains(key), &quot;Expected our peer to have cached the key-value.&quot;);
 }</pre>
-<h3><a name="ValueStoredGetsPropagatedTest115">ValueStoredGetsPropagatedTest</a></h3>
+<h3><a name="ValueStoredGetsPropagatedTest117">ValueStoredGetsPropagatedTest</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> Here we test that when we store a value to our peer, it 
 also gets propagated to 
 another peer that our peer knows about:</p>
@@ -2899,7 +2927,7 @@ public void ValueStoredGetsPropagatedTest()
   Assert.IsTrue(store1.Contains(key), &quot;Expected our peer to have stored the key-value.&quot;);
   Assert.IsTrue(store2.Contains(key), &quot;Expected the other peer to have stored the key-value.&quot;);
 }</pre>
-<h3><a name="GetValuePropagatesToCloserNodeTest116">GetValuePropagatesToCloserNodeTest</a></h3>
+<h3><a name="GetValuePropagatesToCloserNodeTest118">GetValuePropagatesToCloserNodeTest</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> This test verifies 
 that, given three nodes (the first of which is us), where node 2 has the value, 
 a get value also propagates to node 3 because a lookup was performed.</p>
@@ -2951,7 +2979,7 @@ public void GetValuePropagatesToCloserNodeTest()
   Assert.IsTrue(ret.found, &quot;Expected value to be found.&quot;);
   Assert.IsTrue(store3.Contains(key), &quot;Expected the third peer to have stored the key-value.&quot;);
 }</pre>
-<h2><a name="TheDht-BootstrappingDiscussion117">The Dht - Bootstrapping Discussion</a></h2>
+<h2><a name="TheDht-BootstrappingDiscussion119">The Dht - Bootstrapping Discussion</a></h2>
 <p>From the spec: <font color="#FF00FF">To join the network, a node <i>u</i> 
 must have a contact to an already participating node <i>w</i>. <i>u</i> inserts
 <i>w</i> into the appropriate k-bucket. <i>u</i> then performs a node lookup for 
@@ -2987,8 +3015,8 @@ splits.&nbsp; We'll see how the network self-corrects later on.</p>
 to realize that &quot;joining&quot; actually means contacting another node with any one of 
 the four RPC calls.&nbsp; A new peer could join an existing network with its 
 first RPC being FindValue!</p>
-<h2><a name="TheDht-BootstrappingImplementation118">The Dht - Bootstrapping Implementation</a></h2>
-<h3><a name="RandomIDWithinBucket119">RandomIDWithinBucket</a></h3>
+<h2><a name="TheDht-BootstrappingImplementation120">The Dht - Bootstrapping Implementation</a></h2>
+<h3><a name="RandomIDWithinBucket121">RandomIDWithinBucket</a></h3>
 <p>Getting a random ID within a bucket range is interesting and based on knowing 
 that bucket ranges are always powers of 2:</p>
 <pre> /// &lt;summary&gt;
@@ -3020,7 +3048,7 @@ public static ID RandomIDWithinBucket(KBucket bucket, bool forceBit1 = false)
 
   return id;
 }</pre>
-<h3><a name="Bootstrap120">Bootstrap</a></h3>
+<h3><a name="Bootstrap122">Bootstrap</a></h3>
 <pre>/// &lt;summary&gt;
 /// Bootstrap our peer by contacting another peer, adding its contacts
 /// to our list, then getting the contacts for other peers not in the
@@ -3044,8 +3072,8 @@ protected void RefreshBucket(KBucket bucket)
   List&lt;Contact&gt; contacts = bucket.Contacts.ToList();
   contacts.ForEach(c =&gt; c.Protocol.FindNode(ourContact, rndId).ForEach(otherContact =&gt; node.BucketList.AddContact(otherContact)));
 }</pre>
-<h2><a name="TheDht-BootstrappingUnitTests121">The Dht - Bootstrapping Unit Tests</a></h2>
-<h3><a name="RandomWithinBucketTests122">RandomWithinBucketTests</a></h3>
+<h2><a name="TheDht-BootstrappingUnitTests123">The Dht - Bootstrapping Unit Tests</a></h2>
+<h3><a name="RandomWithinBucketTests124">RandomWithinBucketTests</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> Getting a random 
 ID within a bucket range was 
 complicated enough that it deserves a unit test:</p>
@@ -3078,7 +3106,7 @@ public void RandomWithinBucketTests()
     Assert.IsTrue(id.Value == bitCheck, &quot;Expected bits are not correct.&quot;);
   }
 }</pre>
-<h3><a name="BootstrapWithinBootstrappingBucketTest123">BootstrapWithinBootstrappingBucketTest</a></h3>
+<h3><a name="BootstrapWithinBootstrappingBucketTest125">BootstrapWithinBootstrappingBucketTest</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> In the actual 
 bootstrapping unit test, we are setting up a bootstrapping peer we are joining 
 to with 10 contacts.&nbsp; One of those contacts also knows about 10 other 
@@ -3127,7 +3155,7 @@ public void BootstrapWithinBootstrappingBucketTest()
 
   Assert.IsTrue(dhtUs.Router.Node.BucketList.Buckets.Sum(c =&gt; c.Contacts.Count) == 11, &quot;Expected our peer to get 11 contacts.&quot;);
 }</pre>
-<h3><a name="BootstrapOutsideBootstrappingBucketTest124">BootstrapOutsideBootstrappingBucketTest</a></h3>
+<h3><a name="BootstrapOutsideBootstrappingBucketTest126">BootstrapOutsideBootstrappingBucketTest</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> In this test, we 
 set up 20 nodes in the bootstrap peer in such a way that we know how the buckets 
 split <i>for us</i> (20 in the left one, 1 in the right one) and add 10 contacts 
@@ -3190,8 +3218,8 @@ public void BootstrapOutsideBootstrappingBucketTest()
 
   Assert.IsTrue(dhtUs.Router.Node.BucketList.Buckets.Sum(c =&gt; c.Contacts.Count) == 31, &quot;Expected our peer to have 31 contacts.&quot;);
 }</pre>
-<h2><a name="BucketManagement125">Bucket Management</a></h2>
-<h3><a name="EvictingUnresponsiveContactsInFullBuckets126">Evicting Unresponsive Contacts In Full Buckets</a></h3>
+<h2><a name="BucketManagement127">Bucket Management</a></h2>
+<h3><a name="EvictingUnresponsiveContactsInFullBuckets128">Evicting Unresponsive Contacts In Full Buckets</a></h3>
 <p>We should now address this in the <code>AddContact</code> method:</p>
 <pre>// TODO: Ping the oldest contact to see if it's still 
 // around and replace it if not.
@@ -3264,14 +3292,14 @@ public void NonRespondingContactTest()
   Assert.IsFalse(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nonRespondingContact), &quot;Expected bucket to NOT contain non-responding contact.&quot;);
   Assert.IsTrue(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nextNewContact), &quot;Expected bucket to contain new contact.&quot;);
 }</pre>
-<h3><a name="BucketRefresh-Discussion127">Bucket Refresh - Discussion</a></h3>
+<h3><a name="BucketRefresh-Discussion129">Bucket Refresh - Discussion</a></h3>
 <p>From the spec: <font color="#FF00FF">Buckets are generally kept fresh by the 
 traffic of requests traveling through nodes. To handle pathological cases in 
 which there are no lookups for a particular ID range, each node refreshes any 
 bucket to which it has not performed a node lookup in the past hour. Refreshing 
 means picking a random ID in the bucketï¿½s range and performing a node search for 
 that ID.</font></p>
-<h4><a name="Ambiguity#11128">Ambiguity #11</a></h4>
+<h4><a name="Ambiguity#13130">Ambiguity #13</a></h4>
 <p>The phrase &quot;any bucket to which it has not performed a node lookup&quot; is 
 subject to interpretation.&nbsp; One way to interpret this is possibly &quot;the 
 bucket whose range contains the key in the key-value pair for a Store or 
@@ -3282,7 +3310,7 @@ because&nbsp;the original alpha contacts is determined from the list of closest
 contacts across all buckets, but it then becomes arbitrary as to whether to also touch 
 the buckets containing the contacts returned by the FindNodes query that are 
 then queried further.&nbsp; </p>
-<h3><a name="BucketRefresh-Implementation129">Bucket Refresh - Implementation</a></h3>
+<h3><a name="BucketRefresh-Implementation131">Bucket Refresh - Implementation</a></h3>
 <p>I am choosing the first interpretation, which 
 means that the bucket containing the key gets touched in the Store and FindValue 
 methods:</p>
@@ -3333,7 +3361,7 @@ timestamp:</p>
 {
   TimeStamp = DateTime.Now;
 }</pre>
-<h2><a name="Key-ValueManagement130">Key-Value Management</a></h2>
+<h2><a name="Key-ValueManagement132">Key-Value Management</a></h2>
 <p>In this section you will learn something that is not at all clearly stated in 
 the Kademlia specification -- there are actually three kinds of data store:</p>
 <ol>
@@ -3349,13 +3377,13 @@ at the discussion on the emule project forum, particularly &quot;miniminime's&qu
 discussion of the roles that a node can take on<sup>18</sup>.&nbsp; Implementing 
 this approach requires that the receiver peer knows whether to store the 
 key-value in the republish store or in the cache store.</p>
-<h3><a name="OriginalPublisherStore131">Original Publisher Store</a></h3>
+<h3><a name="OriginalPublisherStore133">Original Publisher Store</a></h3>
 <p>The original publisher store is never written to as a result of an RPC store.&nbsp; 
 This store is updated only by the peer itself when it is the originator of the 
 key-value and wants to publish the key-value to other peers. </p>
 <p><img border="0" src="important.png" width="38" height="32"> Key-values from 
 this store are republished once every 24 hours.</p>
-<h3><a name="RepublishedStore132">Republished Store</a></h3>
+<h3><a name="RepublishedStore134">Republished Store</a></h3>
 <p>This store contains key-values that have been republished by other peers as 
 part of process of distributing the data among peers.&nbsp; This store never 
 contains the peer's (as an originator) own storage, but only key-values received 
@@ -3368,7 +3396,7 @@ algorithm:</p>
 	<li>For a particular bucket if it has already been queried for closer nodes.</li>
 <li>If the key has been republished in the last hour.</li>
 </ol>
-<h3><a name="CachedStore133">Cached Store</a></h3>
+<h3><a name="CachedStore135">Cached Store</a></h3>
 <p>The cached store is used when republishing a FindValue request onto the <i>
 next closest node</i>.&nbsp; The intention here is to avoid hotspots during 
 lookup of popular keys by temporarily republishing them onto other nearby peers.&nbsp; 
@@ -3376,7 +3404,7 @@ These temporary key-values have an expiration time.</p>
 <p><img border="0" src="important.png" width="38" height="32">&nbsp; Key-values 
 in the cached store are never republished and are removed after the expiration 
 time.</p>
-<h3><a name="StorageMechanismsintheDhtClass134">Storage Mechanisms in the Dht Class</a></h3>
+<h3><a name="StorageMechanismsintheDhtClass136">Storage Mechanisms in the Dht Class</a></h3>
 <p>These are implemented in the <code>Dht</code> class:</p>
 <pre>protected IStorage originatorStorage;
 protected IStorage republishStorage;
@@ -3427,7 +3455,55 @@ public void Store(Contact sender, ID key, string val, bool isCached = false, int
     storage.Set(key, val, Constants.EXPIRATION_TIME_SECONDS);
   }
 }</pre>
-<h3><a name="ExpiringKey-ValuePairs135">Expiring Key-Value Pairs</a></h3>
+<h3><a name="RepublishingKey-Values137">Republishing Key-Values</a></h3>
+<p>Key-values in the republish store are republished at a particular time 
+interval, typically every hour:</p>
+<pre>/// &lt;summary&gt;
+/// Replicate key values if the key-value hasn't been touched within the republish interval.
+/// Also don't do a FindNode lookup if the bucket containing the key has been refreshed within the refresh interval.
+/// &lt;/summary&gt;
+protected void KeyValueRepublishElapsed(object sender, ElapsedEventArgs e)
+{
+  DateTime now = DateTime.Now;
+
+  republishStorage.Where(k =&gt; (now - republishStorage.GetTimeStamp(k)).TotalMilliseconds &gt;= Constants.KEY_VALUE_REPUBLISH_INTERVAL).ForEach(k=&gt;
+  {
+    ID key = new ID(k);
+    StoreOnCloserContacts(key, republishStorage.Get(key));
+    republishStorage.Touch(k); 
+  });
+}</pre>
+<p><img border="0" src="note.png" width="24" height="32"> Note how a lookup is 
+only performed if the bucket containing the key hasn't itself been refreshed 
+recently (within the last hour):</p>
+<pre>/// &lt;summary&gt;
+/// Perform a lookup if the bucket containing the key has not been refreshed, 
+/// otherwise just get the contacts the k closest contacts we know about.
+/// &lt;/summary&gt;
+protected void StoreOnCloserContacts(ID key, string val)
+{
+  DateTime now = DateTime.Now;
+
+  KBucket kbucket = node.BucketList.GetKBucket(key);
+  List&lt;Contact&gt; contacts;
+
+  if ((now - kbucket.TimeStamp).TotalMilliseconds &lt; Constants.BUCKET_REFRESH_INTERVAL)
+  {
+    // Bucket has been refreshed recently, so don't do a lookup as we have the k closes contacts.
+    contacts = node.BucketList.GetCloseContacts(key, node.OurContact.ID);
+  }
+  else
+  {
+    contacts = router.Lookup(key, router.RpcFindNodes).contacts;
+  }
+
+  contacts.ForEach(c =&gt;
+  {
+    RpcError error = c.Protocol.Store(node.OurContact, key, val);
+    HandleError(error, c);
+  });
+}</pre>
+<h3><a name="ExpiringKey-ValuePairs138">Expiring Key-Value Pairs</a></h3>
 <p>Expire the key-values are removed from the republish and cache storage, 
 which happens in the <code>Dht</code> class:</p>
 <pre>/// &lt;summary&gt;
@@ -3448,14 +3524,14 @@ protected void RemoveExpiredData(IStorage store)
     store.Remove(k);
   });
 }</pre>
-<h3><a name="OriginatorRepublishing-Discussion136">Originator Republishing - Discussion</a></h3>
+<h3><a name="OriginatorRepublishing-Discussion139">Originator Republishing - Discussion</a></h3>
 <p><font color="#FF00FF">For Kademliaï¿½s current application (file sharing), we 
 also require the original publisher of a (key,value) pair to republish it every 
 24 hours. Otherwise, (key,value) pairs expire 24 hours after publication, so as 
 to limit stale index information in the system. For other applications, such as 
 digital certificates or cryptographic hash to value mappings, longer expiration 
 times may be appropriate.</font></p>
-<h3><a name="OriginatorRepublishing-Implementation137">Originator Republishing - Implementation</a></h3>
+<h3><a name="OriginatorRepublishing-Implementation140">Originator Republishing - Implementation</a></h3>
 <p>Republishing originator data is handled in a timer event that resends the 
 key-values in the originator's storage.</p>
 <pre>protected void OriginatorRepublishElapsed(object sender, ElapsedEventArgs e)
@@ -3472,7 +3548,7 @@ key-values in the originator's storage.</p>
   });
 }</pre>
 <p>Republished key-values persist for 24 hours.</p>
-<h3><a name="StoringKey-ValuesOntothenewNodeWhenanewNodeRegisters-Discussion138">Storing Key-Values Onto the new Node When a new Node Registers - Discussion</a></h3>
+<h3><a name="StoringKey-ValuesOntothenewNodeWhenanewNodeRegisters-Discussion141">Storing Key-Values Onto the new Node When a new Node Registers - Discussion</a></h3>
 <p><font color="#FF00FF">When a new node joins the system, it must store any 
 key-value pair to which it is one of the k closest. Existing nodes, by similarly 
 exploiting complete knowledge of their surrounding subtrees, will know which 
@@ -3480,7 +3556,7 @@ key-value pairs the new node should store. Any node learning of a new node
 therefore issues STORE RPCs to transfer relevant key-value pairs to the new 
 node. To avoid redundant STORE RPCs, however, a node only transfers a key-value 
 pair if itï¿½s own ID is closer to the key than are the IDs of other nodes.</font></p>
-<h4><a name="Interpretation139">Interpretation</a></h4>
+<h4><a name="Interpretation142">Interpretation</a></h4>
 <ol>
 	<li>a new node (contact) will be instructed to store key-values that exist 
 	on the bootstrapping node (the one it's boostrapping with) for key-values 
@@ -3488,7 +3564,7 @@ pair if itï¿½s own ID is closer to the key than are the IDs of other nodes.</fon
 	<li>the key XOR'd with the bootstrapping node's ID &lt; (closer than) the key 
 	XOR'd the ID's of other nodes.</li>
 </ol>
-<h4><a name="Ambiguity#13140">Ambiguity #13</a></h4>
+<h4><a name="Ambiguity#14143">Ambiguity #14</a></h4>
 <p>What does &quot;other nodes&quot; mean?&nbsp; Are these all other 
 contacts the bootstrapping node knows about, or just the <i>k</i> closest 
 contacts in the joining node's bucket, or some other determination?&nbsp; We 
@@ -3510,32 +3586,67 @@ calls.</p>
 Implementation</h3>
 <pre>protected void SendKeyValuesToNewContact(Contact sender)
 {
-  // If we have a new contact...
-  if (!bucketList.ContactExists(sender))
+  List&lt;Contact&gt; contacts = new List&lt;Contact&gt;();
+
+  if (IsNewContact(sender))
   {
-    // and our distance to the key &lt; any other contact's distance to the key...
-    storage.AsParallel.ForEach(k =&gt;
+    lock (bucketList)
     {
-      var contacts = bucketList.Buckets.SelectMany(b =&gt; b.Contacts);
+      // Clone so we can release the lock.
+      contacts = new List&lt;Contact&gt;(bucketList.Buckets.SelectMany(b =&gt; b.Contacts));
+    }
 
-      if (contacts.Count() &gt; 0)
+    if (contacts.Count() &gt; 0)
+    {
+      // and our distance to the key &lt; any other contact's distance to the key...
+      storage.AsParallel().ForEach(k =&gt;
       {
-        var distance = contacts.Min(c =&gt; k ^ c.ID.Value);
+        // our min distance to the contact.
+        var distance = contacts.Min(c =&gt; k ^ c.ID);
 
-        if ((k ^ ourContact.ID.Value) &lt; distance)
+        // If our contact is closer, store the contact on its node.
+        if ((k ^ ourContact.ID) &lt; distance)
         {
-          sender.Protocol.Store(ourContact, new ID(k), storage.Get(k)); // send it to the new contact.
+          var error = sender.Protocol.Store(ourContact, new ID(k), storage.Get(k));
+          dht?.HandleError(error, sender);
         }
-      }
-    });
+      });
+    }
   }
 }</pre>
 <p>Annoyingly, for every 
 stored value, there just isn't any way to not perform the XOR computation on 
-every contact.&nbsp; This could get expensive and is optimized using Linq's 
+every contact.&nbsp; This could get expensive and is currently optimized using Linq's 
 parallel feature.</p>
-<p>&nbsp;</p>
-<h3><a name="StoringKey-ValuesOntothenewNodeWhenanewNodeRegisters-UnitTest141">Storing Key-Values Onto the new Node When a new Node Registers - Unit Test</a></h3>
+<p>Determining whether a contact is new is slightly more complicated than one 
+would think.&nbsp; We need to check not only whether the contact exists in any 
+of our buckets, but also whether it's a pending contact -- one that wasn't 
+placed in a bucket because the bucket was full, but none-the-less has already 
+received any closer keys:</p>
+<pre>/// &lt;summary&gt;
+/// Returns true if the contact isn't in the bucket list or the pending contacts list.
+/// &lt;/summary&gt;
+protected bool IsNewContact(Contact sender)
+{
+  bool ret;
+
+  lock (bucketList)
+  {
+    // If we have a new contact...
+    ret = bucketList.ContactExists(sender);
+  }
+
+  if (dht != null) // for unit testing, dht may be null
+  {
+    lock (dht.PendingContacts)
+    {
+      ret |= dht.PendingContacts.ContainsBy(sender, c =&gt; c.ID);
+    }
+  }
+
+  return !ret;
+}</pre>
+<h3><a name="StoringKey-ValuesOntothenewNodeWhenanewNodeRegisters-UnitTest144">Storing Key-Values Onto the new Node When a new Node Registers - Unit Test</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> There's a lot of 
 setup here to for creating two existing contacts and two key-values and their 
 ID's have been specifically set.&nbsp; See the comments for the XOR distance 
@@ -3591,7 +3702,7 @@ public void TestNewContactGetsStoredContactsTest()
   Assert.IsTrue(unseen.Storage.Contains(ID.Mid), &quot;Expected valMid to be stored.&quot;);
   Assert.IsTrue(unseen.Storage.Get(ID.Mid) == valMid, &quot;Expected valMid value to match.&quot;);
 }</pre>
-<h3><a name="KeyRepublishing-Discussion142">Key Republishing - Discussion</a></h3>
+<h3><a name="KeyRepublishing-Discussion145">Key Republishing - Discussion</a></h3>
 <p>
 <font color="#FF00FF">To ensure the persistence of key-value pairs, nodes 
 must periodically republish keys. Otherwise, two phenomena may cause lookups for 
@@ -3623,7 +3734,7 @@ the key&quot; - in other words, for each key, a FindNode is called to find close
 nodes and the value is republished.&nbsp; Without the optimizations, this can be 
 a time consuming process if there's a lot of key-values in a node's store, which 
 is addressed in an optimization later.</p>
-<h4><a name="FirstOptimization143">First Optimization</a></h4>
+<h4><a name="FirstOptimization146">First Optimization</a></h4>
 <p><font color="#FF00FF">Fortunately, the republishing process can be heavily 
 optimized. First, when a node receives a STORE RPC for a given key-value pair, 
 it assumes the RPC was also issued to the other k - 1 closest nodes, and thus 
@@ -3638,7 +3749,7 @@ last hour is not republished as we can assume:</p>
 	<li>If it's been republished by another node, that node republished it to <i>
 	k</i> closer nodes.</li>
 </ol>
-<h4><a name="SecondOptimization144">Second Optimization</a></h4>
+<h4><a name="SecondOptimization147">Second Optimization</a></h4>
 <p><font color="#FF00FF">A second 
 optimization avoids performing node lookups before republishing keys. As 
 described in Section 2.4, to handle unbalanced trees, nodes split k-buckets as 
@@ -3719,7 +3830,7 @@ farther bucket contacts are in red):</p>
 <p>So for this reason, we use the bucket for which the key is in range.&nbsp; 
 Also, new key-values that are published onto to closer nodes persist for 24 
 hours.</p>
-<h3><a name="KeyRepublishing-Implementation145">Key Republishing - Implementation</a></h3>
+<h3><a name="KeyRepublishing-Implementation148">Key Republishing - Implementation</a></h3>
 <p>One refactoring that has to occur is that the storage mechanism needs to 
 associate a timestamp with the key-value, which you'll see used in the following 
 code.</p>
@@ -3753,7 +3864,7 @@ protected void KeyValueRepublishElapsed(object sender, ElapsedEventArgs e)
     storage.Touch(k);
   });
 }</pre>
-<h3><a name="Over-Caching-Discussion146">Over-Caching - Discussion</a></h3>
+<h3><a name="Over-Caching-Discussion149">Over-Caching - Discussion</a></h3>
 <p><font color="#FF00FF">To avoid &quot;over-caching,&quot; we make the expiration time of 
 a (key,value) pair in any nodeï¿½s database exponentially inversely proportional 
 to the number of nodes between the current node and the node whose ID is closest 
@@ -3762,7 +3873,7 @@ to the key ID.</font></p>
 more nodes that are between the current node and the closest node.</p>
 <p>&quot;Exponentially inversely proportional&quot; - meaning the expiration time is <i>a lot 
 shorter</i> the more nodes that are between the current node and closest node.</p>
-<h4><a name="Ambiguity#14147">Ambiguity #14</a></h4>
+<h4><a name="Ambiguity#15150">Ambiguity #15</a></h4>
 <p>The specification provides no guidance for what the calculation for 
 &quot;exponentially inversely proportional&quot; should actually be.&nbsp; It's also 
 undefined as to what the time constants are -- what is a baseline time for which 
@@ -3774,7 +3885,7 @@ where the value of <i>b </i>comes from.&nbsp; In this implementation, where we
 have bucket ranges, rather than a bucket per bit in the key space, the 
 accelerated lookup optimization is irrelevant, so we'll use b==5 which is the 
 spec's recommended value for that optimization. </p>
-<h4><a name="Ambiguity#15148">Ambiguity #15</a></h4>
+<h4><a name="Ambiguity#16151">Ambiguity #16</a></h4>
 <p>Who does the computation &quot;between the current node and the node whose ID is 
 closest to the key ID?&quot;&nbsp; Is the &quot;current node:&quot;</p>
 <ol>
@@ -3783,12 +3894,12 @@ closest to the key ID?&quot;&nbsp; Is the &quot;current node:&quot;</p>
 	<li>The receiver that is handling the store request, and counts the number 
 	of nodes between itself and the sender node?</li>
 </ol>
-<h4><a name="Ambiguity#16149">Ambiguity #16</a></h4>
+<h4><a name="Ambiguity#17152">Ambiguity #17</a></h4>
 <p>As discussed earlier, the entire concept of having a separate stores 
 (originator, republished, cached) is never discussed in the Kademlia 
 specification.&nbsp; Without understanding these three different stores, trying 
 to understand how caching works is probably impossible.</p>
-<h3><a name="Over-Caching-Implementation150">Over-Caching - Implementation</a></h3>
+<h3><a name="Over-Caching-Implementation153">Over-Caching - Implementation</a></h3>
 <p>Caching occurs in only one place -- when a value being looked up (and 
 successfully found) is stored on a &quot;close&quot; node:</p>
 <pre>...
@@ -3818,7 +3929,7 @@ Assert.IsFalse(store3.Contains(key), &quot;Key should not be in the republish st
 Assert.IsTrue(cache3.Contains(key), &quot;Key should be in the cache store.&quot;);
 Assert.IsTrue(cache3.GetExpirationTimeSec(key.Value) == Constants.EXPIRATION_TIME_SECONDS / 2, &quot;Expected 12 hour expiration.&quot;);
 </pre>
-<h3><a name="NeverExpiringRepublishedKey-Values151">Never Expiring Republished Key-Values</a></h3>
+<h3><a name="NeverExpiringRepublishedKey-Values154">Never Expiring Republished Key-Values</a></h3>
 <p>It is reasonable for a cached key-value to expire, but we may never want to 
 expire originator or republished key-values.&nbsp; One good example is a 
 distributed blockchain (or distributed ledger) where data should never 
@@ -3830,12 +3941,12 @@ There are a variety of ways to do this, such as overriding:</p>
   RemoveExpiredData(republishStorage);
 }</pre>
 <p>so that only the cached store expires.</p>
-<h2><a name="Ping152">Ping</a></h2>
+<h2><a name="Ping155">Ping</a></h2>
 <p>Ping is simply a &quot;respond back with the random ID&quot; that was sent.&nbsp; 
 Internally the buckets are potentially updated and if the contact is new, Store 
 RPC calls are made to it for any values that it should store, as discussed above when a new node 
 registers.</p>
-<h3><a name="Piggy-BackedPing153">Piggy-Backed Ping</a></h3>
+<h3><a name="Piggy-BackedPing156">Piggy-Backed Ping</a></h3>
 <p>In his paper<sup>19</sup>, Bruno Spori writes: </p>
 <blockquote>
 	<p>&quot;The situation is different when the first message 
@@ -3853,13 +3964,14 @@ the correctness of the sender as well.&quot;</p>
 <p>We will instead rely on the error handling mechanism for evicting contacts 
 that do not respond or respond incorrectly or with errors.&nbsp; Error handling 
 is discussed later.</p>
-<h2><a name="PersistingtheDht154">Persisting the Dht</a></h2>
+<h2><a name="PersistingtheDht157">Persisting the Dht</a></h2>
 <p>The bucket lists, contacts in each bucket, and stores need to be persisted so the last known state of the Dht can be restored.&nbsp; 
 This is baked into the Dht implementation, serializing the data in a JSON file.&nbsp; 
 The persistence of key-values is handled separately and is defined by the 
 specific implementation needs.</p>
-<h2><a name="ConsiderationsforanAsynchronousImplementation155">Considerations for an Asynchronous Implementation</a></h2>
-<h3><a name="ThreadSafety156">Thread Safety</a></h3>
+<p><font color="#FF0000">TODO</font></p>
+<h2><a name="ConsiderationsforanAsynchronousImplementation158">Considerations for an Asynchronous Implementation</a></h2>
+<h3><a name="ThreadSafety159">Thread Safety</a></h3>
 <p>The entry points to the node:</p>
 <ul>
 	<li>Ping</li>
@@ -3886,7 +3998,7 @@ itself is being modified, however I leave those to some other time.</p>
 <p>It is also assumed that the storage implementation can be re-entrant.&nbsp; 
 In the virtual storage, this is handled by <code>ConcurrentDictionary</code> instances:</p>
 <pre>protected ConcurrentDictionary&lt;BigInteger, StoreValue&gt; store;</pre>
-<h3><a name="ParallelQueries-Discussion157">Parallel Queries - Discussion</a></h3>
+<h3><a name="ParallelQueries-Discussion160">Parallel Queries - Discussion</a></h3>
 <p><font color="#FF00FF">The initiator then sends parallel, asynchronous 
 find_node RPCs to the a nodes it has chosen, a is a system-wide concurrency 
 parameter, such as 3.</font></p>
@@ -3896,7 +4008,7 @@ timeout delays from failed nodes.&nbsp; Waiting for at least some of the nodes
 to respond in each batch of 3 closest nodes gives the system a chance to get 
 even closer nodes to those first set of close nodes with the hope of acquiring
 <i>k</i> closer contacts without having to explore farther contacts.&nbsp;&nbsp;&nbsp; </p>
-<h4><a name="Ambiguity#17158">Ambiguity #17</a></h4>
+<h4><a name="Ambiguity#18161">Ambiguity #18</a></h4>
 <p>It's not particularly clear why all the <i>k</i> closer contacts aren't 
 queried in parallel to start with.&nbsp; Maybe the idea is that you want to try 
 to get closer contacts from already close contacts.&nbsp; Certainly all the 
@@ -3904,7 +4016,7 @@ contacts could be queried and from the ones that respond first, we can select <i
 k</i> closer ones.&nbsp; On the other hand, querying all the contacts 
 simultaneously probably results in unnecessary network traffic as many of the 
 FindNode RPC calls will be ignored. </p>
-<h3><a name="ParallelQueries-Implementation159">Parallel Queries - Implementation</a></h3>
+<h3><a name="ParallelQueries-Implementation162">Parallel Queries - Implementation</a></h3>
 <p>The lookup algorithm requires some refactoring, as currently we're passing 
 the collection of nodes to query to the method that makes the RPC call.&nbsp; 
 For example:</p>
@@ -3924,7 +4036,7 @@ results as they come in.&nbsp; This requires:</p>
 	<li>Changing the algorithm at the top level so that processing continues as 
 	soon as the results appear from the RPC call.</li>
 </ol>
-<h4><a name="TheBaseRouter160">The BaseRouter</a></h4>
+<h4><a name="TheBaseRouter163">The BaseRouter</a></h4>
 <p>For unit testing, it's useful to keep the non-parallel implementation, but 
 ideally both parallel and non-parallel calls to the <code>Router</code> should be made in the 
 same way.&nbsp; An abstract <code>BaseRouter</code> class allows for this:</p>
@@ -3976,7 +4088,7 @@ out Contact foundBy)
   }
   ...
 }</pre>
-<h4><a name="TheParallelRouter161">The ParallelRouter</a></h4>
+<h4><a name="TheParallelRouter164">The ParallelRouter</a></h4>
 <p>The <code>ParallelRouter</code> queues contacts to query, in addition to some other 
 information each thread needs to know about when executing the RPC call.</p>
 <pre>public class ContactQueueItem
@@ -4153,8 +4265,8 @@ locks, otherwise the thread, when if finds a value, would technically have to
 lock both the <code>closerContacts</code> collection and the <code>findResult</code> instance.</p>
 <p><img border="0" src="important.png" width="38" height="32"> The Lookup method 
 itself is not intended to be re-entrant.</p>
-<h2><a name="SomeEnhancements162">Some Enhancements</a></h2>
-<h3><a name="OperatorOverloadingoftheIDClass163">Operator Overloading of the ID Class</a></h3>
+<h2><a name="SomeEnhancements165">Some Enhancements</a></h2>
+<h3><a name="OperatorOverloadingoftheIDClass166">Operator Overloading of the ID Class</a></h3>
 <p>Rather than having to always use id.Value to compare and XOR the BigInteger 
 values, we can add some operators to the ID class itself.&nbsp; Some examples:</p>
 <pre>public class ID : IComparable
@@ -4180,7 +4292,7 @@ values, we can add some operators to the ID class itself.&nbsp; Some examples:</
   ...  
 }</pre>
 <p>And so forth.</p>
-<h2><a name="ABasicTCPSubnetProtocol164">A Basic TCP Subnet Protocol</a></h2>
+<h2><a name="ABasicTCPSubnetProtocol167">A Basic TCP Subnet Protocol</a></h2>
 <p>There's a few points to make in this implementation:</p>
 <ol>
 	<li>A single port is used along with a subnet identifier to route requests 
@@ -4192,7 +4304,7 @@ values, we can add some operators to the ID class itself.&nbsp; Some examples:</
 	are other implementations that continue based on the random ID and handler, 
 	which I chose not to implement.</li>
 </ol>
-<h3><a name="RequestMessages165">Request Messages</a></h3>
+<h3><a name="RequestMessages168">Request Messages</a></h3>
 <p>Requests issued by the DHT are serialized to JSON from the following classes:</p>
 <pre>public abstract class BaseRequest
 {
@@ -4245,7 +4357,7 @@ public class CommonRequest
 }</pre>
 <p>As the comment states, the common request simplifies the server 
 implementation by having RPC handler methods with the same parameter.</p>
-<h3><a name="RequestHandlers166">Request Handlers</a></h3>
+<h3><a name="RequestHandlers169">Request Handlers</a></h3>
 <p>The request handlers extract the pertinent pieces of the CommonRequest and 
 call the appropriate method of the Node class.&nbsp; The important part here is 
 that the contact protocol must be returned as part of the FindNode and FindValue 
@@ -4296,7 +4408,7 @@ public object ServerFindValue(CommonRequest request)
     Value = val 
   };
 }</pre>
-<h3><a name="Responses167">Responses</a></h3>
+<h3><a name="Responses170">Responses</a></h3>
 <p>JSON responses are deserialized into the following classes:</p>
 <pre>public abstract class BaseResponse
 {
@@ -4321,7 +4433,7 @@ public class FindValueResponse : BaseResponse
 
 public class PingResponse : BaseResponse { }
 public class StoreResponse : BaseResponse { }</pre>
-<h3><a name="ServerImplementation168">Server Implementation</a></h3>
+<h3><a name="ServerImplementation171">Server Implementation</a></h3>
 <p>The server is a straightforward <code>HttpListener</code> but note how the subnet ID is 
 used to route the request to the specific node associated with the subnet:</p>
 <pre>protected virtual async void ProcessRequest(HttpListenerContext context)
@@ -4380,7 +4492,7 @@ used to route the request to the specific node associated with the subnet:</p>
   context.Response.Close();
 }
 </pre>
-<h3><a name="TheTCPSubnetProtocol169">The TCP Subnet Protocol</a></h3>
+<h3><a name="TheTCPSubnetProtocol172">The TCP Subnet Protocol</a></h3>
 <p>The protocol implements the four RPC calls, issuing HTTP POST's to the 
 server.&nbsp; Notice how the protocol is instantiated from the JSON return, and 
 if the protocol isn't supported, the contact is removed from the contacts 
@@ -4498,7 +4610,7 @@ protected IProtocol InstantiateProtocol(object protocol, string protocolName)
 prefixed to the protocol name.&nbsp; A different implementation (say in Python) 
 would only need to specify the protocol name, and as long as the type matches 
 the C# type with the namespace prefix, we should be good to go. </p>
-<h3><a name="ErrorReporting170">Error Reporting</a></h3>
+<h3><a name="ErrorReporting173">Error Reporting</a></h3>
 <p>Note how the protocol has been refactored to return any errors from the RPC 
 call.&nbsp; This is handled by the <code>RpcResponse</code> class:</p>
 <pre>public class RpcError
@@ -4523,7 +4635,7 @@ call.&nbsp; This is handled by the <code>RpcResponse</code> class:</p>
 </ol>
 <p>Error handling will be discussed in the next major section, RPC Error 
 Handling.</p>
-<h3><a name="TCPSubnetUnitTesting171">TCP Subnet Unit Testing</a></h3>
+<h3><a name="TCPSubnetUnitTesting174">TCP Subnet Unit Testing</a></h3>
 <p>The following unit 
 tests validate the round trip calls, exercising the protocol calls and the 
 server.&nbsp; Each test initializes the server and then tears it down:</p>
@@ -4544,7 +4656,7 @@ public void TestCleanup()
 }</pre>
 <p>The unit tests exercise each of the four RPC calls as well as a timeout 
 error.</p>
-<h4><a name="PingRouteTest172">PingRouteTest</a></h4>
+<h4><a name="PingRouteTest175">PingRouteTest</a></h4>
 <p><img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
 verifies the Ping RPC call.</p>
 <pre>[TestMethod]
@@ -4562,7 +4674,7 @@ public void PingRouteTest()
 
   p2.Ping(c1);
 }</pre>
-<h4><a name="StoreRouteTest173"> StoreRouteTest</a></h4>
+<h4><a name="StoreRouteTest176"> StoreRouteTest</a></h4>
 <p> <img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
 verifies the Store RPC call;</p>
 <pre>[TestMethod]
@@ -4585,7 +4697,7 @@ public void StoreRouteTest()
   Assert.IsTrue(n2.Storage.Contains(testID), &quot;Expected remote peer to have value.&quot;);
   Assert.IsTrue(n2.Storage.Get(testID) == testValue, &quot;Expected remote peer to contain stored value.&quot;);
 }</pre>
-<h4><a name="FindNodesRouteTest174"> FindNodesRouteTest</a></h4>
+<h4><a name="FindNodesRouteTest177"> FindNodesRouteTest</a></h4>
 <p> <img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
 verifies the FindNodes RPC call:</p>
 
@@ -4613,7 +4725,7 @@ public void FindNodesRouteTest()
   Assert.IsTrue(ret.Count == 1, &quot;Expected 1 contact.&quot;);
   Assert.IsTrue(ret[0].ID == otherPeer, &quot;Expected contact to the other peer (not us).&quot;);
 }</pre>
-<h4><a name="FindValueRouteTest175"> FindValueRouteTest</a></h4>
+<h4><a name="FindValueRouteTest178"> FindValueRouteTest</a></h4>
 <p> <img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
 verifies the FindValueRouteTest:</p>
 
@@ -4643,7 +4755,7 @@ public void FindValueRouteTest()
   Assert.IsTrue(ret.contacts == null, &quot;Expected to find value.&quot;);
   Assert.IsTrue(ret.val == testValue, &quot;Value does not match expected value from peer.&quot;);
 }</pre>
-<h4><a name="UnresponsiveNodeTest176"> UnresponsiveNodeTest</a></h4>
+<h4><a name="UnresponsiveNodeTest179"> UnresponsiveNodeTest</a></h4>
 <p> <img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
 verifies that an unresponsive node results in a timeout error.</p>
 <pre>[TestMethod]
@@ -4667,7 +4779,8 @@ public void UnresponsiveNodeTest()
 
   Assert.IsTrue(error.TimeoutError, &quot;Expected timeout.&quot;);
 }</pre>
-<h2><a name="RPCErrorHandlingandDelayedEviction-Discussion177">RPC Error Handling and Delayed Eviction - Discussion</a></h2>
+<h2><a name="RPCErrorHandlingandDelayedEviction180">RPC Error Handling and Delayed Eviction</a></h2>
+<h3><a name="Discussion181">Discussion</a></h3>
 <p>One of the optimizations in the Kademlia protocol can now be implemented -- 
 delayed eviction:</p>
 <p><font color="#FF00FF">When a Kademlia node receives an RPC 
@@ -4678,12 +4791,12 @@ contacts in the k-bucket, any unresponsive ones can be evicted and replaced with
 entries in the replacement cache. The replacement cache is kept sorted by time 
 last seen, with the most recently seen entry having the highest priority as a 
 replacement candidate.</font></p>
-<h3><a name="Ambiguity#18178">Ambiguity #18</a></h3>
+<h4><a name="Ambiguity#19182">Ambiguity #19</a></h4>
 <p>What happens when the peer throws an exception or the random ID that the peer 
 responds with doesn't match what was sent?&nbsp; To make matters simple, in this 
 implementation we'll handle all error conditions, including timeouts, in the 
 same way.</p>
-<h2><a name="RPCErrorHandlingandDelayedEviction-Implementation179">RPC Error Handling and Delayed Eviction - Implementation</a></h2>
+<h3><a name="Implementation183">Implementation</a></h3>
 <p>The implementation for handling evictions and replacing them with contacts 
 waiting to be added to the bucket is handled in the Dht.&nbsp; First, the error 
 handler:</p>
@@ -4797,7 +4910,7 @@ protected void ReplaceWithPendingContact(KBucket bucket)
     }
   }
 }</pre>
-<h2><a name="RPCErrorHandlingandDelayedEviction-UnitTests180">RPC Error Handling and Delayed Eviction - Unit Tests</a></h2>
+<h3><a name="UnitTests184">Unit Tests</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> We can now modify the existing test for a non-responding contact by checking 
 the pending buffer and eviction count dictionary.&nbsp; The assertions change to 
 this:</p>
@@ -4816,7 +4929,8 @@ Assert.IsTrue(dht.PendingContacts.Count == 0, &quot;Pending contact list should 
 Assert.IsFalse(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nonRespondingContact), &quot;Expected bucket to NOT contain non-responding contact.&quot;);
 Assert.IsTrue(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nextNewContact), &quot;Expected bucket to contain new contact.&quot;);
 Assert.IsTrue(dht.EvictionCount.Count == 0, &quot;Expected no contacts to be pending eviction.&quot;);</pre>
-<h2><a name="PuttingItTogether-ADemo181">Putting It Together - A Demo</a></h2>
+<h2><a name="PuttingItTogether-ADemo185">Putting It Together - A Demo</a></h2>
+<p><img border="0" src="demo1.png" width="191" height="324"></p>
 <p>As usual, there's nothing like a visual demo to see what is happening.&nbsp; 
 This demo uses <a href="https://www.codeproject.com/Articles/1136050/FlowSharp">
 FlowSharp</a> as the drawing canvas.&nbsp; 
@@ -4849,7 +4963,7 @@ protected void InitializeKnownPeers()
   });
 }</pre>
 <p><img border="0" src="bootstrap0.png" width="611" height="469"></p>
-<h3><a name="Bootstrapping182">Bootstrapping</a></h3>
+<h3><a name="Bootstrapping186">Bootstrapping</a></h3>
 <pre>protected void BootstrapWithAPeer()
 {
   Dht dht = dhts[peerBootstrappingIdx];
@@ -4861,12 +4975,11 @@ protected void InitializeKnownPeers()
   DrawDhts();
 }</pre>
 <p>After each peer bootstraps with one of the known peers (randomly selected) the peer network is established:</p>
-<p><img border="0" src="bootstrap.png" width="617" height="482"></p>
+<p><img border="0" src="bootstrap.png" width="592" height="474"></p>
 <p>The directionality of the connection is not shown -- arrows would get lost in 
 this drawing!</p>
-<h3><a name="BucketRefresh183">Bucket Refresh</a></h3>
-<p>To illustrate bucket refresh, let's start with a smaller set of peers (25) 
-and draw their bootstrapped connections in grey:</p>
+<h3><a name="BucketRefresh187">Bucket Refresh</a></h3>
+<p>To illustrate bucket refresh, let's start with a smaller set of peers (25):</p>
 <p><img border="0" src="bucketRefresh1.png" width="466" height="474"></p>
 <p>A bucket refresh calls FindNode all the contacts in each bucket:</p>
 <pre>#if DEBUG
@@ -4895,8 +5008,39 @@ contacts returned by the contact:</p>
 like this, just about every peer learns about every other peer -- another 
 iteration of bucket refreshing results in only a couple more contacts being 
 discovered.</p>
-<h2><a name="NotImplemented184">Not Implemented</a></h2>
-<h3><a name="UDPDropOuts185">UDP Drop Outs</a></h3>
+<h3><a name="StoreValue188">Store Value</a></h3>
+<p>When a non-cached value is stored to a peer, it is republished to close 
+peers.&nbsp; We can see this by coloring the originator with yellow, the 
+immediate peer we're storing the value to in blue, and the peers to which the 
+value is republished in orange:</p>
+<pre> /// &lt;summary&gt;
+/// Color the originator with yellow
+/// the immediate peer we're storing the value to in blue
+/// and the peers to which the value is republished in orange:
+/// &lt;/summary&gt;
+private void btnPublish_Click(object sender, EventArgs e)
+{
+  firstContacts = new List&lt;Dht&gt;();
+  ID key = ID.RandomID;
+  Dht originatorDht = dhts[(int)nudPeerNumber.Value];
+  originatorDht.Store(key, &quot;Test&quot;);
+  UpdatePeerColors();
+  DrawDhts();
+}</pre>
+<p>In a small network, because the store gets published to <i>k</i> peers, most of the 
+peers are involved:</p>
+<p><img border="0" src="publish1.png" width="467" height="465"></p>
+<h3><a name="StoreRepublish189">Store Republish</a></h3>
+<p>When we force an immediate store republish, we see that one node, that is a 
+closer contact, getting the republished key-value:</p>
+<p><img border="0" src="publish2.png" width="459" height="462"></p>
+<p>In a larger network, this becomes more obvious (nodes have been moved to the 
+topmost in the rendering):</p>
+<p><img border="0" src="publish3.png" width="596" height="474"></p>
+<p>Remember that key-values are republished only on <i>k</i> closer contacts, so 
+not every peer gets the republished key-value.</p>
+<h2><a name="NotImplemented190">Not Implemented</a></h2>
+<h3><a name="UDPDropOuts191">UDP Drop Outs</a></h3>
 <p><font color="#FF00FF">A related problem is that because Kademlia uses UDP, 
 valid contacts will sometimes fail to respond when network packets are dropped. 
 Since packet loss often indicates network congestion, Kademlia locks 
@@ -4914,7 +5058,7 @@ for a while.&nbsp; This algorithm is somewhat entangled with delayed eviction.&n
 In delayed eviction, the spec state &quot;any unresponsive ones can be evicted.&quot;&nbsp; 
 It is the spec's description of UDP drop outs that actually defines what 
 &quot;unresponsive&quot; actually means.</p>
-<h3><a name="AcceleratedLookups186">Accelerated Lookups</a></h3>
+<h3><a name="AcceleratedLookups192">Accelerated Lookups</a></h3>
 <font color="#FF00FF">When a contact fails to respond to 5 RPCs in a row, it 
 is considered stale. If a fe-bucket is not full or its replacement cache is 
 empty, Kademlia merely flags stale contacts rather than remove them. This 
@@ -4922,15 +5066,70 @@ ensures, among other things, that if a nodeï¿½s own network connection goes down
 temporarily, the node wonï¿½t completely void all of its k-buckets.</font>
 <p><font color="#FF00FF">Another optimization in the implementation is to 
 achieve fewer hops per lookup by increasing the routing table size. 
-Conceptually, this is done by considering IDs 6 bits at a time instead of just 
+Conceptually, this is done by considering IDs <i>b</i> bits at a time instead of just 
 one bit at a time. As previously described, the expected number of hops per 
-lookup is log2 n. By increasing the routing tableï¿½s size to an expected 2b log2t 
-n k-buckets, we can reduce the number of expected hops to log2&amp; n.</font></p>
+lookup is log<sub>2</sub>n. By increasing the routing tableï¿½s size to an expected 2<sup>b</sup> log<sub>2</sub><sup>b</sup>
+<i>n</i> <i>k</i>-buckets, we can reduce the number of expected hops to log<sub>2</sub><sup>b</sup>
+<i>n</i>.</font></p>
 <p>In this implementation we have bucket ranges rather than a bucket per 
-bit in the key space, therefore the accelerated lookup optimization is 
+prefix bits in the key space, therefore the accelerated lookup optimization is 
 irrelevant because the bucket ranges typically span many prefix bits.</p>
-<h2><a name="Conclusion187">Conclusion</a></h2>
-<h2><a name="References188">References</a></h2>
+<h3><a name="SybilAttacks193">Sybil Attacks</a></h3>
+<p>Peer-to-peer networks are vulnerable to Sybil attacks: </p>
+<blockquote>
+	<p>&quot;In a Sybil attack, the attacker subverts the reputation system of a 
+	peer-to-peer network by creating a large number of pseudonymous identities, 
+	using them to gain a disproportionately large influence. A reputation 
+	system's vulnerability to a Sybil attack depends on how cheaply identities 
+	can be generated, the degree to which the reputation system accepts inputs 
+	from entities that do not have a chain of trust linking them to a trusted 
+	entity, and whether the reputation system treats all entities identically.&quot;<sup>21</sup></p>
+</blockquote>
+<p>In the current implementation, if the peer network is already well populated 
+(most k-buckets are full) a Sybil attack would not replace &quot;good&quot; known peers -- 
+the attack would simply place the attempt into the DHT's pending contact buffer.&nbsp; 
+In a mostly unpopulated network (most k-buckets have room for more peers) the 
+subsequent failure to get a response from a peer would result in its eventual 
+eviction.&nbsp; The piggyback ping approach is also a means for the recipient of 
+the RPC call to verify the sender.</p>
+<h2><a name="Conclusion194">Conclusion</a></h2>
+<p>How does one write a conclusion to an article that is over 120 pages in Word?&nbsp; 
+Petar Maymounkov wrote &quot;...my opinion is that Kademlia is so simple, that with a 
+modern language like Go, a good implementation of Kademlia (the algorithm) is no 
+more than 100 lines of code.&quot;<sup>20</sup>&nbsp; Perhaps when looking at just 
+the algorithm, the router in particular, this may be true, but there is a 
+tremendous amount of detail that has to go into the architecture and 
+implementation of the Kademlia protocol.&nbsp; As one dives deep into the spec, 
+there are contradictions between the two versions of the spec, between 
+implementations out there in the wild and the spec, and numerous ambiguities 
+that must be resolved by carefully understanding the spec and carefully 
+inspecting other implementations and descriptions of the protocol.&nbsp; Anyone 
+adopting a library that implements the Kademlia protocol should have a thorough 
+understanding of these contradictions and ambiguities, and also must go through 
+any implementation with a fine tooth comb to see how these are addressed, if 
+they are addressed at all.&nbsp; In particular, when looking at other 
+implementations, does the implementation (in no particular order of importance):</p>
+<ul>
+	<li>Address delayed eviction?</li>
+	<li>Create fixed buckets (one per prefix) or dynamic buckets?</li>
+	<li>Improve performance with asynchronous behavior?</li>
+	<li>Handle not just non-responsive peers, but exceptions that peers 
+	generate, etc.?</li>
+	<li>Provide reasonable enough documentation to associate the code with the 
+	spec?</li>
+<li>Address the difference between local store, cache store, and remote store 
+updates?</li>
+	<li>Allow for different protocols?</li>
+<li>Address Sybil attacks?</li>
+	<li>Provide detailed unit testing and analysis of the implementation and its 
+	performance?</li>
+</ul>
+<p>These are some of the issues that one should look for.&nbsp; Even in the 
+initial release of this implementation, I have not adequately addressed all 
+these concerns.&nbsp; Regardless, if you made it this far through the document, 
+I suspect you have a much better understanding of the Kademlia protocol, which 
+also gives you some tools to look at other P2P protocols.</p>
+<h2><a name="References195">References</a></h2>
 <p>[1] -
 <a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
 http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>
@@ -4981,6 +5180,11 @@ http://www.emule-project.net/home/perl/general.cgi?l=1</a> </p>
 https://forum.emule-project.net/index.php?showtopic=32335&amp;view=findpost&amp;p=214837</a> </p>
 <p>[19] - <a href="http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf">
 http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf</a> </p>
+<p>[20] - <a href="http://www.maymounkov.org/kademlia">
+http://www.maymounkov.org/kademlia</a> </p>
+
+<p>[21] - <a href="https://en.wikipedia.org/wiki/Sybil_attack">
+https://en.wikipedia.org/wiki/Sybil_attack</a></p>
 <p>&nbsp;</p>
 
 </body>
