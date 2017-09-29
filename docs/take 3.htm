@@ -7,7 +7,7 @@
 </head>
 
 <body>
-<img border="0" src="file:///C:/projects/Kademlia/docs/bucketRefresh2.png" width="460" height="463">
+<img border="0" src="bucketRefresh2.png" width="460" height="463">
 
 <p>Implementing the Kademlia Peer-to-Peer Distributed Hash Table - A Deep Dive</p>
 
@@ -3677,7 +3677,7 @@ is discussed later.</p>
 This is baked into the Dht implementation, serializing the data in a JSON file.&nbsp; 
 The persistence of key-values is handled separately and is defined by the 
 specific implementation needs.</p>
-<p><font color="#FF0000">TODO</font></p>
+<p><font color="#FF0000">TODOOO</font></p>
 <h2>Considerations for an Asynchronous Implementation</h2>
 <h3>Thread Safety</h3>
 <p>The entry points to the node:</p>
@@ -4833,10 +4833,15 @@ updates?</li>
 	performance?</li>
 </ul>
 <p>These are some of the issues that one should look for.&nbsp; Even in the 
-initial release of this implementation, I have not adequately addressed all 
+initial release of this implementation, I have not addressed all 
 these concerns.&nbsp; Regardless, if you made it this far through the document, 
 I suspect you have a much better understanding of the Kademlia protocol, which 
 also gives you some tools to look at other P2P protocols.</p>
+<h3>All the Unit Tests</h3>
+<p>There's a total of 35 unit tests, and even so it seems like there certainly 
+could be more!</p>
+<p><img border="0" src="allunittests.png" width="304" height="730"></p>
+<p>&nbsp;</p>
 <h2>References</h2>
 <p>[1] -
 <a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
