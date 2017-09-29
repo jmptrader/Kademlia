@@ -4,11 +4,11 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{2199EABF-FCAC-4E51-A85F-0A1B0F9C0CB0}</ProjectGuid>
+    <ProjectGuid>{BE0875E7-F543-4461-A0E7-4175F1326DDD}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Protocols</RootNamespace>
-    <AssemblyName>Protocols</AssemblyName>
+    <RootNamespace>CliftonKademlia.Protocols</RootNamespace>
+    <AssemblyName>CliftonKademlia.Protocols</AssemblyName>
     <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
@@ -31,9 +31,8 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\Libs\Newtonsoft.Json.dll</HintPath>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>..\Libs\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -54,7 +53,7 @@
     <Compile Include="TcpSubnetServer.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\Clifton.Kademlia.Common\Clifton.Kademlia.Common.csproj">
+    <ProjectReference Include="..\Clifton.Kademlia.Common\Clifton.Kademlia.Common.csproj">
       <Project>{01939341-c23f-4ce4-91d3-26f6e5611dc2}</Project>
       <Name>Clifton.Kademlia.Common</Name>
     </ProjectReference>

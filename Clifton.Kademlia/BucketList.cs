@@ -2,17 +2,19 @@
 using System.Linq;
 using System.Numerics;
 
+using Clifton.Kademlia.Common;
+
 namespace Clifton.Kademlia
 {
-    public class BucketList
+    public class BucketList : IBucketList
     {
         public List<KBucket> Buckets { get { return buckets; } }
-        public Dht Dht { get { return dht; } set { dht = value; } }
+        public IDht Dht { get { return dht; } set { dht = value; } }
 
         protected List<KBucket> buckets;
         protected ID ourID;
         protected Contact ourContact;
-        protected Dht dht;
+        protected IDht dht;
 
 #if DEBUG       // For unit testing
         public BucketList(ID id, Contact dummyContact)

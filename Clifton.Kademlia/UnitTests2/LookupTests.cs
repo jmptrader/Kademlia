@@ -8,6 +8,7 @@ using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using Clifton.Kademlia;
+using Clifton.Kademlia.Common;
 
 namespace UnitTests2
 {

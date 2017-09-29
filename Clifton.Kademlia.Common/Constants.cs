@@ -1,4 +1,4 @@
-﻿namespace Clifton.Kademlia
+﻿namespace Clifton.Kademlia.Common
 {
 	public static class Constants
 	{

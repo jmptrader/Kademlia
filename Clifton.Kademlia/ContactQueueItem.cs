@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 
+using Clifton.Kademlia.Common;
+
 namespace Clifton.Kademlia
 {
     public class ContactQueueItem

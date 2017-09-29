@@ -64,7 +64,7 @@ namespace Clifton.Kademlia.Protocols
 
             try
             {
-                var contacts = ret?.Contacts?.Select(val => new Contact(InstantiateProtocol(val.Protocol, val.ProtocolName), new ID(val.Contact))).ToList();
+                var contacts = ret?.Contacts?.Select(val => new Contact(Protocol.InstantiateProtocol(val.Protocol, val.ProtocolName), new ID(val.Contact))).ToList();
 
                 // Return only contacts with supported protocols.
                 return (contacts?.Where(c => c.Protocol != null).ToList() ?? EmptyContactList(), GetRpcError(id, ret, timeoutError, error));
@@ -100,7 +100,7 @@ namespace Clifton.Kademlia.Protocols
 
             try
             {
-                var contacts = ret?.Contacts?.Select(val => new Contact(InstantiateProtocol(val.Protocol, val.ProtocolName), new ID(val.Contact))).ToList();
+                var contacts = ret?.Contacts?.Select(val => new Contact(Protocol.InstantiateProtocol(val.Protocol, val.ProtocolName), new ID(val.Contact))).ToList();
 
                 // Return only contacts with supported protocols.
                 return (contacts?.Where(c => c.Protocol != null).ToList(), ret.Value, GetRpcError(id, ret, timeoutError, error));
@@ -163,23 +163,6 @@ namespace Clifton.Kademlia.Protocols
         protected List<Contact> EmptyContactList()
         {
             return new List<Contact>();
-        }
-
-        /// <summary>
-        /// Returns the contact's protocol or, if not supported, null.
-        /// </summary>
-        public static IProtocol InstantiateProtocol(object protocol, string protocolName)
-        {
-            IProtocol ret = null;
-            Type t = Type.GetType("Clifton.Kademlia.Protocols." + protocolName);
-
-            if (t != null)
-            {
-                JObject jobj = (JObject)protocol;
-                ret = (IProtocol)JsonConvert.DeserializeObject(protocol.ToString(), t);
-            }
-
-            return ret;
         }
     }
 }

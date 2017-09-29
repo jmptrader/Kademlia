@@ -2,6 +2,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using Clifton.Kademlia;
+using Clifton.Kademlia.Common;
 using Clifton.Kademlia.Protocols;
 
 namespace UnitTests2

@@ -171,7 +171,7 @@ namespace Clifton.Kademlia.Protocols
         public static IProtocol InstantiateProtocol(object protocol, string protocolName)
         {
             IProtocol ret = null;
-            Type t = Type.GetType("Clifton.Kademlia.Protocols." + protocolName);
+            Type t = Type.GetType("Clifton.Kademlia.Protocols." + protocolName + ", CliftonKademlia.Protocols");
 
             if (t != null)
             {

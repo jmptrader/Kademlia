@@ -4,6 +4,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Numerics;
 
+using Clifton.Kademlia.Common;
+
 namespace Clifton.Kademlia
 {
     public class StoreValue

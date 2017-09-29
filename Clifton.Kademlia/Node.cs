@@ -2,12 +2,18 @@
 using System.Collections.Generic;
 using System.Linq;
 
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+using Clifton.Kademlia.Common;
+using Clifton.Kademlia.Protocols;
+
 namespace Clifton.Kademlia
 {
-    public class Node
+    public class Node : INode
     {
         public Contact OurContact { get { return ourContact; } }
-        public BucketList BucketList { get { return bucketList; } }
+        public IBucketList BucketList { get { return bucketList; } }
         public IStorage Storage { get { return storage; } }
         public IStorage CacheStorage { get { return cacheStorage; } }
         public Dht Dht { get { return dht; } set { dht = value; } }
@@ -42,21 +48,24 @@ namespace Clifton.Kademlia
 
         public object ServerPing(CommonRequest request)
         {
-            Ping(new Contact(null, new ID(request.Sender)));
+            IProtocol protocol = Protocol.InstantiateProtocol(request.Protocol, request.ProtocolName);
+            Ping(new Contact(protocol, new ID(request.Sender)));
 
             return new { RandomID = request.RandomID };
         }
 
         public object ServerStore(CommonRequest request)
         {
-            Store(new Contact(null, new ID(request.Sender)), new ID(request.Key), request.Value, request.IsCached, request.ExpirationTimeSec);
+            IProtocol protocol = Protocol.InstantiateProtocol(request.Protocol, request.ProtocolName);
+            Store(new Contact(protocol, new ID(request.Sender)), new ID(request.Key), request.Value, request.IsCached, request.ExpirationTimeSec);
 
             return new { RandomID = request.RandomID };
         }
 
         public object ServerFindNode(CommonRequest request)
         {
-            var (contacts, val) = FindNode(new Contact(null, new ID(request.Sender)), new ID(request.Key));
+            IProtocol protocol = Protocol.InstantiateProtocol(request.Protocol, request.ProtocolName);
+            var (contacts, val) = FindNode(new Contact(protocol, new ID(request.Sender)), new ID(request.Key));
 
             return new
             {
@@ -73,7 +82,8 @@ namespace Clifton.Kademlia
 
         public object ServerFindValue(CommonRequest request)
         {
-            var (contacts, val) = FindValue(new Contact(null, new ID(request.Sender)), new ID(request.Key));
+            IProtocol protocol = Protocol.InstantiateProtocol(request.Protocol, request.ProtocolName);
+            var (contacts, val) = FindValue(new Contact(protocol, new ID(request.Sender)), new ID(request.Key));
 
             return new
             {

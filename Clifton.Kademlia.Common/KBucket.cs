@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 
-namespace Clifton.Kademlia
+namespace Clifton.Kademlia.Common
 {
-    public class KBucket
+    public class KBucket 
     {
         public DateTime TimeStamp { get; protected set; }
         public List<Contact> Contacts { get { return contacts; } }

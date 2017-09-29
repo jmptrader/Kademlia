@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Clifton.Kademlia
+namespace Clifton.Kademlia.Common
 {
     public abstract class BaseRouter
     {

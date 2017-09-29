@@ -10,6 +10,7 @@ using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using Clifton.Kademlia;
+using Clifton.Kademlia.Common;
 
 namespace UnitTests2
 {
@@ -62,7 +63,7 @@ namespace UnitTests2
             Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
             ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
 
-            BucketList bucketList = SetupSplitFailure();
+            IBucketList bucketList = SetupSplitFailure();
 
             Assert.IsTrue(bucketList.Buckets.Count == 2, "Bucket split should have occurred.");
             Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, "Expected 1 contact in bucket 0.");
@@ -217,7 +218,7 @@ namespace UnitTests2
             //Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
             //((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
 
-            BucketList bucketList = SetupSplitFailure(dht.Node.BucketList);
+            IBucketList bucketList = SetupSplitFailure(dht.Node.BucketList);
 
             Assert.IsTrue(bucketList.Buckets.Count == 2, "Bucket split should have occurred.");
             Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, "Expected 1 contact in bucket 0.");
@@ -255,7 +256,7 @@ namespace UnitTests2
             //Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
             //((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, new VirtualStorage());
 
-            BucketList bucketList = SetupSplitFailure(dht.Node.BucketList);
+            IBucketList bucketList = SetupSplitFailure(dht.Node.BucketList);
 
             Assert.IsTrue(bucketList.Buckets.Count == 2, "Bucket split should have occurred.");
             Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, "Expected 1 contact in bucket 0.");
@@ -336,7 +337,7 @@ namespace UnitTests2
             Assert.IsTrue(unseen.Storage.Get(ID.Mid) == valMid, "Expected valMid value to match.");
         }
 
-        protected BucketList SetupSplitFailure(BucketList bucketList = null)
+        protected IBucketList SetupSplitFailure(IBucketList bucketList = null)
         {
             // force host node ID to < 2^159 so the node ID is not in the 2^159 ... 2^160 range
             byte[] bhostID = new byte[20];

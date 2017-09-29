@@ -1,4 +1,6 @@
-﻿using System;
+﻿#define USE_TCP_SUBNET_PROTOCOL
+
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -9,6 +11,8 @@ using FlowSharpLib;
 using FlowSharpServiceInterfaces;
 
 using Clifton.Kademlia;
+using Clifton.Kademlia.Common;
+using Clifton.Kademlia.Protocols;
 
 namespace KademliaDemo
 {
@@ -25,31 +29,36 @@ namespace KademliaDemo
         protected Dictionary<BigInteger, Color> peerColor;
         protected ID storeKey;
         protected Dht originatorDht;
+        protected TcpSubnetServer server;
 
         // 60 peer network:
-        protected const int NUM_DHT = 60;
-        protected const int ITEMS_PER_ROW = 10;
-        protected const int XOFFSET = 30;
-        protected const int YOFFSET = 30;
-        protected const int SIZE = 30;
-        protected const int XSPACING = 60;
-        protected const int YSPACING = 80;
-        protected const int JITTER = 15;
-        protected const int NUM_KNOWN_PEERS = 5;
-
-        // 25 peer network:
-        //protected const int NUM_DHT = 25;
-        //protected const int ITEMS_PER_ROW = 5;
+        //protected const int NUM_DHT = 60;
+        //protected const int ITEMS_PER_ROW = 10;
         //protected const int XOFFSET = 30;
         //protected const int YOFFSET = 30;
         //protected const int SIZE = 30;
-        //protected const int XSPACING = 100;
-        //protected const int YSPACING = 100;
+        //protected const int XSPACING = 60;
+        //protected const int YSPACING = 80;
         //protected const int JITTER = 15;
-        //protected const int NUM_KNOWN_PEERS = 3;
+        //protected const int NUM_KNOWN_PEERS = 5;
+
+        // 25 peer network:
+        protected const int NUM_DHT = 25;
+        protected const int ITEMS_PER_ROW = 5;
+        protected const int XOFFSET = 30;
+        protected const int YOFFSET = 30;
+        protected const int SIZE = 30;
+        protected const int XSPACING = 100;
+        protected const int YSPACING = 100;
+        protected const int JITTER = 15;
+        protected const int NUM_KNOWN_PEERS = 3;
 
         public MainForm()
         {
+#if USE_TCP_SUBNET_PROTOCOL
+            InitializeTcpSubnetServer();
+#endif
+
             InitializeComponent();
             InitializeFlowSharp();
             InitializeDhts();
@@ -80,6 +89,12 @@ namespace KademliaDemo
             nudPeerNumber.Maximum = NUM_DHT - 1;
         }
 
+        protected void InitializeTcpSubnetServer()
+        {
+            server = new TcpSubnetServer("http://127.0.0.1", 2720);
+            server.Start();
+        }
+
         protected void InitializeDhts()
         {
             dhts = new List<Dht>();
@@ -88,10 +103,22 @@ namespace KademliaDemo
 
             NUM_DHT.ForEach((n) =>
             {
+
+#if USE_TCP_SUBNET_PROTOCOL
+                IProtocol protocol = new TcpSubnetProtocol("http://127.0.0.1", 2720, n);
+#else
                 IProtocol protocol = new VirtualProtocol();
+#endif
+
                 Dht dht = new Dht(ID.RandomID, protocol, () => new VirtualStorage(), new Router());
                 peerColor[dht.ID.Value] = Color.Green;
+
+#if USE_TCP_SUBNET_PROTOCOL
+                server.RegisterProtocol(n, dht.Node);
+#else
                 ((VirtualProtocol)protocol).Node = dht.Node;
+#endif
+
                 dhts.Add(dht);
                 dhtPos.Add(new Rectangle(XOFFSET + rnd.Next(-JITTER, JITTER) + (n % ITEMS_PER_ROW) * XSPACING, YOFFSET + rnd.Next(-JITTER, JITTER) + (n / ITEMS_PER_ROW) * YSPACING, SIZE, SIZE));
             });
@@ -260,6 +287,7 @@ namespace KademliaDemo
         private void btnBucketRefresh_Click(object sender, EventArgs e)
         {
             dhts.AsParallel().ForEach(d => d.PerformBucketRefresh());
+            System.Threading.Thread.Sleep(500);
 
             dhts.ForEachWithIndex((d, i) =>
             {
@@ -293,6 +321,7 @@ namespace KademliaDemo
             storeKey = ID.RandomID;
             originatorDht = dhts[(int)nudPeerNumber.Value];
             originatorDht.Store(storeKey, "Test");
+            System.Threading.Thread.Sleep(500);
             dhts.Where(d => d.RepublishStorage.Contains(storeKey)).ForEach(d => firstContacts.Add(d));
             UpdatePeerColors();
             DrawDhts();
@@ -301,6 +330,7 @@ namespace KademliaDemo
         private void btnRepublish_Click(object sender, EventArgs e)
         {
             dhts.ForEach(d => d.PerformStoreRepublish());
+            System.Threading.Thread.Sleep(500);
             UpdatePeerColors();
             DrawDhts();
         }

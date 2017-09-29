@@ -31,6 +31,9 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>..\Libs\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
@@ -44,25 +47,25 @@
   <ItemGroup>
     <Compile Include="BaseRouter.cs" />
     <Compile Include="BucketList.cs" />
-    <Compile Include="CommonRequest.cs" />
-    <Compile Include="Constants.cs" />
-    <Compile Include="Contact.cs" />
     <Compile Include="ContactQueueItem.cs" />
     <Compile Include="Dht.cs" />
-    <Compile Include="Exceptions.cs" />
-    <Compile Include="ExtensionMethods.cs" />
     <Compile Include="FindResult.cs" />
-    <Compile Include="ID.cs" />
-    <Compile Include="Interfaces.cs" />
-    <Compile Include="KBucket.cs" />
     <Compile Include="Node.cs" />
     <Compile Include="ParallelRouter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Router.cs" />
-    <Compile Include="RpcError.cs" />
-    <Compile Include="Validate.cs" />
     <Compile Include="VirtualProtocol.cs" />
     <Compile Include="VirtualStorage.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Clifton.Kademlia.Common\Clifton.Kademlia.Common.csproj">
+      <Project>{01939341-c23f-4ce4-91d3-26f6e5611dc2}</Project>
+      <Name>Clifton.Kademlia.Common</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Clifton.Kademlia.Protocols\Clifton.Kademlia.Protocols.csproj">
+      <Project>{af70116a-c62f-48b8-8aac-c079f068bf3d}</Project>
+      <Name>Clifton.Kademlia.Protocols</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

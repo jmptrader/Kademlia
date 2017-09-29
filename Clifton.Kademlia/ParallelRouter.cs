@@ -6,6 +6,8 @@ using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading;
 
+using Clifton.Kademlia.Common;
+
 namespace Clifton.Kademlia
 {
     public class ParallelRouter : BaseRouter

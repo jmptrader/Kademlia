@@ -5,9 +5,11 @@ using System.Linq;
 using System.Numerics;
 using System.Timers;
 
+using Clifton.Kademlia.Common;
+
 namespace Clifton.Kademlia
 {
-    public class Dht
+    public class Dht : IDht
     {
 #if DEBUG       // for unit testing and demo
         public BaseRouter Router { get { return router; } }

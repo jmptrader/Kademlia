@@ -2,14 +2,41 @@
 using System.Collections.Generic;
 using System.Numerics;
 
-namespace Clifton.Kademlia
+namespace Clifton.Kademlia.Common
 {
+    //public interface IKBucket
+    //{
+    //    BigInteger Low { get; }
+    //    BigInteger High { get; }
+    //}
+
+    public interface IDht
+    {
+        void DelayEviction(Contact toEvict, Contact toReplace);
+        void AddToPending(Contact pending);
+    }
+
+    public interface IBucketList
+    {
+        List<KBucket> Buckets { get; }
+        IDht Dht { get; set; }
+        void AddContact(Contact contact);
+        KBucket GetKBucket(ID otherID);
+        List<Contact> GetCloseContacts(ID key, ID exclude);
+    }
+
     public interface IProtocol
     {
         RpcError Ping(Contact sender);
         (List<Contact> contacts, RpcError error) FindNode(Contact sender, ID key);
         (List<Contact> contacts, string val, RpcError error) FindValue(Contact sender, ID key);
         RpcError Store(Contact sender, ID key, string val, bool isCached = false, int expirationTimeSec = 0);
+    }
+
+    public interface INode
+    {
+        Contact OurContact { get; }
+        IBucketList BucketList { get; }
     }
 
     public interface IStorage : IEnumerable<BigInteger>

@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Clifton.Kademlia
+namespace Clifton.Kademlia.Common
 {
     public class Contact
     {

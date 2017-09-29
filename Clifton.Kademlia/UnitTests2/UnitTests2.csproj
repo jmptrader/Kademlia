@@ -64,13 +64,17 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\Clifton.Kademlia.Common\Clifton.Kademlia.Common.csproj">
+      <Project>{01939341-c23f-4ce4-91d3-26f6e5611dc2}</Project>
+      <Name>Clifton.Kademlia.Common</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Clifton.Kademlia.Protocols\Clifton.Kademlia.Protocols.csproj">
+      <Project>{af70116a-c62f-48b8-8aac-c079f068bf3d}</Project>
+      <Name>Clifton.Kademlia.Protocols</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Clifton.Kademlia.csproj">
       <Project>{09b2544a-c451-43cf-8bf0-7229601cf27b}</Project>
       <Name>Clifton.Kademlia</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Protocols\Protocols.csproj">
-      <Project>{2199eabf-fcac-4e51-a85f-0a1b0f9c0cb0}</Project>
-      <Name>Protocols</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets" Condition="Exists('$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets')" />
