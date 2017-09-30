@@ -80,14 +80,11 @@ namespace Clifton.Kademlia
             SetupTimers();
         }
 
+        /// <summary>
+        /// Returns a JSON string of the serialized DHT.
+        /// </summary>
         public string Save()
         {
-            //XmlSerializer xs = new XmlSerializer(GetType());
-            //StringBuilder sb = new StringBuilder();
-            //TextWriter tw = new StringWriter(sb);
-            //xs.Serialize(tw, this);
-            //return sb.ToString();
-
             var settings = new JsonSerializerSettings();
             settings.TypeNameHandling = TypeNameHandling.Auto;
             string json = JsonConvert.SerializeObject(this, Formatting.Indented, settings);

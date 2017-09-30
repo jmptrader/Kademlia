@@ -7,7 +7,7 @@
 </head>
 
 <body>
-<h1>Implementing the Kademlia Peer-to-Peer Distributed Hash Table</h1>
+<p>Implementing the Kademlia Peer-to-Peer Distributed Hash Table</p>
 <p>
 <img border="0" src="bucketRefresh2.png" width="460" height="463">
 
@@ -3678,11 +3678,90 @@ the correctness of the sender as well.&quot;</p>
 that do not respond or respond incorrectly or with errors.&nbsp; Error handling 
 is discussed later.</p>
 <h2>Persisting the Dht</h2>
-<p>The bucket lists, contacts in each bucket, and stores need to be persisted so the last known state of the Dht can be restored.&nbsp; 
+<p>The bucket lists and contacts in each bucketneed to be persisted so the last known state of the DHT can be restored.&nbsp; 
 This is baked into the Dht implementation, serializing the data in a JSON file.&nbsp; 
 The persistence of key-values is handled separately and is defined by the 
-specific implementation needs.</p>
-<p><font color="#FF0000">TODOOO</font></p>
+specific implementation needs.&nbsp; Note that the <code>VirtualStorage</code> class provided 
+in the baseline code does not persist its data.&nbsp; Internally, various 
+attributes are marked as <code>JsonIgnore</code> to prevent circular serialization, and some 
+classes have parameter-less public constructors for deserialization.</p>
+<h3>Serializing</h3>
+<p>This is really straight forward, the only trick is to enable the type name 
+handling in <code>Newtonsoft.Json</code> so that properties with abstract and interface types 
+also serialize their concrete type.</p>
+<pre>/// &lt;summary&gt;
+/// Returns a JSON string of the serialized DHT.
+/// &lt;/summary&gt;
+public string Save()
+{
+  var settings = new JsonSerializerSettings();
+  settings.TypeNameHandling = TypeNameHandling.Auto;
+  string json = JsonConvert.SerializeObject(this, Formatting.Indented, settings);
+
+  return json;
+}</pre>
+<h3>Deserializing</h3>
+<p>The deserializer is equally simple, however note the call to 
+DeserializationFixups.&nbsp; This reduces the size of the JSON by not 
+serializing certain properties that can be obtained from other properties.&nbsp; 
+As a result, some minor fixups are necessary.</p>
+<pre>public static Dht Load(string json)
+{
+  var settings = new JsonSerializerSettings();
+  settings.TypeNameHandling = TypeNameHandling.Auto;
+
+  Dht dht = JsonConvert.DeserializeObject&lt;Dht&gt;(json, settings);
+  dht.DeserializationFixups();
+  dht.SetupTimers();
+
+  return dht;
+}
+
+protected void DeserializationFixups()
+{
+  ID = ourContact.ID;
+  protocol = ourContact.Protocol;
+  node = router.Node;
+  node.OurContact = ourContact;
+  node.BucketList.OurID = ID;
+  node.BucketList.OurContact = ourContact;
+  router.Dht = this;
+  node.Dht = this;
+}</pre>
+<h3>Unit Test</h3>
+<p><img border="0" src="unittest.png" width="14" height="32">&nbsp; The unit test is a simple test that a contact in a bucket gets persisted and 
+restored correctly:</p>
+<pre>[TestMethod]
+public void DhtSerializationTest()
+{
+  TcpSubnetProtocol p1 = new TcpSubnetProtocol(&quot;http://127.0.0.1&quot;, 2720, 1);
+  TcpSubnetProtocol p2 = new TcpSubnetProtocol(&quot;http://127.0.0.1&quot;, 2720, 2);
+  VirtualStorage store1 = new VirtualStorage();
+  VirtualStorage store2 = new VirtualStorage();
+
+  // Ensures that all nodes are closer, because ID.Max ^ n &lt; ID.Max when n &gt; 0.
+  Dht dht = new Dht(ID.Max, p1, new Router(), store1, store1, new VirtualStorage());
+
+  ID contactID = ID.Mid; // a closer contact.
+  Contact otherContact = new Contact(p2, contactID);
+  Node otherNode = new Node(otherContact, store2);
+
+  // Add this other contact to our peer list.
+  dht.Node.BucketList.AddContact(otherContact);
+
+  string json = dht.Save();
+
+  Dht newDht = Dht.Load(json);
+  Assert.IsTrue(newDht.Node.BucketList.Buckets.Sum(b =&gt; b.Contacts.Count) == 1, &quot;Expected our node to have 1 contact.&quot;);
+  Assert.IsTrue(newDht.Node.BucketList.ContactExists(otherContact), &quot;Expected our contact to have the other contact.&quot;);
+  Assert.IsTrue(newDht.Router.Node == newDht.Node, &quot;Router node not initialized.&quot;);
+}</pre>
+
+<p><img border="0" src="note.png" width="24" height="32">&nbsp; When you look at the JSON, you suddenly realize that shared objects, 
+particularly contacts, are deserialized into separate instances.&nbsp; Because 
+there are assumptions in the code regarding &quot;same instance&quot; and also as a way of 
+ensuring that we're comparing contacts correctly (using their ID's) the <code>Contact</code> 
+class implements <code>IComparable</code> and <code>operator ==</code> and <code>operator !=</code> overloads.</p>
 <h2>Considerations for an Asynchronous Implementation</h2>
 <h3>Thread Safety</h3>
 <p>The entry points to the node:</p>

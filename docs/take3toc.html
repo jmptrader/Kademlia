@@ -7,7 +7,7 @@
 </head>
 
 <body>
-<h1>Implementing the Kademlia Peer-to-Peer Distributed Hash Table</h1>
+<p>Implementing the Kademlia Peer-to-Peer Distributed Hash Table</p>
 <p>
 <img border="0" src="bucketRefresh2.png" width="460" height="463">
 
@@ -32,7 +32,7 @@
 <li><a href="#WhatisAccomplishedHere12">What is Accomplished Here</a></li>
 <li><a href="#Notation13">Notation</a></li>
 <li><a href="#AWordAbouttheUnitTests14">A Word About the Unit Tests</a></li>
-<li><a href="#ANoteAbouttheCode&nbsp;15">A Note About the Code&nbsp; </a></li>
+<li><a href="#AWordAbouttheCode&nbsp;15">A Word About the Code&nbsp; </a></li>
 </ul>
 <li><a href="#KeyConcepts16">Key Concepts</a></li>
 <ul>
@@ -244,64 +244,72 @@
 <li><a href="#Piggy-BackedPing156">Piggy-Backed Ping</a></li>
 </ul>
 <li><a href="#PersistingtheDht157">Persisting the Dht</a></li>
-<li><a href="#ConsiderationsforanAsynchronousImplementation158">Considerations for an Asynchronous Implementation</a></li>
 <ul>
-<li><a href="#ThreadSafety159">Thread Safety</a></li>
-<li><a href="#ParallelQueries-Discussion160">Parallel Queries - Discussion</a></li>
-<ul>
-<li><a href="#Ambiguity#18161">Ambiguity #18</a></li>
+<li><a href="#Serializing158">Serializing</a></li>
+<li><a href="#Deserializing159">Deserializing</a></li>
+<li><a href="#UnitTest160">Unit Test</a></li>
 </ul>
-<li><a href="#ParallelQueries-Implementation162">Parallel Queries - Implementation</a></li>
+<li><a href="#ConsiderationsforanAsynchronousImplementation161">Considerations for an Asynchronous Implementation</a></li>
 <ul>
-<li><a href="#TheBaseRouter163">The BaseRouter</a></li>
-<li><a href="#TheParallelRouter164">The ParallelRouter</a></li>
+<li><a href="#ThreadSafety162">Thread Safety</a></li>
+<li><a href="#ParallelQueries-Discussion163">Parallel Queries - Discussion</a></li>
+<ul>
+<li><a href="#Ambiguity#18164">Ambiguity #18</a></li>
 </ul>
-</ul>
-<li><a href="#SomeEnhancements165">Some Enhancements</a></li>
+<li><a href="#ParallelQueries-Implementation165">Parallel Queries - Implementation</a></li>
 <ul>
-<li><a href="#OperatorOverloadingoftheIDClass166">Operator Overloading of the ID Class</a></li>
-</ul>
-<li><a href="#ABasicTCPSubnetProtocol167">A Basic TCP Subnet Protocol</a></li>
-<ul>
-<li><a href="#RequestMessages168">Request Messages</a></li>
-<li><a href="#RequestHandlers169">Request Handlers</a></li>
-<li><a href="#Responses170">Responses</a></li>
-<li><a href="#ServerImplementation171">Server Implementation</a></li>
-<li><a href="#TheTCPSubnetProtocol172">The TCP Subnet Protocol</a></li>
-<li><a href="#ErrorReporting173">Error Reporting</a></li>
-<li><a href="#TCPSubnetUnitTesting174">TCP Subnet Unit Testing</a></li>
-<ul>
-<li><a href="#PingRouteTest175">PingRouteTest</a></li>
-<li><a href="#StoreRouteTest176"> StoreRouteTest</a></li>
-<li><a href="#FindNodesRouteTest177"> FindNodesRouteTest</a></li>
-<li><a href="#FindValueRouteTest178"> FindValueRouteTest</a></li>
-<li><a href="#UnresponsiveNodeTest179"> UnresponsiveNodeTest</a></li>
+<li><a href="#TheBaseRouter166">The BaseRouter</a></li>
+<li><a href="#TheParallelRouter167">The ParallelRouter</a></li>
 </ul>
 </ul>
-<li><a href="#RPCErrorHandlingandDelayedEviction180">RPC Error Handling and Delayed Eviction</a></li>
+<li><a href="#SomeEnhancements168">Some Enhancements</a></li>
 <ul>
-<li><a href="#Discussion181">Discussion</a></li>
+<li><a href="#OperatorOverloadingoftheIDClass169">Operator Overloading of the ID Class</a></li>
+</ul>
+<li><a href="#ABasicTCPSubnetProtocol170">A Basic TCP Subnet Protocol</a></li>
 <ul>
-<li><a href="#Ambiguity#19182">Ambiguity #19</a></li>
-</ul>
-<li><a href="#Implementation183">Implementation</a></li>
-<li><a href="#UnitTests184">Unit Tests</a></li>
-</ul>
-<li><a href="#PuttingItTogether-ADemo185">Putting It Together - A Demo</a></li>
+<li><a href="#RequestMessages171">Request Messages</a></li>
+<li><a href="#RequestHandlers172">Request Handlers</a></li>
+<li><a href="#Responses173">Responses</a></li>
+<li><a href="#ServerImplementation174">Server Implementation</a></li>
+<li><a href="#TheTCPSubnetProtocol175">The TCP Subnet Protocol</a></li>
+<li><a href="#ErrorReporting176">Error Reporting</a></li>
+<li><a href="#TCPSubnetUnitTesting177">TCP Subnet Unit Testing</a></li>
 <ul>
-<li><a href="#Bootstrapping186">Bootstrapping</a></li>
-<li><a href="#BucketRefresh187">Bucket Refresh</a></li>
-<li><a href="#StoreValue188">Store Value</a></li>
-<li><a href="#StoreRepublish189">Store Republish</a></li>
+<li><a href="#PingRouteTest178">PingRouteTest</a></li>
+<li><a href="#StoreRouteTest179"> StoreRouteTest</a></li>
+<li><a href="#FindNodesRouteTest180"> FindNodesRouteTest</a></li>
+<li><a href="#FindValueRouteTest181"> FindValueRouteTest</a></li>
+<li><a href="#UnresponsiveNodeTest182"> UnresponsiveNodeTest</a></li>
 </ul>
-<li><a href="#NotImplemented190">Not Implemented</a></li>
+</ul>
+<li><a href="#RPCErrorHandlingandDelayedEviction183">RPC Error Handling and Delayed Eviction</a></li>
 <ul>
-<li><a href="#UDPDropOuts191">UDP Drop Outs</a></li>
-<li><a href="#AcceleratedLookups192">Accelerated Lookups</a></li>
-<li><a href="#SybilAttacks193">Sybil Attacks</a></li>
+<li><a href="#Discussion184">Discussion</a></li>
+<ul>
+<li><a href="#Ambiguity#19185">Ambiguity #19</a></li>
 </ul>
-<li><a href="#Conclusion194">Conclusion</a></li>
-<li><a href="#References195">References</a></li>
+<li><a href="#Implementation186">Implementation</a></li>
+<li><a href="#UnitTests187">Unit Tests</a></li>
+</ul>
+<li><a href="#PuttingItTogether-ADemo188">Putting It Together - A Demo</a></li>
+<ul>
+<li><a href="#Bootstrapping189">Bootstrapping</a></li>
+<li><a href="#BucketRefresh190">Bucket Refresh</a></li>
+<li><a href="#StoreValue191">Store Value</a></li>
+<li><a href="#StoreRepublish192">Store Republish</a></li>
+</ul>
+<li><a href="#NotImplemented193">Not Implemented</a></li>
+<ul>
+<li><a href="#UDPDropOuts194">UDP Drop Outs</a></li>
+<li><a href="#AcceleratedLookups195">Accelerated Lookups</a></li>
+<li><a href="#SybilAttacks196">Sybil Attacks</a></li>
+</ul>
+<li><a href="#Conclusion197">Conclusion</a></li>
+<ul>
+<li><a href="#AlltheUnitTests198">All the Unit Tests</a></li>
+</ul>
+<li><a href="#References199">References</a></li>
 </ul>
 
 
@@ -526,12 +534,15 @@ course.</p>
 partial system tests.&nbsp; Actual unit tests of specific code sections in a 
 particular method, well, it gets inane rather quickly.&nbsp; So you'll see a lot 
 of setup stuff being done in the higher level tests.</p>
-<h3><a name="ANoteAbouttheCode&nbsp;15">A Note About the Code&nbsp; </a></h3>
+<h3><a name="AWordAbouttheCode&nbsp;15">A Word About the Code&nbsp; </a></h3>
 <p>The code presented here is incremental, meaning that as additional features 
 are discussed and added, code is updated to reflect those new features and their 
 unit tests.&nbsp; Not every refactoring is included in the code here, therefore 
 its strongly recommended if you're interested in a particular method, use the 
 final implementation in the actual code base.</p>
+<p>The latest update to the code and the documentation can be found on GitHub:
+<a href="https://github.com/cliftonm/Kademlia">
+https://github.com/cliftonm/Kademlia</a> </p>
 <h2><a name="KeyConcepts16">Key Concepts</a></h2>
 <p>The Kademlia specification essentially consists of several sub-algorithms:</p>
 <ol>
@@ -3965,13 +3976,92 @@ the correctness of the sender as well.&quot;</p>
 that do not respond or respond incorrectly or with errors.&nbsp; Error handling 
 is discussed later.</p>
 <h2><a name="PersistingtheDht157">Persisting the Dht</a></h2>
-<p>The bucket lists, contacts in each bucket, and stores need to be persisted so the last known state of the Dht can be restored.&nbsp; 
+<p>The bucket lists and contacts in each bucketneed to be persisted so the last known state of the DHT can be restored.&nbsp; 
 This is baked into the Dht implementation, serializing the data in a JSON file.&nbsp; 
 The persistence of key-values is handled separately and is defined by the 
-specific implementation needs.</p>
-<p><font color="#FF0000">TODO</font></p>
-<h2><a name="ConsiderationsforanAsynchronousImplementation158">Considerations for an Asynchronous Implementation</a></h2>
-<h3><a name="ThreadSafety159">Thread Safety</a></h3>
+specific implementation needs.&nbsp; Note that the <code>VirtualStorage</code> class provided 
+in the baseline code does not persist its data.&nbsp; Internally, various 
+attributes are marked as <code>JsonIgnore</code> to prevent circular serialization, and some 
+classes have parameter-less public constructors for deserialization.</p>
+<h3><a name="Serializing158">Serializing</a></h3>
+<p>This is really straight forward, the only trick is to enable the type name 
+handling in <code>Newtonsoft.Json</code> so that properties with abstract and interface types 
+also serialize their concrete type.</p>
+<pre>/// &lt;summary&gt;
+/// Returns a JSON string of the serialized DHT.
+/// &lt;/summary&gt;
+public string Save()
+{
+  var settings = new JsonSerializerSettings();
+  settings.TypeNameHandling = TypeNameHandling.Auto;
+  string json = JsonConvert.SerializeObject(this, Formatting.Indented, settings);
+
+  return json;
+}</pre>
+<h3><a name="Deserializing159">Deserializing</a></h3>
+<p>The deserializer is equally simple, however note the call to 
+DeserializationFixups.&nbsp; This reduces the size of the JSON by not 
+serializing certain properties that can be obtained from other properties.&nbsp; 
+As a result, some minor fixups are necessary.</p>
+<pre>public static Dht Load(string json)
+{
+  var settings = new JsonSerializerSettings();
+  settings.TypeNameHandling = TypeNameHandling.Auto;
+
+  Dht dht = JsonConvert.DeserializeObject&lt;Dht&gt;(json, settings);
+  dht.DeserializationFixups();
+  dht.SetupTimers();
+
+  return dht;
+}
+
+protected void DeserializationFixups()
+{
+  ID = ourContact.ID;
+  protocol = ourContact.Protocol;
+  node = router.Node;
+  node.OurContact = ourContact;
+  node.BucketList.OurID = ID;
+  node.BucketList.OurContact = ourContact;
+  router.Dht = this;
+  node.Dht = this;
+}</pre>
+<h3><a name="UnitTest160">Unit Test</a></h3>
+<p><img border="0" src="unittest.png" width="14" height="32">&nbsp; The unit test is a simple test that a contact in a bucket gets persisted and 
+restored correctly:</p>
+<pre>[TestMethod]
+public void DhtSerializationTest()
+{
+  TcpSubnetProtocol p1 = new TcpSubnetProtocol(&quot;http://127.0.0.1&quot;, 2720, 1);
+  TcpSubnetProtocol p2 = new TcpSubnetProtocol(&quot;http://127.0.0.1&quot;, 2720, 2);
+  VirtualStorage store1 = new VirtualStorage();
+  VirtualStorage store2 = new VirtualStorage();
+
+  // Ensures that all nodes are closer, because ID.Max ^ n &lt; ID.Max when n &gt; 0.
+  Dht dht = new Dht(ID.Max, p1, new Router(), store1, store1, new VirtualStorage());
+
+  ID contactID = ID.Mid; // a closer contact.
+  Contact otherContact = new Contact(p2, contactID);
+  Node otherNode = new Node(otherContact, store2);
+
+  // Add this other contact to our peer list.
+  dht.Node.BucketList.AddContact(otherContact);
+
+  string json = dht.Save();
+
+  Dht newDht = Dht.Load(json);
+  Assert.IsTrue(newDht.Node.BucketList.Buckets.Sum(b =&gt; b.Contacts.Count) == 1, &quot;Expected our node to have 1 contact.&quot;);
+  Assert.IsTrue(newDht.Node.BucketList.ContactExists(otherContact), &quot;Expected our contact to have the other contact.&quot;);
+  Assert.IsTrue(newDht.Router.Node == newDht.Node, &quot;Router node not initialized.&quot;);
+}</pre>
+
+<p><img border="0" src="note.png" width="24" height="32">&nbsp; When you look at the JSON, you suddenly realize that shared objects, 
+particularly contacts, are deserialized into separate instances.&nbsp; Because 
+there are assumptions in the code regarding &quot;same instance&quot; and also as a way of 
+ensuring that we're comparing contacts correctly (using their ID's) the <code>Contact</code> 
+class implements <code>IComparable</code> and <code>operator ==</code> and <code>operator !=</code> overloads.</p>
+<h2><a name="ConsiderationsforanAsynchronousImplementation161">Considerations for an Asynchronous Implementation</a></h2>
+<h3><a name="ThreadSafety162">Thread Safety</a></h3>
 <p>The entry points to the node:</p>
 <ul>
 	<li>Ping</li>
@@ -3998,7 +4088,7 @@ itself is being modified, however I leave those to some other time.</p>
 <p>It is also assumed that the storage implementation can be re-entrant.&nbsp; 
 In the virtual storage, this is handled by <code>ConcurrentDictionary</code> instances:</p>
 <pre>protected ConcurrentDictionary&lt;BigInteger, StoreValue&gt; store;</pre>
-<h3><a name="ParallelQueries-Discussion160">Parallel Queries - Discussion</a></h3>
+<h3><a name="ParallelQueries-Discussion163">Parallel Queries - Discussion</a></h3>
 <p><font color="#FF00FF">The initiator then sends parallel, asynchronous 
 find_node RPCs to the a nodes it has chosen, a is a system-wide concurrency 
 parameter, such as 3.</font></p>
@@ -4008,7 +4098,7 @@ timeout delays from failed nodes.&nbsp; Waiting for at least some of the nodes
 to respond in each batch of 3 closest nodes gives the system a chance to get 
 even closer nodes to those first set of close nodes with the hope of acquiring
 <i>k</i> closer contacts without having to explore farther contacts.&nbsp;&nbsp;&nbsp; </p>
-<h4><a name="Ambiguity#18161">Ambiguity #18</a></h4>
+<h4><a name="Ambiguity#18164">Ambiguity #18</a></h4>
 <p>It's not particularly clear why all the <i>k</i> closer contacts aren't 
 queried in parallel to start with.&nbsp; Maybe the idea is that you want to try 
 to get closer contacts from already close contacts.&nbsp; Certainly all the 
@@ -4016,7 +4106,7 @@ contacts could be queried and from the ones that respond first, we can select <i
 k</i> closer ones.&nbsp; On the other hand, querying all the contacts 
 simultaneously probably results in unnecessary network traffic as many of the 
 FindNode RPC calls will be ignored. </p>
-<h3><a name="ParallelQueries-Implementation162">Parallel Queries - Implementation</a></h3>
+<h3><a name="ParallelQueries-Implementation165">Parallel Queries - Implementation</a></h3>
 <p>The lookup algorithm requires some refactoring, as currently we're passing 
 the collection of nodes to query to the method that makes the RPC call.&nbsp; 
 For example:</p>
@@ -4036,7 +4126,7 @@ results as they come in.&nbsp; This requires:</p>
 	<li>Changing the algorithm at the top level so that processing continues as 
 	soon as the results appear from the RPC call.</li>
 </ol>
-<h4><a name="TheBaseRouter163">The BaseRouter</a></h4>
+<h4><a name="TheBaseRouter166">The BaseRouter</a></h4>
 <p>For unit testing, it's useful to keep the non-parallel implementation, but 
 ideally both parallel and non-parallel calls to the <code>Router</code> should be made in the 
 same way.&nbsp; An abstract <code>BaseRouter</code> class allows for this:</p>
@@ -4088,7 +4178,7 @@ out Contact foundBy)
   }
   ...
 }</pre>
-<h4><a name="TheParallelRouter164">The ParallelRouter</a></h4>
+<h4><a name="TheParallelRouter167">The ParallelRouter</a></h4>
 <p>The <code>ParallelRouter</code> queues contacts to query, in addition to some other 
 information each thread needs to know about when executing the RPC call.</p>
 <pre>public class ContactQueueItem
@@ -4265,8 +4355,8 @@ locks, otherwise the thread, when if finds a value, would technically have to
 lock both the <code>closerContacts</code> collection and the <code>findResult</code> instance.</p>
 <p><img border="0" src="important.png" width="38" height="32"> The Lookup method 
 itself is not intended to be re-entrant.</p>
-<h2><a name="SomeEnhancements165">Some Enhancements</a></h2>
-<h3><a name="OperatorOverloadingoftheIDClass166">Operator Overloading of the ID Class</a></h3>
+<h2><a name="SomeEnhancements168">Some Enhancements</a></h2>
+<h3><a name="OperatorOverloadingoftheIDClass169">Operator Overloading of the ID Class</a></h3>
 <p>Rather than having to always use id.Value to compare and XOR the BigInteger 
 values, we can add some operators to the ID class itself.&nbsp; Some examples:</p>
 <pre>public class ID : IComparable
@@ -4292,7 +4382,7 @@ values, we can add some operators to the ID class itself.&nbsp; Some examples:</
   ...  
 }</pre>
 <p>And so forth.</p>
-<h2><a name="ABasicTCPSubnetProtocol167">A Basic TCP Subnet Protocol</a></h2>
+<h2><a name="ABasicTCPSubnetProtocol170">A Basic TCP Subnet Protocol</a></h2>
 <p>There's a few points to make in this implementation:</p>
 <ol>
 	<li>A single port is used along with a subnet identifier to route requests 
@@ -4304,7 +4394,7 @@ values, we can add some operators to the ID class itself.&nbsp; Some examples:</
 	are other implementations that continue based on the random ID and handler, 
 	which I chose not to implement.</li>
 </ol>
-<h3><a name="RequestMessages168">Request Messages</a></h3>
+<h3><a name="RequestMessages171">Request Messages</a></h3>
 <p>Requests issued by the DHT are serialized to JSON from the following classes:</p>
 <pre>public abstract class BaseRequest
 {
@@ -4357,7 +4447,7 @@ public class CommonRequest
 }</pre>
 <p>As the comment states, the common request simplifies the server 
 implementation by having RPC handler methods with the same parameter.</p>
-<h3><a name="RequestHandlers169">Request Handlers</a></h3>
+<h3><a name="RequestHandlers172">Request Handlers</a></h3>
 <p>The request handlers extract the pertinent pieces of the CommonRequest and 
 call the appropriate method of the Node class.&nbsp; The important part here is 
 that the contact protocol must be returned as part of the FindNode and FindValue 
@@ -4408,7 +4498,7 @@ public object ServerFindValue(CommonRequest request)
     Value = val 
   };
 }</pre>
-<h3><a name="Responses170">Responses</a></h3>
+<h3><a name="Responses173">Responses</a></h3>
 <p>JSON responses are deserialized into the following classes:</p>
 <pre>public abstract class BaseResponse
 {
@@ -4433,7 +4523,7 @@ public class FindValueResponse : BaseResponse
 
 public class PingResponse : BaseResponse { }
 public class StoreResponse : BaseResponse { }</pre>
-<h3><a name="ServerImplementation171">Server Implementation</a></h3>
+<h3><a name="ServerImplementation174">Server Implementation</a></h3>
 <p>The server is a straightforward <code>HttpListener</code> but note how the subnet ID is 
 used to route the request to the specific node associated with the subnet:</p>
 <pre>protected virtual async void ProcessRequest(HttpListenerContext context)
@@ -4492,7 +4582,7 @@ used to route the request to the specific node associated with the subnet:</p>
   context.Response.Close();
 }
 </pre>
-<h3><a name="TheTCPSubnetProtocol172">The TCP Subnet Protocol</a></h3>
+<h3><a name="TheTCPSubnetProtocol175">The TCP Subnet Protocol</a></h3>
 <p>The protocol implements the four RPC calls, issuing HTTP POST's to the 
 server.&nbsp; Notice how the protocol is instantiated from the JSON return, and 
 if the protocol isn't supported, the contact is removed from the contacts 
@@ -4610,7 +4700,7 @@ protected IProtocol InstantiateProtocol(object protocol, string protocolName)
 prefixed to the protocol name.&nbsp; A different implementation (say in Python) 
 would only need to specify the protocol name, and as long as the type matches 
 the C# type with the namespace prefix, we should be good to go. </p>
-<h3><a name="ErrorReporting173">Error Reporting</a></h3>
+<h3><a name="ErrorReporting176">Error Reporting</a></h3>
 <p>Note how the protocol has been refactored to return any errors from the RPC 
 call.&nbsp; This is handled by the <code>RpcResponse</code> class:</p>
 <pre>public class RpcError
@@ -4635,7 +4725,7 @@ call.&nbsp; This is handled by the <code>RpcResponse</code> class:</p>
 </ol>
 <p>Error handling will be discussed in the next major section, RPC Error 
 Handling.</p>
-<h3><a name="TCPSubnetUnitTesting174">TCP Subnet Unit Testing</a></h3>
+<h3><a name="TCPSubnetUnitTesting177">TCP Subnet Unit Testing</a></h3>
 <p>The following unit 
 tests validate the round trip calls, exercising the protocol calls and the 
 server.&nbsp; Each test initializes the server and then tears it down:</p>
@@ -4656,7 +4746,7 @@ public void TestCleanup()
 }</pre>
 <p>The unit tests exercise each of the four RPC calls as well as a timeout 
 error.</p>
-<h4><a name="PingRouteTest175">PingRouteTest</a></h4>
+<h4><a name="PingRouteTest178">PingRouteTest</a></h4>
 <p><img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
 verifies the Ping RPC call.</p>
 <pre>[TestMethod]
@@ -4674,7 +4764,7 @@ public void PingRouteTest()
 
   p2.Ping(c1);
 }</pre>
-<h4><a name="StoreRouteTest176"> StoreRouteTest</a></h4>
+<h4><a name="StoreRouteTest179"> StoreRouteTest</a></h4>
 <p> <img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
 verifies the Store RPC call;</p>
 <pre>[TestMethod]
@@ -4697,7 +4787,7 @@ public void StoreRouteTest()
   Assert.IsTrue(n2.Storage.Contains(testID), &quot;Expected remote peer to have value.&quot;);
   Assert.IsTrue(n2.Storage.Get(testID) == testValue, &quot;Expected remote peer to contain stored value.&quot;);
 }</pre>
-<h4><a name="FindNodesRouteTest177"> FindNodesRouteTest</a></h4>
+<h4><a name="FindNodesRouteTest180"> FindNodesRouteTest</a></h4>
 <p> <img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
 verifies the FindNodes RPC call:</p>
 
@@ -4725,7 +4815,7 @@ public void FindNodesRouteTest()
   Assert.IsTrue(ret.Count == 1, &quot;Expected 1 contact.&quot;);
   Assert.IsTrue(ret[0].ID == otherPeer, &quot;Expected contact to the other peer (not us).&quot;);
 }</pre>
-<h4><a name="FindValueRouteTest178"> FindValueRouteTest</a></h4>
+<h4><a name="FindValueRouteTest181"> FindValueRouteTest</a></h4>
 <p> <img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
 verifies the FindValueRouteTest:</p>
 
@@ -4755,7 +4845,7 @@ public void FindValueRouteTest()
   Assert.IsTrue(ret.contacts == null, &quot;Expected to find value.&quot;);
   Assert.IsTrue(ret.val == testValue, &quot;Value does not match expected value from peer.&quot;);
 }</pre>
-<h4><a name="UnresponsiveNodeTest179"> UnresponsiveNodeTest</a></h4>
+<h4><a name="UnresponsiveNodeTest182"> UnresponsiveNodeTest</a></h4>
 <p> <img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
 verifies that an unresponsive node results in a timeout error.</p>
 <pre>[TestMethod]
@@ -4779,8 +4869,8 @@ public void UnresponsiveNodeTest()
 
   Assert.IsTrue(error.TimeoutError, &quot;Expected timeout.&quot;);
 }</pre>
-<h2><a name="RPCErrorHandlingandDelayedEviction180">RPC Error Handling and Delayed Eviction</a></h2>
-<h3><a name="Discussion181">Discussion</a></h3>
+<h2><a name="RPCErrorHandlingandDelayedEviction183">RPC Error Handling and Delayed Eviction</a></h2>
+<h3><a name="Discussion184">Discussion</a></h3>
 <p>One of the optimizations in the Kademlia protocol can now be implemented -- 
 delayed eviction:</p>
 <p><font color="#FF00FF">When a Kademlia node receives an RPC 
@@ -4791,12 +4881,12 @@ contacts in the k-bucket, any unresponsive ones can be evicted and replaced with
 entries in the replacement cache. The replacement cache is kept sorted by time 
 last seen, with the most recently seen entry having the highest priority as a 
 replacement candidate.</font></p>
-<h4><a name="Ambiguity#19182">Ambiguity #19</a></h4>
+<h4><a name="Ambiguity#19185">Ambiguity #19</a></h4>
 <p>What happens when the peer throws an exception or the random ID that the peer 
 responds with doesn't match what was sent?&nbsp; To make matters simple, in this 
 implementation we'll handle all error conditions, including timeouts, in the 
 same way.</p>
-<h3><a name="Implementation183">Implementation</a></h3>
+<h3><a name="Implementation186">Implementation</a></h3>
 <p>The implementation for handling evictions and replacing them with contacts 
 waiting to be added to the bucket is handled in the Dht.&nbsp; First, the error 
 handler:</p>
@@ -4910,7 +5000,7 @@ protected void ReplaceWithPendingContact(KBucket bucket)
     }
   }
 }</pre>
-<h3><a name="UnitTests184">Unit Tests</a></h3>
+<h3><a name="UnitTests187">Unit Tests</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> We can now modify the existing test for a non-responding contact by checking 
 the pending buffer and eviction count dictionary.&nbsp; The assertions change to 
 this:</p>
@@ -4929,7 +5019,7 @@ Assert.IsTrue(dht.PendingContacts.Count == 0, &quot;Pending contact list should 
 Assert.IsFalse(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nonRespondingContact), &quot;Expected bucket to NOT contain non-responding contact.&quot;);
 Assert.IsTrue(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nextNewContact), &quot;Expected bucket to contain new contact.&quot;);
 Assert.IsTrue(dht.EvictionCount.Count == 0, &quot;Expected no contacts to be pending eviction.&quot;);</pre>
-<h2><a name="PuttingItTogether-ADemo185">Putting It Together - A Demo</a></h2>
+<h2><a name="PuttingItTogether-ADemo188">Putting It Together - A Demo</a></h2>
 <p><img border="0" src="demo1.png" width="191" height="324"></p>
 <p>As usual, there's nothing like a visual demo to see what is happening.&nbsp; 
 This demo uses <a href="https://www.codeproject.com/Articles/1136050/FlowSharp">
@@ -4963,7 +5053,7 @@ protected void InitializeKnownPeers()
   });
 }</pre>
 <p><img border="0" src="bootstrap0.png" width="611" height="469"></p>
-<h3><a name="Bootstrapping186">Bootstrapping</a></h3>
+<h3><a name="Bootstrapping189">Bootstrapping</a></h3>
 <pre>protected void BootstrapWithAPeer()
 {
   Dht dht = dhts[peerBootstrappingIdx];
@@ -4978,7 +5068,7 @@ protected void InitializeKnownPeers()
 <p><img border="0" src="bootstrap.png" width="592" height="474"></p>
 <p>The directionality of the connection is not shown -- arrows would get lost in 
 this drawing!</p>
-<h3><a name="BucketRefresh187">Bucket Refresh</a></h3>
+<h3><a name="BucketRefresh190">Bucket Refresh</a></h3>
 <p>To illustrate bucket refresh, let's start with a smaller set of peers (25):</p>
 <p><img border="0" src="bucketRefresh1.png" width="466" height="474"></p>
 <p>A bucket refresh calls FindNode all the contacts in each bucket:</p>
@@ -5008,7 +5098,7 @@ contacts returned by the contact:</p>
 like this, just about every peer learns about every other peer -- another 
 iteration of bucket refreshing results in only a couple more contacts being 
 discovered.</p>
-<h3><a name="StoreValue188">Store Value</a></h3>
+<h3><a name="StoreValue191">Store Value</a></h3>
 <p>When a non-cached value is stored to a peer, it is republished to close 
 peers.&nbsp; We can see this by coloring the originator with yellow, the 
 immediate peer we're storing the value to in blue, and the peers to which the 
@@ -5030,7 +5120,7 @@ private void btnPublish_Click(object sender, EventArgs e)
 <p>In a small network, because the store gets published to <i>k</i> peers, most of the 
 peers are involved:</p>
 <p><img border="0" src="publish1.png" width="467" height="465"></p>
-<h3><a name="StoreRepublish189">Store Republish</a></h3>
+<h3><a name="StoreRepublish192">Store Republish</a></h3>
 <p>When we force an immediate store republish, we see that one node, that is a 
 closer contact, getting the republished key-value:</p>
 <p><img border="0" src="publish2.png" width="459" height="462"></p>
@@ -5039,8 +5129,8 @@ topmost in the rendering):</p>
 <p><img border="0" src="publish3.png" width="596" height="474"></p>
 <p>Remember that key-values are republished only on <i>k</i> closer contacts, so 
 not every peer gets the republished key-value.</p>
-<h2><a name="NotImplemented190">Not Implemented</a></h2>
-<h3><a name="UDPDropOuts191">UDP Drop Outs</a></h3>
+<h2><a name="NotImplemented193">Not Implemented</a></h2>
+<h3><a name="UDPDropOuts194">UDP Drop Outs</a></h3>
 <p><font color="#FF00FF">A related problem is that because Kademlia uses UDP, 
 valid contacts will sometimes fail to respond when network packets are dropped. 
 Since packet loss often indicates network congestion, Kademlia locks 
@@ -5058,7 +5148,7 @@ for a while.&nbsp; This algorithm is somewhat entangled with delayed eviction.&n
 In delayed eviction, the spec state &quot;any unresponsive ones can be evicted.&quot;&nbsp; 
 It is the spec's description of UDP drop outs that actually defines what 
 &quot;unresponsive&quot; actually means.</p>
-<h3><a name="AcceleratedLookups192">Accelerated Lookups</a></h3>
+<h3><a name="AcceleratedLookups195">Accelerated Lookups</a></h3>
 <font color="#FF00FF">When a contact fails to respond to 5 RPCs in a row, it 
 is considered stale. If a fe-bucket is not full or its replacement cache is 
 empty, Kademlia merely flags stale contacts rather than remove them. This 
@@ -5074,7 +5164,7 @@ lookup is log<sub>2</sub>n. By increasing the routing table�s size to an expec
 <p>In this implementation we have bucket ranges rather than a bucket per 
 prefix bits in the key space, therefore the accelerated lookup optimization is 
 irrelevant because the bucket ranges typically span many prefix bits.</p>
-<h3><a name="SybilAttacks193">Sybil Attacks</a></h3>
+<h3><a name="SybilAttacks196">Sybil Attacks</a></h3>
 <p>Peer-to-peer networks are vulnerable to Sybil attacks: </p>
 <blockquote>
 	<p>&quot;In a Sybil attack, the attacker subverts the reputation system of a 
@@ -5092,7 +5182,7 @@ In a mostly unpopulated network (most k-buckets have room for more peers) the
 subsequent failure to get a response from a peer would result in its eventual 
 eviction.&nbsp; The piggyback ping approach is also a means for the recipient of 
 the RPC call to verify the sender.</p>
-<h2><a name="Conclusion194">Conclusion</a></h2>
+<h2><a name="Conclusion197">Conclusion</a></h2>
 <p>How does one write a conclusion to an article that is over 120 pages in Word?&nbsp; 
 Petar Maymounkov wrote &quot;...my opinion is that Kademlia is so simple, that with a 
 modern language like Go, a good implementation of Kademlia (the algorithm) is no 
@@ -5125,11 +5215,16 @@ updates?</li>
 	performance?</li>
 </ul>
 <p>These are some of the issues that one should look for.&nbsp; Even in the 
-initial release of this implementation, I have not adequately addressed all 
+initial release of this implementation, I have not addressed all 
 these concerns.&nbsp; Regardless, if you made it this far through the document, 
 I suspect you have a much better understanding of the Kademlia protocol, which 
 also gives you some tools to look at other P2P protocols.</p>
-<h2><a name="References195">References</a></h2>
+<h3><a name="AlltheUnitTests198">All the Unit Tests</a></h3>
+<p>There's a total of 35 unit tests, and even so it seems like there certainly 
+could be more!</p>
+<p><img border="0" src="allunittests.png" width="304" height="730"></p>
+<p>&nbsp;</p>
+<h2><a name="References199">References</a></h2>
 <p>[1] -
 <a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
 http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>
