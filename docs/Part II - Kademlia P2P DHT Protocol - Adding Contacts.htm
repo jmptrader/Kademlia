@@ -1,0 +1,739 @@
+<html>
+
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<title>New Page 1</title>
+</head>
+
+<body>
+
+<h2>Adding Contacts - Discussion</h2>
+<p>Version 2, Section 2.2 of the specification initially states this simple 
+algorithm for dealing adding contacts:</p>
+<p><font color="#FF00FF">When a Kademlia node receives any message (request or 
+reply) from another node, it updates the appropriate k-bucket for the sender’s 
+node ID. If the sending node already exists in the recipient’s k-bucket, the 
+recipient moves it to the tail of the list. If the node is not already in the 
+appropriate k-bucket and the bucket has fewer than k entries, then the recipient 
+just inserts the new sender at the tail of the list. If the appropriate k-bucket 
+is full, however, then the recipient pings the k-bucket’s least-recently seen 
+node to decide what to do. If the least recently seen node fails to respond, it 
+is evicted from the k-bucket and the new sender inserted at the tail. Otherwise, 
+if the least-recently seen node responds, it is moved to the tail of the list, 
+and the new sender’s contact is discarded.</font></p>
+<p>Let's define a few terms (if you aren't sure, don't know, or just want some 
+clarity):</p>
+<ul>
+	<li>head of the list - the first entry in the list</li>
+	<li>tail of the list - the last entry in the list</li>
+	<li>&quot;the appropriate k-bucket for the sender's node ID&quot; - this is the 
+	k-bucket for which the sender's node ID is in the range of the k-bucket.</li>
+</ul>
+<p>Here's a flowchart of what the spec says:</p>
+<p align="center">
+<img border="0" src="addContact1.png" width="520" height="679"></p>
+<p>This seems reasonable and the spec goes on to state:</p>
+<p><font color="#FF00FF">k-buckets effectively implement a least-recently seen 
+eviction policy, except that live nodes are never removed from the list. This 
+preference for old contacts is driven by our analysis of Gnutella trace data 
+collected by Saroiu et. al. ... The longer a node has been up, the more likely 
+it is to remain up another hour. By keeping the oldest live contacts around, 
+k-buckets maximize the probability that the nodes they contain will remain 
+online.&nbsp; A second benefit of k-buckets is that they provide resistance to 
+certain DoS attacks. One cannot flush nodes' routing state by flooding the 
+system with new nodes. Kademlia nodes will only insert the new nodes in the 
+k-buckets when old nodes leave the system.</font></p>
+<p>We also observe that this has nothing to do with binary trees, which is 
+something version 2 of the spec introduced.&nbsp; This is basically a hang-over 
+from version 1 of the spec.</p>
+<h3>Contradiction #2</h3>
+<p>Section 2.4 states something slightly different:</p>
+<p><font color="#FF00FF">Nodes in the routing tree are allocated dynamically, as 
+needed. Initially, a node u’s routing tree has a single node— one k-bucket 
+covering the entire ID space. When u learns of a new contact, it attempts to 
+insert the contact in the appropriate k-bucket. If that bucket is not full, the 
+new contact is simply inserted. Otherwise, if the k-bucket’s range includes u’s 
+own node ID, then the bucket is split into two new buckets, the old contents 
+divided between the two, and the insertion attempt repeated. If a k-bucket with 
+a different range is full, the new contact is simply dropped.</font></p>
+<h4>Terminology</h4>
+<ul>
+	<li>&quot;u's routing tree&quot; - the host's bucket list.</li>
+	<li>&quot;if a k-bucket with a different range is full&quot; - meaning, a k-bucket 
+	that does not include u's own node ID.</li>
+</ul>
+<p>The purpose of allowing a bucket to split if it contains the host's node ID 
+is so that the host keeps a list of nodes that are &quot;close to it&quot; -- closeness 
+defined essentially by the integer difference of the node ID's, not the XOR 
+difference (more on this whole XOR thing later.)</p>
+<p>So this algorithm looks like this:</p>
+<p align="center"><img border="0" src="addContact2.png" width="761" height="625"></p>
+<p>What happened to pinging the least seen contact and replacing it?&nbsp; </p>
+<h3>Contradiction #3</h3>
+<p>But the spec then goes on to say:</p>
+<p><font color="#FF00FF">One complication arises in highly unbalanced trees.&nbsp; 
+Suppose node <i>u</i> joins the system and is the only node whose ID begins 000. 
+Suppose further that the system already has more than k nodes with prefix 001. 
+Every node with prefix 001 would have an empty k-bucket into which <i>u</i> 
+should be inserted, yet <i>u</i>’s bucket refresh would only notify k of the 
+nodes.&nbsp; To avoid this problem, Kademlia nodes keep all valid contacts in a 
+subtree of size at least k nodes, even if this requires splitting buckets in 
+which the node’s own ID does not reside. Figure 5 illustrates these additional 
+splits.</font></p>
+<h4>Terminology</h4>
+<ul>
+	<li>&quot;a subtree of size at least k nodes&quot; - ok, we can vaguely see that a 
+	subtree contains other subtrees where the total number of contacts is 
+	greater than k.</li>
+	<li>&quot;even if this requires splitting buckets in which the node's own ID does 
+	not reside&quot; - not only is this contradictory, but there's no explanation of 
+	what &quot;even if this requires&quot; means.&nbsp; How do you code this?</li>
+</ul>
+<p>This section of the specification apparently creates much confusion -- I 
+found several links with people asking about this section.&nbsp; It's 
+unfortunate that the original authors do not themselves answer these questions.&nbsp; 
+Jim Dixon has a very interesting response<sup>12</sup> on The Mail Archive which 
+I present in full here:</p>
+<blockquote>
+	<p>&quot;The source of confusion is that the 13-page version of the Kademlia uses<br>
+	the same term to refer to two different data structures. The first is<br>
+	well-defined: k-bucket i contains zero to k contacts whose XOR distance is<br>
+	[2^i..2^(i+1)). It cannot be split. The current node can only be in<br>
+	bucket zero, if it is present at all. In fact its presence would be<br>
+	pointless or worse.<br>
+	<br>
+	The second thing referred to as a k-bucket doesn't have the same<br>
+	properties. Specifically, the current node must be present, it wanders<br>
+	from one k-bucket to another, these k-buckets can be split, and there are<br>
+	sometimes ill-defined constraints on the characteristics of subtrees of<br>
+	k-buckets, such as the requirement that &quot;Kademlia nodes keep all valid<br>
+	contacts in a subtree of size of at least k nodes, even if this requires<br>
+	splitting buckets in which the node's own ID does not reside&quot; (section<br>
+	2.4, near the end).<br>
+	<br>
+	In a generous spirit, you might say that the logical content of the two<br>
+	descriptions is the same. However, for someone trying to implement<br>
+	Kademlia, the confusion of terms causes headaches -- and leads to a<br>
+	situation where all sorts of things are described as Kademlia, because<br>
+	they can be said to be, if you are of a generous disposition. However,<br>
+	not surprisingly, they don't interoperate.&quot;</p>
+</blockquote>
+<p>So my decision, given the lack of clarity and by the authors of the spec, is 
+to ignore this, because, as you will see next, there is yet another version of 
+how contacts are added.</p>
+<h3>Contradiction #4</h3>
+<p>In Section 4.2, on Accelerated Lookups, we have a different specification for 
+how contacts are added:</p>
+<p><font color="#FF00FF">Section 2.4 describes how a Kademlia node splits a 
+k-bucket when the bucket is full and its range includes the node’s own ID. The 
+implementation, however, also splits ranges not containing the node’s ID, up to 
+b - 1 levels. If b = 2, for instance, the half of the ID space not containing 
+the node’s ID gets split once (into two ranges); if b = 3, it gets split at two 
+levels into a maximum of four ranges, etc. The general splitting rule is that a 
+node splits a full k-bucket if the bucket’s range contains the node’s own ID or 
+the depth d of the k-bucket in the routing tree satisfies d&nbsp; (mod b) != 0.</font></p>
+<h4>Terminology</h4>
+<ul>
+	<li>depth - According to the spec: <font color="#FF00FF">The depth is just 
+	the length of the prefix shared by all nodes in the k-bucket’s range. </font>
+	Do not confuse that with this statement: <font color="#FF00FF">Define the 
+	depth, h, of a node to be 160 - <i>i</i>, where <i>i</i> is the smallest 
+	index of a non-empty bucket.</font>&nbsp; The former is referring to the 
+	depth of <i>a k-bucket</i>, the 
+	latter the depth of <i>the node</i>.</li>
+</ul>
+<h3>Ambiguity #2</h3>
+<p>With regards to the definition of depth, does this mean &quot;the length of prefix 
+shared by <i>any</i> node that would <i>reside in the k-bucket's range</i>&quot; or 
+does it mean &quot;the length of a prefix shared by <i>all</i> nodes <i>currently in the k-bucket</i>?&quot;</p>
+<p>If we look at Brian Muller's implementation, we see the latter case:</p>
+<pre>def depth(self):
+  <span style="color: rgb(36, 41, 46); font-family: SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, Menlo, Courier, monospace; font-size: 12px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: pre; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; display: inline !important; float: none;">sp </span><span class="pl-k" style="box-sizing: border-box; color: rgb(215, 58, 73); font-family: SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, Menlo, Courier, monospace; font-size: 12px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: pre; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial;">=</span><span style="color: rgb(36, 41, 46); font-family: SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, Menlo, Courier, monospace; font-size: 12px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: pre; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; display: inline !important; float: none;"> sharedPrefix([bytesToBitString(n.id) </span><span class="pl-k" style="box-sizing: border-box; color: rgb(215, 58, 73); font-family: SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, Menlo, Courier, monospace; font-size: 12px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: pre; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial;">for</span><span style="color: rgb(36, 41, 46); font-family: SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, Menlo, Courier, monospace; font-size: 12px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: pre; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; display: inline !important; float: none;"> n </span><span class="pl-k" style="box-sizing: border-box; color: rgb(215, 58, 73); font-family: SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, Menlo, Courier, monospace; font-size: 12px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: pre; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial;">in</span><span style="color: rgb(36, 41, 46); font-family: SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, Menlo, Courier, monospace; font-size: 12px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: pre; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; display: inline !important; float: none;"> </span><span class="pl-c1" style="box-sizing: border-box; color: rgb(0, 92, 197); font-family: SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, Menlo, Courier, monospace; font-size: 12px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: pre; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial;">self</span><span style="color: rgb(36, 41, 46); font-family: SFMono-Regular, Consolas, &quot;Liberation Mono&quot;, Menlo, Courier, monospace; font-size: 12px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: pre; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; background-color: rgb(255, 255, 255); text-decoration-style: initial; text-decoration-color: initial; display: inline !important; float: none;">.nodes.values()])</span>
+  return len(sp)
+
+def sharedPrefix(args):
+  i = 0
+  while i &lt; min(map(len, args)):
+   if len(set(map(operator.itemgetter(i), args))) != 1:
+     break
+    i += 1
+  return args[0][:i]</pre>
+<p>Here, the depth is determined by the shared prefixes in the nodes.</p>
+<h3>What is the Bucket Splitting Algorithm Actually Doing?</h3>
+<p>So, when we use the following algorithm to determine whether a bucket can be 
+split:</p>
+<pre>kbucket.HasInRange(ourID) || ((kbucket.Depth() % Constants.B) != 0)</pre>
+<p>What is this actually doing?</p>
+<ol>
+	<li>First, the HasInRange is testing whether our node ID is close to the 
+	contact's node ID.&nbsp; If our node ID is in the range of the bucket 
+	associated with the contact's node ID, then we know the two nodes are 
+	&quot;close&quot; in terms of the integer difference.&nbsp; Initially, the range spans 
+	the entire 2<sup>160</sup> ID space, so everybody is &quot;close.&quot;&nbsp; This 
+	test of &quot;closeness&quot; is refined as new contacts are added.</li>
+	<li>Regarding the depth mod 5 computation, I asked Brian Muller this 
+	question: &quot;is the purpose of the depth to limit the number of &quot;new&quot; nodes 
+	that a host will maintain (ignoring for the moment the issue of pinging an 
+	old contact to see if can be replaced)?&quot; to which he replied: &quot;Yep! The idea 
+	is that a node should know about nodes spread across the network - though 
+	definitely not all of them. The depth is used as a way to control how &quot;deep&quot; 
+	a nodes' understanding of the network is (and the number of nodes it knows 
+	about).&quot;</li>
+</ol>
+<p>As buckets split, eventually buckets will become full that do not contain the 
+node ID.&nbsp; The depth to which the bucket has split is based on the number of 
+bits shared in the prefix of the contacts in the bucket.&nbsp; With random ID's, 
+this number will initially be small, but as bucket ranges become more narrow 
+from subsequent splits, more contacts will begin the share the same prefix and 
+the bucket when split, will result in less &quot;room&quot; for new contacts.&nbsp; 
+Eventually, when the bucket range becomes narrow enough, the number of bits 
+shared in the prefix of the contacts in the bucket reaches the threshold <i>b</i> 
+which the spec says should be 5.</p>
+<h3>Failing to add Yourself to a Peer - Self Correcting</h3>
+<p>Let's say your a new node and you want to register yourself with a known 
+peer, but that peer is basically maxed out for the number of contacts that it 
+can hold in the particular bucket for your ID -- the depth is <i>b</i>.&nbsp; In 
+this case, you will not be added to the peer's contact list.&nbsp; The Kademlia 
+spec does not indicate in its protocol how this condition should be handled.&nbsp; 
+Interestingly, this is not an issue.&nbsp; Whether you are successfully added as 
+a contact or not, you will receive back &quot;nearby&quot; peers.&nbsp; Any time you 
+contact those peers (to store a value, for example) all the peers that you 
+contact will try to add your contact.&nbsp; When one succeeds, your contact ID 
+will be disseminated slowly through the network. </p>
+<h3>Degrading a Kademlia Peer</h3>
+<p>Given a peer with both an ID and a single contact ID of less than 2<sup>159</sup>, 
+it 
+will initially split once for 20 contacts that are added having ID's greater than 2<sup>159</sup>.&nbsp; 
+</p>
+<p>All of those 20 contacts having ID's greater than 2<sup>159</sup> will go in the second 
+bucket.&nbsp; The peer ID will not be in this second bucket range.&nbsp; If those contacts 
+in the second bucket have ID's where the number of shared bits is <i>b</i>, 
+therefore <i>b</i> mod <i>b</i> 
+== 0, any new contact in the range of the second bucket will not be added.&nbsp; </p>
+<p align="center"><img border="0" src="degrade1.png" width="651" height="449"></p>
+<p><img border="0" src="unittest.png" width="14" height="32"> We can 
+verify this with a unit test:</p>
+<pre>/// &lt;summary&gt;
+/// Force a failed add by choosing node ID's that cause depth mod 5 != 0 to be false.
+/// &lt;/summary&gt;
+[TestMethod]
+public void ForceFailedAddTest()
+{
+  // force host node ID to &lt; 2^159 so the node ID is not in the 2^159 ... 2^160 range
+  byte[] hostID = new byte[20];
+  hostID[19] = 0x7F;
+  BucketList bucketList = new BucketList(new ID(hostID));
+
+  // Also add a contact in this 0 - 2^159 range, arbitrarily something not our host ID.
+  // This ensures that only one bucket split will occur after 20 nodes with ID &gt;= 2^159 are added,
+  // otherwise, buckets will in the 2^159 ... 2^160 space.
+  byte[] id = new byte[20];
+  id[0] = 1;
+  bucketList.AddContact(new Contact(null, new ID(id)));
+
+  Assert.IsTrue(bucketList.Buckets.Count == 1, &quot;Bucket split should not have occurred.&quot;);
+  Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, &quot;Expected 1 contact in bucket 0.&quot;);
+
+  // make sure contact ID's all have the same 5 bit prefix and are in the 2^159 ... 2^160 - 1 space
+  byte[] contactID = new byte[20];
+  contactID[19] = 0x80;
+  // 1000 xxxx prefix, xxxx starts at 1000 (8)
+  // this ensures that all the contacts in a bucket match only the prefix as only the first 5 bits are shared.
+  // |----| shared range
+  // 1000 1000 ...
+  // 1000 1100 ...
+  // 1000 1110 ...
+  byte shifter = 0x08;
+  int pos = 19;
+
+  Constants.K.ForEach(() =&gt;
+  {
+    contactID[pos] |= shifter;
+    bucketList.AddContact(new Contact(null, new ID(contactID)));
+    shifter &gt;&gt;= 1;
+
+    if (shifter == 0)
+    {
+      shifter = 0x80;
+      --pos;
+    }
+  });
+
+  Assert.IsTrue(bucketList.Buckets.Count == 2, &quot;Bucket split should have occurred.&quot;);
+  Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, &quot;Expected 1 contact in bucket 0.&quot;);
+  Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, &quot;Expected 20 contacts in bucket 1.&quot;);
+
+  // This next contact should not split the bucket as depth == 5 and therefore adding the contact will fail.
+  // Any unique ID &gt;= 2^159 will do.
+  id = new byte[20];
+  id[19] = 0x80;
+  bucketList.AddContact(new Contact(null, new ID(id)));
+
+  Assert.IsTrue(bucketList.Buckets.Count == 2, &quot;Bucket split should not have occurred.&quot;);
+  Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, &quot;Expected 1 contact in bucket 0.&quot;);
+  Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, &quot;Expected 20 contacts in bucket 1.&quot;);
+}</pre>
+<p>What we've effectively done is break Kademlia, as the peer will no longer 
+accept half of the possible ID range.&nbsp; As long as the peer ID is outside 
+the range of a bucket whose shared prefix mod <i>b</i> is 0, we can continue 
+this process by adding contacts with a shared prefixes (assume <i>b</i>==5)&nbsp; 
+01xxx, 001xx, 0001x, and 00001 and again for every multiple of <i>b</i> bits.&nbsp; 
+If a peer has a &quot;small&quot; ID, you can easily prevent it from accepting new 
+contacts within half of its bucket ranges.</p>
+<p>There are several ways to mitigate this:</p>
+<ol>
+	<li>ID's should not be created by the user, they should be assigned by the 
+	library.&nbsp; Of course, given the open source nature of all these 
+	implementations, enforcing this is impossible.</li>
+<li>A contact's ID should be unique for its network address -- in other words, a 
+malicious peer should not be able to create multiple contacts simply by 
+providing a unique ID in its contact request.</li>
+	<li>One might consider increasing <i>b</i> as <i>i</i> in 2<sup><i>i</i></sup> 
+	increases.&nbsp; There might be some justification for this, as the range 2<sup>159</sup> 
+	through 2<sup>160</sup> - 1 contains half the possible contacts, one might 
+	allow the depth for bucket splitting to be greater than the recommended <i>b</i> 
+	= 5.</li>
+</ol>
+<h2>Adding Contacts - Implementation</h2>
+<p>This is the flowchart of what we're implementing:</p>
+<p align="center">
+<img border="0" src="addContact3.png" width="664" height="838"></p>
+<p>As I'm using Brian Muller's implementation as the authority with regards to 
+the spec, we'll go with how he coded the algorithm and (eventually) 
+incorporating the fallback where we discard nodes in a full k-bucket that don't 
+respond to a ping -- but that's later.</p>
+<p>The <code>BucketList</code> class implements the algorithm to add a contact:</p>
+<pre>	/// &lt;summary&gt;
+/// Add a contact if possible, based on the algorithm described
+/// in sections 2.2, 2.4 and 4.2
+/// &lt;/summary&gt;
+public void AddContact(Contact contact)
+{
+  Validate.IsFalse&lt;OurNodeCannotBeAContactException&gt;(ourID == contact.ID, &quot;Cannot add ourselves as a contact!&quot;);
+
+  contact.Touch(); // Update the LastSeen to now.
+  KBucket kbucket = GetKBucket(contact.ID);
+
+  if (kbucket.Contains(contact.ID))
+  {
+    // Replace the existing contact, updating the network info and LastSeen timestamp.
+    kbucket.Replace(contact);
+  }
+  else if (kbucket.IsBucketFull)
+  {
+    if (CanSplit(kbucket))
+    {
+      // Split the bucket and try again.
+      (KBucket k1, KBucket k2) = kbucket.Split();
+      int idx = GetKBucketIndex(contact.ID);
+      buckets[idx] = k1;
+      buckets.Insert(idx + 1, k2);
+      AddContact(contact);
+    }
+    else
+    {
+      // TODO: Ping the oldest contact to see if it's still 
+      // around and replace it if not.
+    }
+  }
+  else
+  {
+    // Bucket isn't full, so just add the contact.
+    kbucket.AddContact(contact);
+  }
+}</pre>
+<p>We have a few helper methods in this class as well:</p>
+<pre>protected virtual bool CanSplit(KBucket kbucket)
+{
+  return kbucket.HasInRange(ourID) || ((kbucket.Depth() % Constants.B) != 0);
+}
+
+#if DEBUG
+public KBucket GetKBucket(ID otherID)
+#else
+protected KBucket GetKBucket(ID otherID)
+#endif
+{
+  return buckets[buckets.FindIndex(b =&gt; b.HasInRange(otherID))];
+}
+
+protected int GetKBucketIndex(ID otherID)
+{
+  return buckets.FindIndex(b =&gt; b.HasInRange(otherID));
+}</pre>
+<p>The method <code>CanSplit</code> is <code>virtual</code> so you can provide a different implementation.</p>
+<p>The majority of the remaining work is done in the <code>KBucket</code> class:</p>
+<pre>/// &lt;summary&gt;
+/// Splits the kbucket into returning two new kbuckets filled with contacts separated by the new midpoint
+/// &lt;/summary&gt;
+public (KBucket, KBucket) Split()
+{
+  BigInteger midpoint = (Low + High) / 2;
+  KBucket k1 = new KBucket(Low, midpoint);
+  KBucket k2 = new KBucket(midpoint, High);
+
+  Contacts.ForEach(c =&gt;
+  {
+    // &lt;, because the High value is exclusive in the HasInRange test.
+    KBucket k = c.ID.Value &lt; midpoint ? k1 : k2;
+    k.AddContact(c);
+  });
+
+  return (k1, k2);
+}
+
+/// &lt;summary&gt;
+/// Returns number of bits that are in common across all contacts.
+/// If there are no contacts, or no shared bits, the return is 0.
+/// &lt;/summary&gt;
+public int Depth()
+{
+  bool[] bits = new bool[0];
+
+  if (contacts.Count &gt; 0)
+  {
+    // Start with the first contact.
+    bits = contacts[0].ID.Bytes.Bits().ToArray();
+
+    contacts.Skip(1).ForEach(c =&gt; bits = SharedBits(bits, c.ID));
+  }
+
+  return bits.Length;
+}
+
+/// &lt;summary&gt;
+/// Returns a new bit array of just the shared bits.
+/// &lt;/summary&gt;
+protected bool[] SharedBits(bool[] bits, ID id)
+{
+  bool[] idbits = id.Bytes.Bits().ToArray();
+
+  // Useful for viewing the bit arrays.
+  //string sbits1 = System.String.Join(&quot;&quot;, bits.Select(b =&gt; b ? &quot;1&quot; : &quot;0&quot;));
+  //string sbits2 = System.String.Join(&quot;&quot;, idbits.Select(b =&gt; b ? &quot;1&quot; : &quot;0&quot;));
+
+  int q = Constances.ID_LENGTH_BITS - 1;
+  int n = bits.Length - 1;
+  List&lt;bool&gt; sharedBits = new List&lt;bool&gt;();
+
+  while (n &gt;= 0 &amp;&amp; bits[n] == idbits[q])
+  {
+    sharedBits.Insert(0, (bits[n]));
+    --n;
+    --q;
+  }
+
+  return sharedBits.ToArray();
+}</pre>
+<p>Recall that the ID is stored as a little-endian value, and the prefix is most 
+significant bits, so we have to work the ID backwards n-1 to 0.&nbsp; 
+<img border="0" src="note.png" width="24" height="32"> Also note 
+the implementation of the <code>Bytes</code> property in the <code>ID</code> class:</p>
+<pre>// Zero-pad msb's if ToByteArray length != Constants.LENGTH_BYTES
+// The array returned is in little-endian order (lsb at index 0)
+public byte[] Bytes
+{
+  get
+  {
+    byte[] bytes = new byte[Constants.ID_LENGTH_BYTES];
+    byte[] partial = id.ToByteArray().Take(Constants.ID_LENGTH_BYTES).ToArray(); // remove msb 0 at index 20.
+    partial.CopyTo(bytes, 0);
+
+    return bytes;
+  }
+}</pre>
+<p>and the <code>Bits</code> extension method:</p>
+<pre>/// &lt;summary&gt;
+/// Little endian conversion of bytes to bits.
+/// &lt;/summary&gt;
+public static IEnumerable&lt;bool&gt; Bits(this byte[] bytes)
+{
+  IEnumerable&lt;bool&gt; GetBits(byte b)
+  {
+    byte shifter = 0x01;
+
+    for (int i = 0; i &lt; 8; i++)
+    {
+      yield return (b &amp; shifter) != 0;
+      shifter &lt;&lt;= 1;
+    }
+  }
+
+  return bytes.SelectMany(GetBits);
+}</pre>
+<h3>Basic Unit Tests</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> A few basic unit tests:</p>
+<pre>[TestMethod]
+public void UniqueIDAddTest()
+{
+  BucketList bucketList = new BucketList(ID.RandomID);
+  Constants.K.ForEach(() =&gt; bucketList.AddContact(new Contact(null, ID.RandomID)));
+  Assert.IsTrue(bucketList.Buckets.Count == 1, &quot;No split should have taken place.&quot;);
+  Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == Constants.K, &quot;K contacts should have been added.&quot;); 
+}
+
+[TestMethod]
+public void DuplicateIDTest()
+{
+  BucketList bucketList = new BucketList(ID.RandomID);
+  ID id = ID.RandomID;
+  bucketList.AddContact(new Contact(null, id));
+  bucketList.AddContact(new Contact(null, id));
+  Assert.IsTrue(bucketList.Buckets.Count == 1, &quot;No split should have taken place.&quot;);
+  Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, &quot;Bucket should have one contact.&quot;);
+}
+
+[TestMethod]
+public void BucketSplitTest()
+{
+  BucketList bucketList = new BucketList(ID.RandomID);
+  Constants.K.ForEach(() =&gt; bucketList.AddContact(new Contact(null, ID.RandomID)));
+  bucketList.AddContact(new Contact(null, ID.RandomID));
+  Assert.IsTrue(bucketList.Buckets.Count &gt; 1, &quot;Bucket should have split into two or more buckets.&quot;);
+}</pre>
+<h2>Adding Contacts - Distribution Tests Reveal Importance of Randomness</h2>
+<p>Some very interesting things are revealed with the above implementation.&nbsp; 
+Let's write a unit test that runs the process of adding 3200 contacts, and we do 
+this 100 times, to get some results about the number of contacts that are 
+actually added:</p>
+<h3>Distribution Tests</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"></p>
+<pre>[TestMethod]
+public void RandomIDDistributionTest()
+{
+  Random rnd = new Random();
+  byte[] buffer = new byte[20];
+  List&lt;int&gt; contactsAdded = new List&lt;int&gt;();
+
+  100.ForEach(() =&gt;
+  {
+    rnd.NextBytes(buffer);
+    BucketList bucketList = new BucketList(new ID(buffer));
+
+    3200.ForEach(() =&gt;
+    {
+      rnd.NextBytes(buffer);
+      bucketList.AddContact(new Contact(null, new ID(buffer)));
+    });
+
+    int contacts = bucketList.Buckets.Sum(b =&gt; b.Contacts.Count);
+    contactsAdded.Add(contacts);
+  });
+
+  Assert.IsTrue(contactsAdded.Average().ApproximatelyEquals(720, 20), &quot;Unexpected distribution.&quot;);
+  Assert.IsTrue(contactsAdded.Select(n=&gt;(double)n).StdDev().ApproximatelyEquals(10, 2), &quot;Bad distribution&quot;);
+}</pre>
+<p><img border="0" src="note.png" width="24" height="32"> Things to note:</p>
+<ol>
+	<li>The ID is determined by a random value of 0-255 for each byte in the 20 
+	byte ID space.&nbsp; This biases the buckets that an ID can go into because 
+	a linear random ID results in very unbalanced bucket trees.&nbsp; More on 
+	this later.</li>
+<li>Of the 3200 contacts attempted to be added, on average we only 
+succeed at adding around 720 contacts.</li>
+	<li>If we increase <i>b </i>we can affect this number.&nbsp; For example, 
+	increasing b to 6 (from 5) doubles the number of contacts that are added.</li>
+</ol>
+<h4>The Question of Randomness</h4>
+<p>As noted above, the ID was determined by a random value of 0-255 for each 
+byte in the 20 bytes ID space.&nbsp; What happens instead if we randomize the ID 
+based instead on its prefix?&nbsp; Meaning that the distribution of ID's, based 
+on their prefix, is randomly distributed?&nbsp; Some helper methods:</p>
+<pre>protected ID RandomizeBeyond(int bit)
+{
+  byte[] randomized = Bytes;
+
+  ID newid = new ID(randomized);
+
+  // TODO: Optimize
+  for (int i = bit + 1; i &lt; Constants.ID_LENGTH_BITS; i++)
+  {
+    newid.ClearBit(i);
+  }
+
+  // TODO: Optimize
+  for (int i = 0; i &lt; bit; i++)
+  {
+    if (rnd.NextDouble() &lt; 0.5)
+    {
+      newid.SetBit(i);
+    }
+  }
+
+  return newid;
+}
+
+/// &lt;summary&gt;
+/// Clears the bit n, from the LSB.
+/// &lt;/summary&gt;
+public void ClearBit(int n)
+{
+  byte[] bytes = Bytes;
+  bytes[n / 8] &amp;= (byte)((1 &lt;&lt; (n % 8)) ^ 0xFF);
+  id = new BigInteger(bytes.Append0());
+}
+
+/// &lt;summary&gt;
+/// Sets the bit n, from the LSB.
+/// &lt;/summary&gt;
+public void SetBit(int n)
+{
+  byte[] bytes = Bytes;
+  bytes[n / 8] |= (byte)(1 &lt;&lt; (n % 8));
+  id = new BigInteger(bytes.Append0());
+}</pre>
+<p>Also, a random ID generator:</p>
+<pre>/// &lt;summary&gt;
+/// Produce a random ID distributed evenly across the 160 bit space.
+/// &lt;/summary&gt;
+public static ID RandomID
+{
+  get
+  {
+    byte[] data = new byte[Constants.ID_LENGTH_BYTES];
+    ID id = new ID(data);
+    // Uniform random bucket index.
+    int idx = rnd.Next(Constants.ID_LENGTH_BITS);
+    // 0 &lt;= idx &lt;= 159
+    // Remaining bits are randomized to get unique ID.
+    id.SetBit(idx);
+    id = id.RandomizeBeyond(idx);
+
+    return id;
+  }
+}</pre>
+<p><img border="0" src="unittest.png" width="14" height="32"> This affects the bucket splitting algorithm.&nbsp; Notice with this unit 
+test:</p>
+<pre>[TestMethod]
+public void RandomPrefixDistributionTest()
+{
+  List&lt;int&gt; contactsAdded = new List&lt;int&gt;();
+
+  100.ForEach(() =&gt;
+  {
+    BucketList bucketList = new BucketList(ID.RandomID);
+    3200.ForEach(() =&gt; bucketList.AddContact(new Contact(null, ID.RandomID)));
+    int contacts = bucketList.Buckets.Sum(b =&gt; b.Contacts.Count);
+    contactsAdded.Add(contacts);
+  });
+
+  Assert.IsTrue(contactsAdded.Average().ApproximatelyEquals(1900, 200), &quot;Unexpected distribution.&quot;);
+  Assert.IsTrue(contactsAdded.Select(n =&gt; (double)n).StdDev().ApproximatelyEquals(750, 50), &quot;Bad distribution&quot;);
+}</pre>
+<p>Notice how 
+large the standard deviation is -- there is something go on here, which we'll 
+explore next.</p>
+<h3>How a Contact ID Affects Distribution</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> Let's look at what happens when we assign a node ID as one of 2<sup>i</sup> 
+where 0 &lt;= i &lt; 160 and add 3200 integer random contact ID's.&nbsp; Here's the unit test, which outputs the count of 
+contacts added to each node ID in the set of <i>i</i>:</p>
+<pre>[TestMethod]
+public void DistributionTestForEachPrefix()
+{
+  Random rnd = new Random();
+  StringBuilder sb = new StringBuilder();
+  byte[] buffer = new byte[20];
+
+  160.ForEach((i) =&gt;
+  {
+    BucketList bucketList = new BucketList(new ID(BigInteger.Pow(new BigInteger(2), i)));
+    rnd.NextBytes(buffer);
+
+    3200.ForEach(() =&gt;
+    {
+      rnd.NextBytes(buffer);
+      bucketList.AddContact(new Contact(null, new ID(buffer)));
+    });
+
+    int contacts = bucketList.Buckets.Sum(b =&gt; b.Contacts.Count);
+    sb.Append(i + &quot;,&quot; + contacts + CRLF);
+  });
+
+  File.WriteAllText(&quot;prefixTest.txt&quot;, sb.ToString());
+}</pre>
+<p align="center"><img border="0" src="dist3.png" width="482" height="289"></p>
+<p>That looks fairly reasonable.&nbsp; </p>
+<p><img border="0" src="unittest.png" width="14" height="32"> Compare the above with the distribution of contact counts when the contact ID 
+is selected from a random prefix with randomized bits after the prefix as 
+opposed to a random integer ID:</p>
+<pre>[TestMethod]
+public void DistributionTestForEachPrefixWithRandomPrefixDistributedContacts()
+{
+  StringBuilder sb = new StringBuilder();
+
+  160.ForEach((i) =&gt;
+  {
+    BucketList bucketList = new BucketList(new ID(BigInteger.Pow(new BigInteger(2), i)));
+    3200.ForEach(() =&gt; bucketList.AddContact(new Contact(null, ID.RandomID)));
+    int contacts = bucketList.Buckets.Sum(b =&gt; b.Contacts.Count);
+    sb.Append(i + &quot;,&quot; + contacts + CRLF);
+  });
+
+  File.WriteAllText(&quot;prefixTest.txt&quot;, sb.ToString());
+}</pre>
+<p align="center"><img border="0" src="dist2.png" width="487" height="296"></p>
+<p align="left">If there was a question as to whether to choose a node ID based 
+on an even distribution in the prefix space vs. simply a random integer ID, I 
+think this clearly demonstrates that a random integer ID is the best choice.&nbsp; 
+If we want to support more than an average of ~700 contacts in our peer, we can 
+always increase <i>b</i>. </p>
+<h2>References</h2>
+<p>[1] -
+<a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
+http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>
+</p>
+<p>[2] -
+<a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia">
+https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia</a></p>
+<p>[3] -
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE">
+http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html</a></p>
+<p>[4] -
+<a href="https://github.com/bmuller/kademlia">
+https://github.com/bmuller/kademlia</a></p>
+
+<p>[5] - <a href="https://en.wikipedia.org/wiki/Smart_contract">
+https://en.wikipedia.org/wiki/Smart_contract</a></p>
+<p>[6] -
+<a href="http://sandhill.com/article/is-data-decentralization-the-new-trend/">
+http://sandhill.com/article/is-data-decentralization-the-new-trend/</a></p>
+<p>[7] - <a href="https://arxiv.org/pdf/1506.03471.pdf">
+https://arxiv.org/pdf/1506.03471.pdf</a></p>
+<p>[8] - <a href="https://en.wikipedia.org/wiki/BitTorrent">
+https://en.wikipedia.org/wiki/BitTorrent</a></p>
+<p>[9] - <a href="https://en.wikipedia.org/wiki/Kad_network">
+https://en.wikipedia.org/wiki/Kad_network</a></p>
+<p>[10] - <a href="https://en.wikipedia.org/wiki/Chord_(peer-to-peer)">https://en.wikipedia.org/wiki/Chord_(peer-to-peer)</a> </p>
+<p>[11] - <a href="https://en.wikipedia.org/wiki/Pastry_(DHT)">https://en.wikipedia.org/wiki/Pastry_(DHT)</a> </p>
+<p>[12] -
+<a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html">
+https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html</a> </p>
+
+<p>[13] -
+<a href="https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table">
+https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table</a></p>
+<p>[14] -
+<a href="https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170">
+https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170</a></p>
+<p>[15] - <a href="https://en.wikipedia.org/wiki/Kademlia">
+https://en.wikipedia.org/wiki/Kademlia</a> </p>
+
+[16] - <a href="https://forum.emule-project.net/index.php?showtopic=32335">
+https://forum.emule-project.net/index.php?showtopic=32335</a>
+
+<p>[17] - <a href="http://www.emule-project.net/home/perl/general.cgi?l=1">
+http://www.emule-project.net/home/perl/general.cgi?l=1</a> </p>
+<p>[18] -
+<a href="https://forum.emule-project.net/index.php?showtopic=32335&view=findpost&p=214837">
+https://forum.emule-project.net/index.php?showtopic=32335&amp;view=findpost&amp;p=214837</a> </p>
+<p>[19] - <a href="http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf">
+http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf</a> </p>
+<p>[20] - <a href="http://www.maymounkov.org/kademlia">
+http://www.maymounkov.org/kademlia</a> </p>
+
+<p>[21] - <a href="https://en.wikipedia.org/wiki/Sybil_attack">
+https://en.wikipedia.org/wiki/Sybil_attack</a></p>
+
+</body>
+
+</html>

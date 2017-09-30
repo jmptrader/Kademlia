@@ -1,0 +1,668 @@
+<html>
+
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<title>New Page 1</title>
+</head>
+
+<body>
+
+<h2>The Dht Class - Discussion</h2>
+<p>We use a wrapper <code>Dht</code> class, which will 
+become the main entry point for <i>our</i> peer, for interacting with <i>other</i> 
+peers.&nbsp; The purpose of this class is:</p>
+<ol>
+	<li>When storing a value, use the lookup algorithm to find other closer 
+	peers to propagate the key-value.</li>
+<li>When looking up a value, if our peer doesn't have the value, we again use 
+the lookup algorithm to find other closer nodes that might have the value.</li>
+	<li>Later we'll add a bootstrapping method that registers our peer with 
+	another peer and initializes our bucket list with that peer's closest 
+	contacts.</li>
+</ol>
+<h2>The Dht Class - Implementation</h2>
+<pre>public class Dht
+{
+#if DEBUG // for unit testing
+  public Router Router { get { return router; } }
+#endif
+
+  protected Router router;
+  protected IStorage storage;
+  protected IProtocol protocol;
+  protected Node node;
+
+  public Dht(ID id, IProtocol protocol, IStorage storage)
+  {
+    this.storage = storage;
+    node = new Node(new Contact(protocol, id), storage);
+    router = new Router(node);
+  }
+
+  public void Store(ID key, string val)
+  {
+    // We're storing to k closer contacts.
+    storage.Set(key, val);
+    List&lt;Contact&gt; contacts = router.Lookup(key, router.RpcFindNodes).contacts;
+    contacts.ForEach(c =&gt; c.Protocol.Store(node.OurContact, key, val));
+  }
+
+  public (bool found, List&lt;Contact&gt; contacts, string val) FindValue(ID key)
+  {
+    TouchBucketWithKey(key);
+
+    string ourVal;
+    List&lt;Contact&gt; contactsQueried = new List&lt;Contact&gt;();
+    (bool found, List&lt;Contact&gt; contacts, string val) ret = (false, null, null);
+
+    // If we have it, return with our value.
+    if (storage.TryGetValue(key, out ourVal))
+    {
+      ret = (true, null, ourVal);
+    }
+    else
+    {
+      var lookup = router.Lookup(key, router.RpcFindValue);
+
+      if (lookup.found)
+      {
+        ret = (true, null, lookup.val);
+        // Find the first close contact (other than the one the value was found by) in which to also store the key-value.
+        var storeTo = lookup.contacts.Where(c =&gt; c != lookup.foundBy).OrderBy(c =&gt; c.ID.Value ^ key.Value).FirstOrDefault();
+
+        if (storeTo != null)
+        {
+          storeTo.Protocol.Store(node.OurContact, key, lookup.val);
+        }
+      }
+    }
+
+    return ret;
+  }
+}</pre>
+<h3>Ambiguity #12</h3>
+<p>What exactly should the sender do when a value is not found?&nbsp; The DHT 
+returns the nearest nodes, but given that the lookup failed to find the value, 
+we know these nodes also do not have the value.&nbsp; As far as I've been able 
+to determine, neither the spec nor a cursory search of the web indicates what to 
+do.</p>
+<h2>The Dht Class - Unit Tests</h2>
+<h3>LocalStoreFoundValueTest</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> To get started, let's just make sure we can set/get values in our local store 
+with an empty bucket list.</p>
+<pre>[TestMethod]
+public void LocalStoreFoundValueTest()
+{
+  VirtualProtocol vp = new VirtualProtocol();
+  Dht dht = new Dht(ID.RandomID, vp, new VirtualStorage());
+  vp.Node = dht.Router.Node;
+  ID key = ID.RandomID;
+  string val = &quot;Test&quot;;
+  dht.Store(key, val);
+  string retval = dht.FindValue(key).val;
+  Assert.IsTrue(retval == val, &quot;Expected to get back what we stored&quot;);
+}</pre>
+<h3>ValueStoredInCloserNodeTest</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> This test creates a single contact and stores the value in that contact.&nbsp; 
+We set up the ID's so that the contact's ID is less (XOR metric) than our peer's 
+ID, and we use a key of ID.Zero to prevent further complexities when computing 
+the distance.&nbsp; Most of the code here is to 
+set up the conditions to make this test!</p>
+<pre>[TestMethod]
+public void ValueStoredInCloserNodeTest()
+{
+  VirtualProtocol vp1 = new VirtualProtocol();
+  VirtualProtocol vp2 = new VirtualProtocol();
+  VirtualStorage store1 = new VirtualStorage();
+  VirtualStorage store2 = new VirtualStorage();
+
+  // Ensures that all nodes are closer, because ID.Max ^ n &lt; ID.Max when n &gt; 0.
+  Dht dht = new Dht(ID.Max, vp1, store1);
+  vp1.Node = dht.Router.Node;
+
+  ID contactID = ID.Mid; // a closer contact.
+  Contact otherContact = new Contact(vp2, contactID);
+  Node otherNode = new Node(otherContact, store2);
+  vp2.Node = otherNode;
+
+  // Add this other contact to our peer list.
+  dht.Router.Node.BucketList.AddContact(otherContact);
+
+  // We want an integer distance, not an XOR distance.
+  ID key = ID.Zero;
+
+  // Set the value in the other node, to be discovered by the lookup process.
+  string val = &quot;Test&quot;;
+  otherNode.SimpleStore(key, val);
+
+  Assert.IsFalse(store1.Contains(key), &quot;Expected our peer to NOT have cached the key-value.&quot;);
+
+  // Try and find the value, given our Dht knows about the other contact.
+  string retval = dht.FindValue(key).val;
+
+  Assert.IsTrue(retval == val, &quot;Expected to get back what we stored&quot;);
+  Assert.IsTrue(store1.Contains(key), &quot;Expected our peer to have cached the key-value.&quot;);
+}</pre>
+<p>The method SimpleStore simply stores the value in the node's storage -- this 
+method is available only in DEBUG mode for unit testing:</p>
+<pre>#if DEBUG // For unit testing
+public void SimpleStore(ID key, string val)
+{
+  storage.Set(key, val);
+}
+#endif
+</pre>
+<h3>ValueFoundInFartherNodeTest</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> We can change the setup of the ID's and verify that the we find the value in 
+a farther node.</p>
+<pre>[TestMethod]
+public void ValueStoredInFartherNodeTest()
+{
+  VirtualProtocol vp1 = new VirtualProtocol();
+  VirtualProtocol vp2 = new VirtualProtocol();
+  VirtualStorage store1 = new VirtualStorage();
+  VirtualStorage store2 = new VirtualStorage();
+
+  // Ensures that all nodes are closer, because ID.Max ^ n &lt; ID.Max when n &gt; 0.
+  Dht dht = new Dht(ID.Zero, vp1, store1);
+  vp1.Node = dht.Router.Node;
+
+  ID contactID = ID.Max; // a closer contact.
+  Contact otherContact = new Contact(vp2, contactID);
+  Node otherNode = new Node(otherContact, store2);
+  vp2.Node = otherNode;
+
+  // Add this other contact to our peer list.
+  dht.Router.Node.BucketList.AddContact(otherContact);
+
+  // We want an integer distance, not an XOR distance.
+  ID key = ID.One;
+
+  // Set the value in the other node, to be discovered by the lookup process.
+  string val = &quot;Test&quot;;
+  otherNode.SimpleStore(key, val);
+
+  Assert.IsFalse(store1.Contains(key), &quot;Expected our peer to NOT have cached the key-value.&quot;);
+
+  // Try and find the value, given our Dht knows about the other contact.
+  string retval = dht.FindValue(key).val;
+
+  Assert.IsTrue(retval == val, &quot;Expected to get back what we stored&quot;);
+  Assert.IsTrue(store1.Contains(key), &quot;Expected our peer to have cached the key-value.&quot;);
+}</pre>
+<h3>ValueStoredGetsPropagatedTest</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> Here we test that when we store a value to our peer, it 
+also gets propagated to 
+another peer that our peer knows about:</p>
+<pre>[TestMethod]
+public void ValueStoredGetsPropagatedTest()
+{
+  VirtualProtocol vp1 = new VirtualProtocol();
+  VirtualProtocol vp2 = new VirtualProtocol();
+  VirtualStorage store1 = new VirtualStorage();
+  VirtualStorage store2 = new VirtualStorage();
+
+  // Ensures that all nodes are closer, because ID.Max ^ n &lt; ID.Max when n &gt; 0.
+  Dht dht = new Dht(ID.Max, vp1, store1);
+  vp1.Node = dht.Router.Node;
+
+  ID contactID = ID.Mid; // a closer contact.
+  Contact otherContact = new Contact(vp2, contactID);
+  Node otherNode = new Node(otherContact, store2);
+  vp2.Node = otherNode;
+
+  // Add this other contact to our peer list.
+  dht.Router.Node.BucketList.AddContact(otherContact);
+
+  // We want an integer distance, not an XOR distance.
+  ID key = ID.Zero;
+  string val = &quot;Test&quot;;
+
+  Assert.IsFalse(store1.Contains(key), &quot;Obviously we don't have the key-value yet.&quot;);
+  Assert.IsFalse(store2.Contains(key), &quot;And equally obvious, the other peer doesn't have the key-value yet either.&quot;);
+
+  dht.Store(key, val);
+
+  Assert.IsTrue(store1.Contains(key), &quot;Expected our peer to have stored the key-value.&quot;);
+  Assert.IsTrue(store2.Contains(key), &quot;Expected the other peer to have stored the key-value.&quot;);
+}</pre>
+<h3>GetValuePropagatesToCloserNodeTest</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> This test verifies 
+that, given three nodes (the first of which is us), where node 2 has the value, 
+a get value also propagates to node 3 because a lookup was performed.</p>
+<pre>[TestMethod]
+public void GetValuePropagatesToCloserNodeTest()
+{
+  VirtualProtocol vp1 = new VirtualProtocol();
+  VirtualProtocol vp2 = new VirtualProtocol();
+  VirtualProtocol vp3 = new VirtualProtocol();
+  VirtualStorage store1 = new VirtualStorage();
+  VirtualStorage store2 = new VirtualStorage();
+  VirtualStorage store3 = new VirtualStorage();
+
+  // Ensures that all nodes are closer, because ID.Max ^ n &lt; ID.Max when n &gt; 0.
+  Dht dht = new Dht(ID.Max, vp1, store1);
+  vp1.Node = dht.Router.Node;
+
+  // Setup node 2:
+
+  ID contactID2 = ID.Mid; // a closer contact.
+  Contact otherContact2 = new Contact(vp2, contactID2);
+  Node otherNode2 = new Node(otherContact2, store2);
+  vp2.Node = otherNode2;
+
+  // Add the second contact to our peer list.
+  dht.Router.Node.BucketList.AddContact(otherContact2);
+
+  // Node 2 has the value.
+  // We want an integer distance, not an XOR distance.
+  ID key = ID.Zero;
+  string val = &quot;Test&quot;;
+  otherNode2.Storage.Set(key, val);
+
+  // Setup node 3:
+
+  ID contactID3 = ID.Zero.SetBit(158); // 01000.... -- a farther contact.
+  Contact otherContact3 = new Contact(vp3, contactID3);
+  Node otherNode3 = new Node(otherContact3, store3);
+  vp3.Node = otherNode3;
+
+  // Add the third contact to our peer list.
+  dht.Router.Node.BucketList.AddContact(otherContact3);
+
+  Assert.IsFalse(store1.Contains(key), &quot;Obviously we don't have the key-value yet.&quot;);
+  Assert.IsFalse(store3.Contains(key), &quot;And equally obvious, the third peer doesn't have the key-value yet either.&quot;);
+
+  var ret = dht.FindValue(key);
+
+  Assert.IsTrue(ret.found, &quot;Expected value to be found.&quot;);
+  Assert.IsTrue(store3.Contains(key), &quot;Expected the third peer to have stored the key-value.&quot;);
+}</pre>
+<h2>The Dht - Bootstrapping Discussion</h2>
+<p>From the spec: <font color="#FF00FF">To join the network, a node <i>u</i> 
+must have a contact to an already participating node <i>w</i>. <i>u</i> inserts
+<i>w</i> into the appropriate k-bucket. <i>u</i> then performs a node lookup for 
+its own node ID. Finally, <i>u</i> refreshes all k-buckets further away than its 
+closest neighbor. During the refreshes, <i>u</i> both populates its own 
+k-buckets and inserts itself into other nodes' k-buckets as necessary.</font></p>
+<p>The wikipedia 
+page adds a little more detail:</p>
+<blockquote>
+	<p>&quot;The joining node inserts the bootstrap node into one of its k-buckets. 
+	The joining node then does a FIND_NODE of its own ID against the bootstrap 
+	node (the only other node it knows). The &quot;self-lookup&quot; will populate other 
+	nodes' k-buckets with the new node ID, and will populate the joining node's 
+	k-buckets with the nodes in the path between it and the bootstrap node. 
+	After this, the joining node refreshes all k-buckets further away than the 
+	k-bucket the bootstrap node falls in. This refresh is just a lookup of a 
+	random key that is within that k-bucket range.&quot;</p>
+</blockquote>
+<p>By choosing a random ID within the contact's bucket range, we are creating an 
+ID whose prefix determines the ordering of the contacts returned by 
+<code>GetCloseContacts</code>:</p>
+<pre>Select(c =&gt; new { contact = c, distance = c.ID.Value ^ key.Value }).
+OrderBy(d =&gt; d.distance).</pre>
+<p>This will sort the contacts such that those that are closer -- those where no 
+bits are set in the prefix of the contact -- are first in the list.&nbsp; 
+Ideally, with many peers participating, we should get <i>k</i> contacts that are 
+closer.</p>
+<p><img border="0" src="note.png" width="24" height="32"> Of particular note 
+here is that when a peer network is small or in the throws of being born, other 
+contacts that nodes have will not be discovered until the bootstrapping bucket 
+splits.&nbsp; We'll see how the network self-corrects later on.</p>
+<p><img border="0" src="note.png" width="24" height="32"> It's also interesting 
+to realize that &quot;joining&quot; actually means contacting another node with any one of 
+the four RPC calls.&nbsp; A new peer could join an existing network with its 
+first RPC being FindValue!</p>
+<h2>The Dht - Bootstrapping Implementation</h2>
+<h3>RandomIDWithinBucket</h3>
+<p>Getting a random ID within a bucket range is interesting and based on knowing 
+that bucket ranges are always powers of 2:</p>
+<pre> /// &lt;summary&gt;
+/// Returns an ID within the range of the bucket's Low and High range.
+/// The optional parameter forceBit1 is for our unit tests.
+/// This works because the bucket low-high range will always be a power of 2!
+/// &lt;/summary&gt;
+public static ID RandomIDWithinBucket(KBucket bucket, bool forceBit1 = false)
+{
+  // Simple case:
+  // High = 1000
+  // Low = 0010
+  // We want random values between 0010 and 1000
+
+  // Low and High will always be powers of 2.
+  var lowBits = new ID(bucket.Low).Bytes.Bits().Reverse();
+  var highBits = new ID(bucket.High).Bytes.Bits().Reverse();
+
+  // We randomize &quot;below&quot; this High prefix range.
+  int highPrefix = highBits.TakeWhile(b =&gt; !b).Count() + 1;
+  // Up to the prefix of the Low range.
+  // This sets up a mask of 0's for the LSB's in the Low prefix.
+  int lowPrefix = lowBits.TakeWhile(b =&gt; !b).Count();
+  // RandomizeBeyond is little endian for &quot;bits after&quot; so reverse high/low prefixes.
+  ID id = Zero.RandomizeBeyond(Constants.ID_LENGTH_BITS - highPrefix, Constants.ID_LENGTH_BITS - lowPrefix, forceBit1);
+
+  // The we add the low range.
+  id = new ID(bucket.Low + id.Value);
+
+  return id;
+}</pre>
+<h3>Bootstrap</h3>
+<pre>/// &lt;summary&gt;
+/// Bootstrap our peer by contacting another peer, adding its contacts
+/// to our list, then getting the contacts for other peers not in the
+/// bucket range of our known peer we're joining.
+/// &lt;/summary&gt;
+public void Bootstrap(Contact knownPeer)
+{
+  node.BucketList.AddContact(knownPeer);
+  List&lt;Contact&gt; contacts = knownPeer.Protocol.FindNode(ourContact, ourId);
+  contacts.ForEach(c =&gt; node.BucketList.AddContact(c));
+  KBucket knownPeerBucket = node.BucketList.GetKBucket(knownPeer.ID);
+  // Resolve the list now, so we don't include additional contacts as we add to our bucket additional contacts.
+  var otherBuckets = node.BucketList.Buckets.Where(b =&gt; b != knownPeerBucket);
+  otherBuckets.ForEach(b =&gt; RefreshBucket(b));
+}
+
+protected void RefreshBucket(KBucket bucket)
+{
+  ID rndId = ID.RandomIDWithinBucket(bucket);
+  // Isolate in a separate list as contacts collection for this bucket might change.
+  List&lt;Contact&gt; contacts = bucket.Contacts.ToList();
+  contacts.ForEach(c =&gt; c.Protocol.FindNode(ourContact, rndId).ForEach(otherContact =&gt; node.BucketList.AddContact(otherContact)));
+}</pre>
+<h2>The Dht - Bootstrapping Unit Tests</h2>
+<h3>RandomWithinBucketTests</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> Getting a random 
+ID within a bucket range was 
+complicated enough that it deserves a unit test:</p>
+<pre>[TestMethod]
+public void RandomWithinBucketTests()
+{
+  // Must be powers of 2.
+  List&lt;(int low, int high)&gt; testCases = new List&lt;(int low, int high)&gt;()
+  {
+    (0, 256), // 7 bits should be set
+    (256, 1024), // 2 bits (256 + 512) should be set
+    (65536, 65536 * 2), // no additional bits should be set.
+    (65536, 65536 * 4), // 2 bits (65536 and 65536*2) should be set.
+    (65536, 65536 * 16), // 4 bits (65536, 65536*2, 65536*4, 65536*8) should be set.
+  };
+
+  foreach (var testCase in testCases)
+  {
+    KBucket bucket = new KBucket(testCase.low, testCase.high);
+    // We force all bits in the range we are &quot;randomizing&quot; to be true
+    // so it's not really randomized. This verifies the outer algorithm
+    // that figures out which bits to randomize.
+    ID id = ID.RandomIDWithinBucket(bucket, true); 
+
+    Assert.IsTrue(id.Value &gt;= bucket.Low &amp;&amp; id.Value &lt; bucket.High, &quot;ID is outside of bucket range.&quot;);
+
+    // The ID, because we're forcing bits, should always be (high - 1) &amp; ~max(0, low - 1)
+    int bitCheck = (testCase.high - 1) &amp; ~Math.Max(0, testCase.low - 1);
+
+    Assert.IsTrue(id.Value == bitCheck, &quot;Expected bits are not correct.&quot;);
+  }
+}</pre>
+<h3>BootstrapWithinBootstrappingBucketTest</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> In the actual 
+bootstrapping unit test, we are setting up a bootstrapping peer we are joining 
+to with 10 contacts.&nbsp; One of those contacts also knows about 10 other 
+contacts.&nbsp; The joining peer will receive 10 contacts (for a total of 11, 
+the bootstrapper + 10) and will not find any others because the &quot;other peers not 
+in the known peer bucket&quot; are all in the same bucket (the bucket hasn't split 
+yet.)&nbsp; The ID's for our peers are irrelevant in this scenario.</p>
+<pre>[TestMethod]
+public void BootstrapWithinBootstrappingBucketTest()
+{
+  // We need 22 virtual protocols. One for the bootstrap peer,
+  // 10 for the nodes the bootstrap peer knows about, and 10 for the nodes
+  // one of those nodes knows about, and one for us to rule them all.
+  VirtualProtocol[] vp = new VirtualProtocol[22];
+  22.ForEach((i) =&gt; vp[i] = new VirtualProtocol());
+
+  // Us
+  Dht dhtUs = new Dht(ID.RandomID, vp[0], null);
+  vp[0].Node = dhtUs.Router.Node;
+
+  // Our bootstrap peer
+  Dht dhtBootstrap = new Dht(ID.RandomID, vp[1], null);
+  vp[1].Node = dhtBootstrap.Router.Node;
+  Node n = null;
+
+  // Our boostrapper knows 10 contacts
+  10.ForEach((i) =&gt;
+  {
+    Contact c = new Contact(vp[i + 2], ID.RandomID);
+    n = new Node(c, null);
+    vp[i + 2].Node = n;
+    dhtBootstrap.Router.Node.BucketList.AddContact(c);
+  });
+
+  // One of those nodes, in this case the last one we added to our bootstrapper
+  // for convenience, knows about 10 other contacts.
+  10.ForEach((i) =&gt;
+  {
+    Contact c = new Contact(vp[i + 12], ID.RandomID);
+    Node n2 = new Node(c, null);
+    vp[i + 12].Node = n;
+    n.BucketList.AddContact(c); // Note we're adding these contacts to the 10th node.
+  });
+
+  dhtUs.Bootstrap(dhtBootstrap.Router.Node.OurContact);
+
+  Assert.IsTrue(dhtUs.Router.Node.BucketList.Buckets.Sum(c =&gt; c.Contacts.Count) == 11, &quot;Expected our peer to get 11 contacts.&quot;);
+}</pre>
+<h3>BootstrapOutsideBootstrappingBucketTest</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> In this test, we 
+set up 20 nodes in the bootstrap peer in such a way that we know how the buckets 
+split <i>for us</i> (20 in the left one, 1 in the right one) and add 10 contacts 
+to the one in the right one.&nbsp; Because out bootstrap peer will be in the our 
+left bucket, we should have a total of 31 contacts (bootstrap + its 20 contacts 
++ the other nodes 10 contacts.)</p>
+<pre>[TestMethod]
+public void BootstrapOutsideBootstrappingBucketTest()
+{
+  // We need 32 virtual protocols. One for the bootstrap peer,
+  // 20 for the nodes the bootstrap peer knows about, 10 for the nodes
+  // one of those nodes knows about, and one for us to rule them all.
+  VirtualProtocol[] vp = new VirtualProtocol[32];
+  32.ForEach((i) =&gt; vp[i] = new VirtualProtocol());
+
+  // Us, ID doesn't matter.
+  Dht dhtUs = new Dht(ID.RandomID, vp[0], null);
+  vp[0].Node = dhtUs.Router.Node;
+
+  // Our bootstrap peer
+  // All ID's are &lt; 2^159
+  Dht dhtBootstrap = new Dht(ID.Zero.RandomizeBeyond(Constants.ID_LENGTH_BITS - 1), vp[1], null);
+  vp[1].Node = dhtBootstrap.Router.Node;
+  Node n = null;
+
+  // Our boostrapper knows 20 contacts
+  20.ForEach((i) =&gt;
+  {
+    ID id;
+
+    // All ID's are &lt; 2^159 except the last one, which is &gt;= 2^159
+    // which will force a bucket split for _us_
+    if (i &lt; 19)
+    {
+      id = ID.Zero.RandomizeBeyond(Constants.ID_LENGTH_BITS - 1);
+    }
+    else
+    {
+      id = ID.Max;
+    }
+
+    Contact c = new Contact(vp[i + 2], id);
+    n = new Node(c, null);
+    vp[i + 2].Node = n;
+    dhtBootstrap.Router.Node.BucketList.AddContact(c);
+    });
+
+  // One of those nodes, in this case specifically the last one we added to our bootstrapper
+  // so that it isn't in the bucket of our bootstrapper, we add 10 contacts. The ID's of
+  // those contacts don't matter.
+  10.ForEach((i) =&gt;
+  {
+    Contact c = new Contact(vp[i + 22], ID.RandomID);
+    Node n2 = new Node(c, null);
+    vp[i + 22].Node = n;
+    n.BucketList.AddContact(c); // Note we're adding these contacts to the 10th node.
+  });
+
+  dhtUs.Bootstrap(dhtBootstrap.Router.Node.OurContact);
+
+  Assert.IsTrue(dhtUs.Router.Node.BucketList.Buckets.Sum(c =&gt; c.Contacts.Count) == 31, &quot;Expected our peer to have 31 contacts.&quot;);
+}</pre>
+<h2>Persisting the Dht</h2>
+<p>The bucket lists and contacts in each bucketneed to be persisted so the last known state of the DHT can be restored.&nbsp; 
+This is baked into the Dht implementation, serializing the data in a JSON file.&nbsp; 
+The persistence of key-values is handled separately and is defined by the 
+specific implementation needs.&nbsp; Note that the <code>VirtualStorage</code> class provided 
+in the baseline code does not persist its data.&nbsp; Internally, various 
+attributes are marked as <code>JsonIgnore</code> to prevent circular serialization, and some 
+classes have parameter-less public constructors for deserialization.</p>
+<h3>Serializing</h3>
+<p>This is really straight forward, the only trick is to enable the type name 
+handling in <code>Newtonsoft.Json</code> so that properties with abstract and interface types 
+also serialize their concrete type.</p>
+<pre>/// &lt;summary&gt;
+/// Returns a JSON string of the serialized DHT.
+/// &lt;/summary&gt;
+public string Save()
+{
+  var settings = new JsonSerializerSettings();
+  settings.TypeNameHandling = TypeNameHandling.Auto;
+  string json = JsonConvert.SerializeObject(this, Formatting.Indented, settings);
+
+  return json;
+}</pre>
+<h3>Deserializing</h3>
+<p>The deserializer is equally simple, however note the call to 
+DeserializationFixups.&nbsp; This reduces the size of the JSON by not 
+serializing certain properties that can be obtained from other properties.&nbsp; 
+As a result, some minor fixups are necessary.</p>
+<pre>public static Dht Load(string json)
+{
+  var settings = new JsonSerializerSettings();
+  settings.TypeNameHandling = TypeNameHandling.Auto;
+
+  Dht dht = JsonConvert.DeserializeObject&lt;Dht&gt;(json, settings);
+  dht.DeserializationFixups();
+  dht.SetupTimers();
+
+  return dht;
+}
+
+protected void DeserializationFixups()
+{
+  ID = ourContact.ID;
+  protocol = ourContact.Protocol;
+  node = router.Node;
+  node.OurContact = ourContact;
+  node.BucketList.OurID = ID;
+  node.BucketList.OurContact = ourContact;
+  router.Dht = this;
+  node.Dht = this;
+}</pre>
+<h3>Unit Test</h3>
+<p><img border="0" src="unittest.png" width="14" height="32">&nbsp; The unit test is a simple test that a contact in a bucket gets persisted and 
+restored correctly:</p>
+<pre>[TestMethod]
+public void DhtSerializationTest()
+{
+  TcpSubnetProtocol p1 = new TcpSubnetProtocol(&quot;http://127.0.0.1&quot;, 2720, 1);
+  TcpSubnetProtocol p2 = new TcpSubnetProtocol(&quot;http://127.0.0.1&quot;, 2720, 2);
+  VirtualStorage store1 = new VirtualStorage();
+  VirtualStorage store2 = new VirtualStorage();
+
+  // Ensures that all nodes are closer, because ID.Max ^ n &lt; ID.Max when n &gt; 0.
+  Dht dht = new Dht(ID.Max, p1, new Router(), store1, store1, new VirtualStorage());
+
+  ID contactID = ID.Mid; // a closer contact.
+  Contact otherContact = new Contact(p2, contactID);
+  Node otherNode = new Node(otherContact, store2);
+
+  // Add this other contact to our peer list.
+  dht.Node.BucketList.AddContact(otherContact);
+
+  string json = dht.Save();
+
+  Dht newDht = Dht.Load(json);
+  Assert.IsTrue(newDht.Node.BucketList.Buckets.Sum(b =&gt; b.Contacts.Count) == 1, &quot;Expected our node to have 1 contact.&quot;);
+  Assert.IsTrue(newDht.Node.BucketList.ContactExists(otherContact), &quot;Expected our contact to have the other contact.&quot;);
+  Assert.IsTrue(newDht.Router.Node == newDht.Node, &quot;Router node not initialized.&quot;);
+}</pre>
+
+<p><img border="0" src="note.png" width="24" height="32">&nbsp; When you look at the JSON, you suddenly realize that shared objects, 
+particularly contacts, are deserialized into separate instances.&nbsp; Because 
+there are assumptions in the code regarding &quot;same instance&quot; and also as a way of 
+ensuring that we're comparing contacts correctly (using their ID's) the <code>Contact</code> 
+class implements <code>IComparable</code> and <code>operator ==</code> and <code>operator !=</code> overloads.</p>
+<h2>References</h2>
+<p>[1] -
+<a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
+http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>
+</p>
+<p>[2] -
+<a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia">
+https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia</a></p>
+<p>[3] -
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE">
+http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html</a></p>
+<p>[4] -
+<a href="https://github.com/bmuller/kademlia">
+https://github.com/bmuller/kademlia</a></p>
+
+<p>[5] - <a href="https://en.wikipedia.org/wiki/Smart_contract">
+https://en.wikipedia.org/wiki/Smart_contract</a></p>
+<p>[6] -
+<a href="http://sandhill.com/article/is-data-decentralization-the-new-trend/">
+http://sandhill.com/article/is-data-decentralization-the-new-trend/</a></p>
+<p>[7] - <a href="https://arxiv.org/pdf/1506.03471.pdf">
+https://arxiv.org/pdf/1506.03471.pdf</a></p>
+<p>[8] - <a href="https://en.wikipedia.org/wiki/BitTorrent">
+https://en.wikipedia.org/wiki/BitTorrent</a></p>
+<p>[9] - <a href="https://en.wikipedia.org/wiki/Kad_network">
+https://en.wikipedia.org/wiki/Kad_network</a></p>
+<p>[10] - <a href="https://en.wikipedia.org/wiki/Chord_(peer-to-peer)">https://en.wikipedia.org/wiki/Chord_(peer-to-peer)</a> </p>
+<p>[11] - <a href="https://en.wikipedia.org/wiki/Pastry_(DHT)">https://en.wikipedia.org/wiki/Pastry_(DHT)</a> </p>
+<p>[12] -
+<a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html">
+https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html</a> </p>
+
+<p>[13] -
+<a href="https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table">
+https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table</a></p>
+<p>[14] -
+<a href="https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170">
+https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170</a></p>
+<p>[15] - <a href="https://en.wikipedia.org/wiki/Kademlia">
+https://en.wikipedia.org/wiki/Kademlia</a> </p>
+
+[16] - <a href="https://forum.emule-project.net/index.php?showtopic=32335">
+https://forum.emule-project.net/index.php?showtopic=32335</a>
+
+<p>[17] - <a href="http://www.emule-project.net/home/perl/general.cgi?l=1">
+http://www.emule-project.net/home/perl/general.cgi?l=1</a> </p>
+<p>[18] -
+<a href="https://forum.emule-project.net/index.php?showtopic=32335&view=findpost&p=214837">
+https://forum.emule-project.net/index.php?showtopic=32335&amp;view=findpost&amp;p=214837</a> </p>
+<p>[19] - <a href="http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf">
+http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf</a> </p>
+<p>[20] - <a href="http://www.maymounkov.org/kademlia">
+http://www.maymounkov.org/kademlia</a> </p>
+
+<p>[21] - <a href="https://en.wikipedia.org/wiki/Sybil_attack">
+https://en.wikipedia.org/wiki/Sybil_attack</a></p>
+<p>&nbsp;</p>
+
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+
+</body>
+
+</html>

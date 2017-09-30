@@ -1,0 +1,792 @@
+<html>
+
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<title>New Page 1</title>
+</head>
+
+<body>
+
+<h2>Bucket Management</h2>
+<h3>Evicting Unresponsive Contacts In Full Buckets</h3>
+<p>We should now address this in the <code>AddContact</code> method:</p>
+<pre>// TODO: Ping the oldest contact to see if it's still 
+// around and replace it if not.
+</pre>
+<p>In our VirtualProtocol, we'll simulate a node that doesn't respond:</p>
+<pre>public bool Ping(Contact sender)
+{
+  // Ping still adds/updates the sender's contact.
+  if (Responds)
+  {
+    node.Ping(sender);
+  }
+
+  return Responds;
+}</pre>
+<p>We can then implement the handling of a non-responsive node:</p>
+<pre>if (CanSplit(kbucket))
+{
+  // Split the bucket and try again.
+  (KBucket k1, KBucket k2) = kbucket.Split();
+  int idx = GetKBucketIndex(contact.ID);
+  buckets[idx] = k1;
+  buckets.Insert(idx + 1, k2);
+  AddContact(contact);
+}
+else
+{
+  Contact lastSeenContact = kbucket.Contacts.OrderBy(c =&gt; c.LastSeen).Last();
+  bool stillUp = lastSeenContact.Protocol.Ping(ourContact);
+
+  if (!stillUp)
+  {
+    kbucket.EvictContact(lastSeenContact);
+    kbucket.AddContact(contact);
+  }
+}</pre>
+<p><img border="0" src="unittest.png" width="14" height="32"> The unit test for 
+this is straight forward -- we create a virtual node that simulates not 
+responding.&nbsp; </p>
+<p><img border="0" src="note.png" width="24" height="32"> Note how we're setting 
+up the contacts to force a split failure, so that we trigger the part of the 
+code that checks for non-responding contacts.</p>
+<pre>[TestMethod]
+public void NonRespondingContactTest()
+{
+  Contact dummyContact = new Contact(new VirtualProtocol(), ID.Zero);
+  ((VirtualProtocol)dummyContact.Protocol).Node = new Node(dummyContact, null);
+
+  BucketList bucketList = SetupSplitFailure();
+
+  Assert.IsTrue(bucketList.Buckets.Count == 2, &quot;Bucket split should have occurred.&quot;);
+  Assert.IsTrue(bucketList.Buckets[0].Contacts.Count == 1, &quot;Expected 1 contact in bucket 0.&quot;);
+  Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, &quot;Expected 20 contacts in bucket 1.&quot;);
+
+  // The bucket is now full. Pick the first contact, as it is last seen (they are added in chronological order.)
+  Contact nonRespondingContact = bucketList.Buckets[1].Contacts[0];
+
+  // Since the protocols are shared, we need to assign a unique protocol for this node for testing.
+  VirtualProtocol vpUnresponding = new VirtualProtocol(((VirtualProtocol)nonRespondingContact.Protocol).Node, false);
+  nonRespondingContact.Protocol = vpUnresponding;
+
+  // Setup the next new contact (it can respond.)
+  Contact nextNewContact = new Contact(dummyContact.Protocol, ID.Zero.SetBit(159));
+
+  bucketList.AddContact(nextNewContact);
+
+  Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, &quot;Expected 20 contacts in bucket 1.&quot;);
+
+  // Verify CanSplit -&gt; Evict happened.
+  Assert.IsFalse(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nonRespondingContact), &quot;Expected bucket to NOT contain non-responding contact.&quot;);
+  Assert.IsTrue(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nextNewContact), &quot;Expected bucket to contain new contact.&quot;);
+}</pre>
+<h3>Bucket Refresh - Discussion</h3>
+<p>From the spec: <font color="#FF00FF">Buckets are generally kept fresh by the 
+traffic of requests traveling through nodes. To handle pathological cases in 
+which there are no lookups for a particular ID range, each node refreshes any 
+bucket to which it has not performed a node lookup in the past hour. Refreshing 
+means picking a random ID in the bucket’s range and performing a node search for 
+that ID.</font></p>
+<h4>Ambiguity #13</h4>
+<p>The phrase &quot;any bucket to which it has not performed a node lookup&quot; is 
+subject to interpretation.&nbsp; One way to interpret this is possibly &quot;the 
+bucket whose range contains the key in the key-value pair for a Store or 
+FindValue operation.&nbsp; Another interpretation is: the k-bucket containing 
+the range for any contact ID queried during 
+during the lookup process.&nbsp; This second approach might seem more correct 
+because&nbsp;the original alpha contacts is determined from the list of closest 
+contacts across all buckets, but it then becomes arbitrary as to whether to also touch 
+the buckets containing the contacts returned by the FindNodes query that are 
+then queried further.&nbsp; </p>
+<h3>Bucket Refresh - Implementation</h3>
+<p>I am choosing the first interpretation, which 
+means that the bucket containing the key gets touched in the Store and FindValue 
+methods:</p>
+<pre>public void Store(ID key, string val)
+{
+  TouchBucketWithKey(key);
+  ...
+}
+
+public (bool found, List&lt;Contact&gt; contacts, string val) FindValue(ID key)
+{
+  TouchBucketWithKey(key);
+  ...
+}
+
+protected void TouchBucketWithKey(ID key)
+{
+  node.BucketList.GetKBucket(key).Touch();
+}</pre>
+<p>Then we set up a simple refresh timer in the <code>Dht</code> class:</p>
+<pre>protected void SetupBucketRefreshTimer()
+{
+  bucketRefreshTimer = new Timer(Constants.BUCKET_REFRESH_INTERVAL);
+  bucketRefreshTimer.AutoReset = true;
+  bucketRefreshTimer.Elapsed += BucketRefreshTimerElapsed;
+  bucketRefreshTimer.Start();
+}
+
+private void BucketRefreshTimerElapsed(object sender, ElapsedEventArgs e)
+{
+  node.BucketList.Buckets.
+  Where(b =&gt; (DateTime.Now - b.TimeStamp).TotalMilliseconds &gt;= Constants.BUCKET_REFRESH_INTERVAL).
+  ForEach(b =&gt; RefreshBucket(b));
+}
+
+protected void RefreshBucket(KBucket bucket)
+{
+  bucket.Touch();
+  ID rndId = ID.RandomIDWithinBucket(bucket);
+  // Isolate in a separate list as contacts collection for this bucket might change.
+  List&lt;Contact&gt; contacts = bucket.Contacts.ToList();
+  contacts.ForEach(c =&gt; c.Protocol.FindNode(ourContact, rndId).ForEach(otherContact =&gt; node.BucketList.AddContact(otherContact)));
+}</pre>
+<p><img border="0" src="note.png" width="24" height="32">Note that now when a 
+bucket is refreshed, it is always touched, which updates its last seen 
+timestamp:</p>
+<pre>public void Touch()
+{
+  TimeStamp = DateTime.Now;
+}</pre>
+<h2>Key-Value Management</h2>
+<p>In this section you will learn something that is not at all clearly stated in 
+the Kademlia specification -- there are actually three kinds of data store:</p>
+<ol>
+	<li>Original publisher store</li>
+	<li>Republished store</li>
+	<li>Cached store</li>
+</ol>
+<p>Let's look at each of these.</p>
+<p><img border="0" src="important.png" width="38" height="32">&nbsp; It is 
+paramount to understand that the Kademlia specification does not discuss this at 
+all.&nbsp; The information in this section has been gleaned from closely looking 
+at the discussion on the emule project forum, particularly &quot;miniminime's&quot; 
+discussion of the roles that a node can take on<sup>18</sup>.&nbsp; Implementing 
+this approach requires that the receiver peer knows whether to store the 
+key-value in the republish store or in the cache store.</p>
+<h3>Original Publisher Store</h3>
+<p>The original publisher store is never written to as a result of an RPC store.&nbsp; 
+This store is updated only by the peer itself when it is the originator of the 
+key-value and wants to publish the key-value to other peers. </p>
+<p><img border="0" src="important.png" width="38" height="32"> Key-values from 
+this store are republished once every 24 hours.</p>
+<h3>Republished Store</h3>
+<p>This store contains key-values that have been republished by other peers as 
+part of process of distributing the data among peers.&nbsp; This store never 
+contains the peer's (as an originator) own storage, but only key-values received 
+from other peers. </p>
+<p><img border="0" src="important.png" width="38" height="32"> Key-values in 
+this store are republished to other peers only if a closer peer is found.&nbsp; 
+This check occurs every hour and is optimized to avoid calling the lookup 
+algorithm:</p>
+<ol>
+	<li>For a particular bucket if it has already been queried for closer nodes.</li>
+<li>If the key has been republished in the last hour.</li>
+</ol>
+<h3>Cached Store</h3>
+<p>The cached store is used when republishing a FindValue request onto the <i>
+next closest node</i>.&nbsp; The intention here is to avoid hotspots during 
+lookup of popular keys by temporarily republishing them onto other nearby peers.&nbsp; 
+These temporary key-values have an expiration time.</p>
+<p><img border="0" src="important.png" width="38" height="32">&nbsp; Key-values 
+in the cached store are never republished and are removed after the expiration 
+time.</p>
+<h3>Storage Mechanisms in the Dht Class</h3>
+<p>These are implemented in the <code>Dht</code> class:</p>
+<pre>protected IStorage originatorStorage;
+protected IStorage republishStorage;
+protected IStorage cacheStorage;</pre>
+<p>With a couple constructor options:</p>
+<pre>/// &lt;summary&gt;
+/// Use this constructor to initialize the stores to the same instance.
+/// &lt;/summary&gt;
+public Dht(ID id, IProtocol protocol, Func&lt;IStorage&gt; storageFactory)
+{
+  originatorStorage = storageFactory();
+  republishStorage = storageFactory();
+  cacheStorage = storageFactory();
+  FinishInitialization(id, protocol);
+}
+
+/// &lt;summary&gt;
+/// Supports different concrete storage types. For example, you may want the cacheStorage
+/// to be an in memory store, the originatorStorage to be a SQL database, and the republish store
+/// to be a key-value database.
+/// &lt;/summary&gt;
+public Dht(ID id, IProtocol protocol, IStorage originatorStorage, IStorage republishStorage, IStorage cacheStorage)
+{
+  this.originatorStorage = originatorStorage;
+  this.republishStorage = republishStorage;
+  this.cacheStorage = cacheStorage;
+  FinishInitialization(id, protocol);
+}</pre>
+<p>The ability to specify different storage mechanisms can be very useful, 
+however this means that a <code>Node</code> must store the key-value in the appropriate 
+storage:</p>
+<pre>/// &lt;summary&gt;
+/// Store a key-value pair in the republish or cache storage, updating the contact if it's not us.
+/// &lt;/summary&gt;
+public void Store(Contact sender, ID key, string val, bool isCached = false, int expirationTimeSec = 0)
+{
+  Validate.IsFalse&lt;SendingQueryToSelfException&gt;(sender.ID.Value == ourContact.ID.Value, &quot;Sender should not be ourself!&quot;);
+
+  if (isCached)
+  {
+    cacheStorage.Set(key, val, expirationTimeSec);
+  }
+  else
+  {
+    SendKeyValuesToNewContact(sender);
+    bucketList.AddContact(sender);
+
+    storage.Set(key, val, Constants.EXPIRATION_TIME_SECONDS);
+  }
+}</pre>
+<h3>Republishing Key-Values</h3>
+<p>Key-values in the republish store are republished at a particular time 
+interval, typically every hour:</p>
+<pre>/// &lt;summary&gt;
+/// Replicate key values if the key-value hasn't been touched within the republish interval.
+/// Also don't do a FindNode lookup if the bucket containing the key has been refreshed within the refresh interval.
+/// &lt;/summary&gt;
+protected void KeyValueRepublishElapsed(object sender, ElapsedEventArgs e)
+{
+  DateTime now = DateTime.Now;
+
+  republishStorage.Where(k =&gt; (now - republishStorage.GetTimeStamp(k)).TotalMilliseconds &gt;= Constants.KEY_VALUE_REPUBLISH_INTERVAL).ForEach(k=&gt;
+  {
+    ID key = new ID(k);
+    StoreOnCloserContacts(key, republishStorage.Get(key));
+    republishStorage.Touch(k); 
+  });
+}</pre>
+<p><img border="0" src="note.png" width="24" height="32"> Note how a lookup is 
+only performed if the bucket containing the key hasn't itself been refreshed 
+recently (within the last hour):</p>
+<pre>/// &lt;summary&gt;
+/// Perform a lookup if the bucket containing the key has not been refreshed, 
+/// otherwise just get the contacts the k closest contacts we know about.
+/// &lt;/summary&gt;
+protected void StoreOnCloserContacts(ID key, string val)
+{
+  DateTime now = DateTime.Now;
+
+  KBucket kbucket = node.BucketList.GetKBucket(key);
+  List&lt;Contact&gt; contacts;
+
+  if ((now - kbucket.TimeStamp).TotalMilliseconds &lt; Constants.BUCKET_REFRESH_INTERVAL)
+  {
+    // Bucket has been refreshed recently, so don't do a lookup as we have the k closes contacts.
+    contacts = node.BucketList.GetCloseContacts(key, node.OurContact.ID);
+  }
+  else
+  {
+    contacts = router.Lookup(key, router.RpcFindNodes).contacts;
+  }
+
+  contacts.ForEach(c =&gt;
+  {
+    RpcError error = c.Protocol.Store(node.OurContact, key, val);
+    HandleError(error, c);
+  });
+}</pre>
+<h3>Expiring Key-Value Pairs</h3>
+<p>Expire the key-values are removed from the republish and cache storage, 
+which happens in the <code>Dht</code> class:</p>
+<pre>/// &lt;summary&gt;
+/// Any expired keys in the republish or node's cache are removed.
+/// &lt;/summary&gt;
+protected virtual void ExpireKeysElapsed(object sender, ElapsedEventArgs e)
+{
+  RemoveExpiredData(cacheStorage);
+  RemoveExpiredData(republishStorage);
+}
+
+protected void RemoveExpiredData(IStorage store)
+{
+  DateTime now = DateTime.Now;
+  // ToList so our key list is resolved now as we remove keys.
+  store.Where(k =&gt; (now - store.GetTimeStamp(k)).TotalSeconds &gt;= store.GetExpirationTimeSec(k)).ToList().ForEach(k =&gt;
+  {
+    store.Remove(k);
+  });
+}</pre>
+<h3>Originator Republishing - Discussion</h3>
+<p><font color="#FF00FF">For Kademlia’s current application (file sharing), we 
+also require the original publisher of a (key,value) pair to republish it every 
+24 hours. Otherwise, (key,value) pairs expire 24 hours after publication, so as 
+to limit stale index information in the system. For other applications, such as 
+digital certificates or cryptographic hash to value mappings, longer expiration 
+times may be appropriate.</font></p>
+<h3>Originator Republishing - Implementation</h3>
+<p>Republishing originator data is handled in a timer event that resends the 
+key-values in the originator's storage.</p>
+<pre>protected void OriginatorRepublishElapsed(object sender, ElapsedEventArgs e)
+{
+  DateTime now = DateTime.Now;
+
+  originatorStorage.Where(k =&gt; (now - originatorStorage.GetTimeStamp(k)).TotalMilliseconds &gt;= Constants.ORIGINATOR_REPUBLISH_INTERVAL).ForEach(k =&gt;
+  {
+    ID key = new ID(k);
+    // Just use close contacts, don't do a lookup.
+    var contacts = node.BucketList.GetCloseContacts(key, node.OurContact.ID);
+    contacts.ForEach(c =&gt; c.Protocol.Store(ourContact, key, originatorStorage.Get(key)));
+    originatorStorage.Touch(k);
+  });
+}</pre>
+<p>Republished key-values persist for 24 hours.</p>
+<h3>Storing Key-Values Onto the new Node When a new Node Registers - Discussion</h3>
+<p><font color="#FF00FF">When a new node joins the system, it must store any 
+key-value pair to which it is one of the k closest. Existing nodes, by similarly 
+exploiting complete knowledge of their surrounding subtrees, will know which 
+key-value pairs the new node should store. Any node learning of a new node 
+therefore issues STORE RPCs to transfer relevant key-value pairs to the new 
+node. To avoid redundant STORE RPCs, however, a node only transfers a key-value 
+pair if it’s own ID is closer to the key than are the IDs of other nodes.</font></p>
+<h4>Interpretation</h4>
+<ol>
+	<li>a new node (contact) will be instructed to store key-values that exist 
+	on the bootstrapping node (the one it's boostrapping with) for key-values 
+	that meet the following condition:</li>
+	<li>the key XOR'd with the bootstrapping node's ID &lt; (closer than) the key 
+	XOR'd the ID's of other nodes.</li>
+</ol>
+<h4>Ambiguity #14</h4>
+<p>What does &quot;other nodes&quot; mean?&nbsp; Are these all other 
+contacts the bootstrapping node knows about, or just the <i>k</i> closest 
+contacts in the joining node's bucket, or some other determination?&nbsp; We 
+have to understand what &quot;exploiting complete knowledge of their surrounding 
+subtrees&quot; means.&nbsp; First, this indicates that it isn't just the joining 
+node's bucket.&nbsp; It 
+would make sense to interpret this as &quot;store the values onto the joining node for any 
+key-value where the joining node will be closer to that key <i>when there are no 
+other nodes that are closer.</i>&quot;&nbsp; If the joining 
+node&nbsp; becomes the <i>closest</i> node to a key-value, then it is requested 
+to store that key-value.</p>
+<p><img border="0" src="note.png" width="24" height="32"> It's interesting to 
+note that this algorithm executes regardless of whether the bootstrapping node 
+actually added the the joining node to a k-bucket.&nbsp; Remember also that 
+&quot;joining&quot; actually means contacting another node with any one of the four RPC 
+calls.</p>
+<p>Republished key-values when a new node registers persist for 24 hours.</p>
+<h3>Storing Key-Values On the New Node When a New Node Registers - 
+Implementation</h3>
+<pre>protected void SendKeyValuesToNewContact(Contact sender)
+{
+  List&lt;Contact&gt; contacts = new List&lt;Contact&gt;();
+
+  if (IsNewContact(sender))
+  {
+    lock (bucketList)
+    {
+      // Clone so we can release the lock.
+      contacts = new List&lt;Contact&gt;(bucketList.Buckets.SelectMany(b =&gt; b.Contacts));
+    }
+
+    if (contacts.Count() &gt; 0)
+    {
+      // and our distance to the key &lt; any other contact's distance to the key...
+      storage.AsParallel().ForEach(k =&gt;
+      {
+        // our min distance to the contact.
+        var distance = contacts.Min(c =&gt; k ^ c.ID);
+
+        // If our contact is closer, store the contact on its node.
+        if ((k ^ ourContact.ID) &lt; distance)
+        {
+          var error = sender.Protocol.Store(ourContact, new ID(k), storage.Get(k));
+          dht?.HandleError(error, sender);
+        }
+      });
+    }
+  }
+}</pre>
+<p>Annoyingly, for every 
+stored value, there just isn't any way to not perform the XOR computation on 
+every contact.&nbsp; This could get expensive and is currently optimized using Linq's 
+parallel feature.</p>
+<p>Determining whether a contact is new is slightly more complicated than one 
+would think.&nbsp; We need to check not only whether the contact exists in any 
+of our buckets, but also whether it's a pending contact -- one that wasn't 
+placed in a bucket because the bucket was full, but none-the-less has already 
+received any closer keys:</p>
+<pre>/// &lt;summary&gt;
+/// Returns true if the contact isn't in the bucket list or the pending contacts list.
+/// &lt;/summary&gt;
+protected bool IsNewContact(Contact sender)
+{
+  bool ret;
+
+  lock (bucketList)
+  {
+    // If we have a new contact...
+    ret = bucketList.ContactExists(sender);
+  }
+
+  if (dht != null) // for unit testing, dht may be null
+  {
+    lock (dht.PendingContacts)
+    {
+      ret |= dht.PendingContacts.ContainsBy(sender, c =&gt; c.ID);
+    }
+  }
+
+  return !ret;
+}</pre>
+<h3>Storing Key-Values Onto the new Node When a new Node Registers - Unit Test</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> There's a lot of 
+setup here to for creating two existing contacts and two key-values and their 
+ID's have been specifically set.&nbsp; See the comments for the XOR distance 
+&quot;math.&quot;</p>
+<pre>/// &lt;summary&gt;
+/// Verify that we get stored values whose keys ^ contact ID are less than stored keys ^ other contacts.
+/// &lt;/summary&gt;
+[TestMethod]
+public void TestNewContactGetsStoredContactsTest()
+{
+  // Set up a node at the midpoint.
+  // The existing node has the ID 10000....
+  Node existing = new Node(new Contact(null, ID.Mid), new VirtualStorage());
+  string val1 = &quot;Value 1&quot;;
+  string valMid = &quot;Value Mid&quot;;
+
+  // The existing node stores two items, one with an ID &quot;hash&quot; of 1, the other with ID.Max
+  // Simple storage, rather than executing the code for Store.
+  existing.SimpleStore(ID.One, val1);
+  existing.SimpleStore(ID.Mid, valMid);
+
+  Assert.IsTrue(existing.Storage.Count() == 2, &quot;Expected the existing node to have two key-values.&quot;);
+
+  // Create a contact in the existing node's bucket list that is closer to one of the values.
+  // This contact has the prefix 010000....
+  Contact otherContact = new Contact(null, ID.Zero.SetBit(158));
+  Node other = new Node(otherContact, new VirtualStorage());
+  existing.BucketList.Buckets[0].Contacts.Add(otherContact);
+
+  // The unseen contact has a prefix 0110000....
+  VirtualProtocol unseenvp = new VirtualProtocol();
+  Contact unseenContact = new Contact(unseenvp, ID.Zero.SetBit(157));
+  Node unseen = new Node(unseenContact, new VirtualStorage());
+  unseenvp.Node = unseen; // final fixup.
+
+  Assert.IsTrue(unseen.Storage.Count() == 0, &quot;The unseen node shouldn't have any key-values!&quot;);
+
+  // An unseen node pings, and we should get back valMin only, as ID.One ^ ID.Mid &lt; ID.Max ^ ID.Mid
+  existing.Ping(unseenContact);
+
+  // Contacts     V1          V2 
+  // 10000000     00...0001   10...0000
+  // 01000000
+  
+  // Math:
+  // c1 ^ V1     c1 ^ V2     c2 ^ V1     c2 ^ V2 
+  // 100...001   000...000   010...001   110...000
+
+  // c1 ^ V1 &gt; c2 ^ V1, so V1 doesn't get sent to the unseen node.
+  // c1 ^ V2 &lt; c2 ^ V2, so V2 does get sent.
+
+  Assert.IsTrue(unseen.Storage.Count() == 1, &quot;Expected 1 value stored in our new node.&quot;);
+  Assert.IsTrue(unseen.Storage.Contains(ID.Mid), &quot;Expected valMid to be stored.&quot;);
+  Assert.IsTrue(unseen.Storage.Get(ID.Mid) == valMid, &quot;Expected valMid value to match.&quot;);
+}</pre>
+<h3>Key Republishing - Discussion</h3>
+<p>
+<font color="#FF00FF">To ensure the persistence of key-value pairs, nodes 
+must periodically republish keys. Otherwise, two phenomena may cause lookups for 
+valid keys to fail. First, some of the k nodes that initially get a key-value 
+pair when it is published may leave the network. Second, new nodes may join the 
+network with IDs closer to some published key than the nodes on which the 
+key-value pair was originally published. In both cases, the nodes with a 
+key-value pair must republish it so as once again to ensure it is available on 
+the k nodes closest to the key.</font></font> </p>
+<p>
+<font color="#FF00FF"> To compensate for nodes leaving the network, Kademlia 
+republishes each key-value pair once an hour. A naive implementation of this 
+strategy would require many messages—each of up to k nodes storing a key-value 
+pair would perform a node lookup followed by k - 1 STORE RPCs every hour.&nbsp; 
+</font></font></p>
+<p>From wikipedia<sup>15</sup>, which can be helpful for understanding the spec with 
+different phrasing:</p>
+<p>&quot;Periodically, a node that stores a value will explore the network to find 
+the k nodes that are close to the key value and replicate the value onto them. 
+This compensates for disappeared nodes.&quot;</p>
+<p>and...</p>
+<p>&quot;The node that is providing the file [key-value] will periodically refresh the 
+information onto the network (perform FIND_NODE and STORE messages). When all of 
+the nodes having the file [key-value] go offline, nobody will be refreshing its values 
+(sources and keywords) and the information will eventually disappear from the 
+network.&quot;</p>
+<p>The wikipedia write-up clarifies what is meant by &quot;on the k nodes closest to 
+the key&quot; - in other words, for each key, a FindNode is called to find closer 
+nodes and the value is republished.&nbsp; Without the optimizations, this can be 
+a time consuming process if there's a lot of key-values in a node's store, which 
+is addressed in an optimization later.</p>
+<h4>First Optimization</h4>
+<p><font color="#FF00FF">Fortunately, the republishing process can be heavily 
+optimized. First, when a node receives a STORE RPC for a given key-value pair, 
+it assumes the RPC was also issued to the other k - 1 closest nodes, and thus 
+the recipient will not republish the key-value pair in the next hour. This 
+ensures that as long as republication intervals are not exactly synchronized, 
+only one node will republish a given key-value pair every hour.&nbsp; </font></p>
+<p>This first optimization is simple - when receiving a Store, update the 
+timestamp on the key-value.&nbsp; Any key-value that has been touched within the 
+last hour is not republished as we can assume:</p>
+<ol>
+	<li>For a new key-value, it was also published to <i>k</i> closer nodes.</li>
+	<li>If it's been republished by another node, that node republished it to <i>
+	k</i> closer nodes.</li>
+</ol>
+<h4>Second Optimization</h4>
+<p><font color="#FF00FF">A second 
+optimization avoids performing node lookups before republishing keys. As 
+described in Section 2.4, to handle unbalanced trees, nodes split k-buckets as 
+required to ensure they have complete knowledge of a surrounding subtree with at 
+least k nodes. If, before republishing key-value pairs, a node <i>u</i> 
+refreshes all k-buckets in this subtree of k nodes, it will automatically be 
+able to figure out the k closest nodes to a given key. These bucket refreshes 
+can be amortized over the republication of many keys.</font></p>
+<p>This second optimization is sort of straight forward -- if we've done a bucket refresh 
+within the last hour, we can avoid calling FindNode (the node lookup algorithm.)&nbsp; 
+How do we determine the bucket to test if it's been refreshed?&nbsp; The bucket 
+for which the key is in range should contain some closer contacts we've seen for 
+that key.&nbsp; While the answer might be obvious, it's worthwhile to discuss 
+the reasoning here.&nbsp; 
+</p>
+<p>Buckets in the bucket 
+list are maintained in range order rather than in a tree, which naturally orders 
+them by their prefix:</p>
+<table border="1" width="66%">
+	<tr>
+		<td>State</td>
+		<td>Bucket Range(s)</td>
+		<td width="142">Prefix(es)</td>
+	</tr>
+	<tr>
+		<td>Initial Bucket</td>
+		<td>0 .. 2<sup>160</sup></td>
+		<td width="142">1</td>
+	</tr>
+	<tr>
+		<td>Two Buckets</td>
+		<td>0 .. 2<sup>159 |</sup> 2<sup>159</sup> .. 2<sup>160</sup></td>
+		<td width="142">01, 1</td>
+	</tr>
+	<tr>
+		<td>Four Buckets</td>
+		<td>0 .. 2<sup>158</sup> | 2<sup>158</sup> .. 2<sup>159</sup> | 2<sup>159</sup> 
+		- 2<sup>159 </sup>+ 2<sup>158 </sup>| 2<sup>159</sup> - 2<sup>159</sup>+2<sup>158</sup> 
+		.. 2<sup>160</sup></td>
+		<td width="142">001, 01, 10, 1</td>
+	</tr>
+</table>
+<p>When we identify a bucket a given key, the contacts in that bucket are 
+closest, as per the XOR computation on the prefix.&nbsp; For example, looking at 
+the four buckets with prefixes 001, 01, 10, and 1, we see that the contacts in 
+the key's bucket range are closest (closest bucket contacts are in green, 
+farther bucket contacts are in red):</p>
+<table border="1" width="65%">
+	<tr>
+		<td>Key Prefix</td>
+		<td>Key Prefix ^ Bucket Prefixes</td>
+		<td>Explanation</td>
+	</tr>
+	<tr>
+		<td>1</td>
+		<td><b><font color="#FF0000">101, 11, 01</font>, <font color="#00FF00">0</font></b></td>
+		<td>Bucket with prefix 1 always has contacts that are closer</td>
+	</tr>
+	<tr>
+		<td>01</td>
+		<td><b><font color="#FF0000">011</font>, <font color="#00FF00">00</font>,
+		<font color="#FF0000">11, 11</font></b></td>
+		<td>Bucket with prefix 01 always has contacts that are closer</td>
+	</tr>
+	<tr>
+		<td>001</td>
+		<td><b><font color="#00FF00">000</font>,<font color="#FF0000"> 011, 101, 
+		101</font></b></td>
+		<td>Bucket with prefix 001 always has contacts that are closer</td>
+	</tr>
+	<tr>
+		<td>0001</td>
+		<td><b><font color="#00FF00">0011</font>, <font color="#FF0000">0101, 
+		1001, 1001</font></b></td>
+		<td>Bucket with prefix 001 always has contacts that are closer</td>
+	</tr>
+</table>
+<p>So for this reason, we use the bucket for which the key is in range.&nbsp; 
+Also, new key-values that are published onto to closer nodes persist for 24 
+hours.</p>
+<h3>Key Republishing - Implementation</h3>
+<p>One refactoring that has to occur is that the storage mechanism needs to 
+associate a timestamp with the key-value, which you'll see used in the following 
+code.</p>
+<pre>/// &lt;summary&gt;
+/// Replicate key values if the key-value hasn't been touched within the republish interval.
+/// Also don't do a FindNode lookup if the bucket containing the key has been refreshed within the refresh interval.
+/// &lt;/summary&gt;
+protected void KeyValueRepublishElapsed(object sender, ElapsedEventArgs e)
+{
+  DateTime now = DateTime.Now;
+
+  node.Storage.Where(k =&gt; (now - storage.GetTimeStamp(k)).TotalMilliseconds &gt;= Constants.KEY_VALUE_REPUBLISH_INTERVAL).ForEach(k=&gt;
+  {
+    ID kid = new ID(k);
+    KBucket kbucket = node.BucketList.GetKBucket(k);
+    List&lt;Contact&gt; contacts;
+
+    if ((now - kbucket.TimeStamp).TotalMilliseconds &lt; Constants.BUCKET_REFRESH_INTERVAL)
+    {
+      // Bucket has been refreshed recently, so don't do a lookup as we have the k closes contacts.
+      contacts = kbucket.Contacts;
+    }
+    else
+    {
+      // Do a lookup and touch the bucket, since we just did a lookup.
+      contacts = router.Lookup(kid, router.RpcFindNodes).contacts;
+      TouchBucketWithKey(kid);
+    }
+
+    contacts.ForEach(c =&gt; c.Protocol.Store(node.OurContact, kid, storage.Get(k)));
+    storage.Touch(k);
+  });
+}</pre>
+<h3>Over-Caching - Discussion</h3>
+<p><font color="#FF00FF">To avoid &quot;over-caching,&quot; we make the expiration time of 
+a (key,value) pair in any node’s database exponentially inversely proportional 
+to the number of nodes between the current node and the node whose ID is closest 
+to the key ID.</font></p>
+<p>&quot;Inversely proportional&quot; - meaning that the expiration time is shorter the 
+more nodes that are between the current node and the closest node.</p>
+<p>&quot;Exponentially inversely proportional&quot; - meaning the expiration time is <i>a lot 
+shorter</i> the more nodes that are between the current node and closest node.</p>
+<h4>Ambiguity #15</h4>
+<p>The specification provides no guidance for what the calculation for 
+&quot;exponentially inversely proportional&quot; should actually be.&nbsp; It's also 
+undefined as to what the time constants are -- what is a baseline time for which 
+a key-value should persist?&nbsp; It is assumed that this should be a maximum of 
+24 hours.&nbsp; We also need to track an expiration time that is separate 
+from the key-value republish timestamp.&nbsp; Furthermore, up to this point, I 
+haven't implemented the concept of accelerated lookup optimization, which is 
+where the value of <i>b </i>comes from.&nbsp; In this implementation, where we 
+have bucket ranges, rather than a bucket per bit in the key space, the 
+accelerated lookup optimization is irrelevant, so we'll use b==5 which is the 
+spec's recommended value for that optimization. </p>
+<h4>Ambiguity #16</h4>
+<p>Who does the computation &quot;between the current node and the node whose ID is 
+closest to the key ID?&quot;&nbsp; Is the &quot;current node:&quot;</p>
+<ol>
+	<li>The sender that is caching the key-value on another code, and counts the 
+	number of nodes between itself and receiving node?</li>
+	<li>The receiver that is handling the store request, and counts the number 
+	of nodes between itself and the sender node?</li>
+</ol>
+<h4>Ambiguity #17</h4>
+<p>As discussed earlier, the entire concept of having a separate stores 
+(originator, republished, cached) is never discussed in the Kademlia 
+specification.&nbsp; Without understanding these three different stores, trying 
+to understand how caching works is probably impossible.</p>
+<h3>Over-Caching - Implementation</h3>
+<p>Caching occurs in only one place -- when a value being looked up (and 
+successfully found) is stored on a &quot;close&quot; node:</p>
+<pre>...
+var lookup = router.Lookup(key, router.RpcFindValue);
+TouchBucketWithKey(key);
+
+if (lookup.found)
+{
+  ret = (true, null, lookup.val);
+  // Find the first close contact (other than the one the value was found by) in which to *cache* the key-value.
+  var storeTo = lookup.contacts.Where(c =&gt; c != lookup.foundBy).OrderBy(c =&gt; c.ID.Value ^ key.Value).FirstOrDefault();
+
+  if (storeTo != null)
+  {
+    int separatingNodes = GetSeparatingNodesCount(ourContact, storeTo);
+    int expTimeSec = (int)(Constants.EXPIRATION_TIME_SECONDS / Math.Pow(2, separatingNodes));
+    storeTo.Protocol.Store(node.OurContact, key, lookup.val, true, expTimeSec);
+  }
+}
+...</pre>
+<p>In the unit test <code>GetValuePropagatesToCloserNodeTest</code>, we can 
+verify that the key is stored in the close node's<i> cache</i> and that the 
+expiration time is 24 hours / (2<sup>1</sup>) == 12 hours, knowing that the separating node 
+count is 1:</p>
+<pre>Assert.IsTrue(ret.found, &quot;Expected value to be found.&quot;);
+Assert.IsFalse(store3.Contains(key), &quot;Key should not be in the republish store.&quot;);
+Assert.IsTrue(cache3.Contains(key), &quot;Key should be in the cache store.&quot;);
+Assert.IsTrue(cache3.GetExpirationTimeSec(key.Value) == Constants.EXPIRATION_TIME_SECONDS / 2, &quot;Expected 12 hour expiration.&quot;);
+</pre>
+<h3>Never Expiring Republished Key-Values</h3>
+<p>It is reasonable for a cached key-value to expire, but we may never want to 
+expire originator or republished key-values.&nbsp; One good example is a 
+distributed blockchain (or distributed ledger) where data should never 
+disappear, even if the original publisher disappears from the peer network.&nbsp; 
+There are a variety of ways to do this, such as overriding:</p>
+<pre>protected virtual void ExpireKeysElapsed(object sender, ElapsedEventArgs e)
+{
+  RemoveExpiredData(cacheStorage);
+  RemoveExpiredData(republishStorage);
+}</pre>
+<p>so that only the cached store expires.</p>
+<h2>References</h2>
+<p>[1] -
+<a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
+http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>
+</p>
+<p>[2] -
+<a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia">
+https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia</a></p>
+<p>[3] -
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE">
+http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html</a></p>
+<p>[4] -
+<a href="https://github.com/bmuller/kademlia">
+https://github.com/bmuller/kademlia</a></p>
+
+<p>[5] - <a href="https://en.wikipedia.org/wiki/Smart_contract">
+https://en.wikipedia.org/wiki/Smart_contract</a></p>
+<p>[6] -
+<a href="http://sandhill.com/article/is-data-decentralization-the-new-trend/">
+http://sandhill.com/article/is-data-decentralization-the-new-trend/</a></p>
+<p>[7] - <a href="https://arxiv.org/pdf/1506.03471.pdf">
+https://arxiv.org/pdf/1506.03471.pdf</a></p>
+<p>[8] - <a href="https://en.wikipedia.org/wiki/BitTorrent">
+https://en.wikipedia.org/wiki/BitTorrent</a></p>
+<p>[9] - <a href="https://en.wikipedia.org/wiki/Kad_network">
+https://en.wikipedia.org/wiki/Kad_network</a></p>
+<p>[10] - <a href="https://en.wikipedia.org/wiki/Chord_(peer-to-peer)">https://en.wikipedia.org/wiki/Chord_(peer-to-peer)</a> </p>
+<p>[11] - <a href="https://en.wikipedia.org/wiki/Pastry_(DHT)">https://en.wikipedia.org/wiki/Pastry_(DHT)</a> </p>
+<p>[12] -
+<a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html">
+https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html</a> </p>
+
+<p>[13] -
+<a href="https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table">
+https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table</a></p>
+<p>[14] -
+<a href="https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170">
+https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170</a></p>
+<p>[15] - <a href="https://en.wikipedia.org/wiki/Kademlia">
+https://en.wikipedia.org/wiki/Kademlia</a> </p>
+
+[16] - <a href="https://forum.emule-project.net/index.php?showtopic=32335">
+https://forum.emule-project.net/index.php?showtopic=32335</a>
+
+<p>[17] - <a href="http://www.emule-project.net/home/perl/general.cgi?l=1">
+http://www.emule-project.net/home/perl/general.cgi?l=1</a> </p>
+<p>[18] -
+<a href="https://forum.emule-project.net/index.php?showtopic=32335&view=findpost&p=214837">
+https://forum.emule-project.net/index.php?showtopic=32335&amp;view=findpost&amp;p=214837</a> </p>
+<p>[19] - <a href="http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf">
+http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf</a> </p>
+<p>[20] - <a href="http://www.maymounkov.org/kademlia">
+http://www.maymounkov.org/kademlia</a> </p>
+
+<p>[21] - <a href="https://en.wikipedia.org/wiki/Sybil_attack">
+https://en.wikipedia.org/wiki/Sybil_attack</a></p>
+
+</body>
+
+</html>

@@ -1,0 +1,365 @@
+<html>
+
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<title>New Page 1</title>
+</head>
+
+<body>
+
+<h2>Considerations for an Asynchronous Implementation</h2>
+<h3>Thread Safety</h3>
+<p>The entry points to the node:</p>
+<ul>
+	<li>Ping</li>
+	<li>Store</li>
+<li>FindNode</li>
+<li>FindValue</li>
+</ul>
+<p>must be re-entrant.&nbsp; The first issue is with add contacts and the bucket 
+manipulation that occurs.&nbsp; Collections should not be modified while they 
+are searched or otherwise manipulated.&nbsp; The simplest way to handle this is 
+to put a lock around the entire <code>AddContact</code> method:</p>
+<pre>public void AddContact(Contact contact)
+{
+  Validate.IsFalse&lt;OurNodeCannotBeAContactException&gt;(ourID == contact.ID, &quot;Cannot add ourselves as a contact!&quot;);
+
+  lock (this)
+  {
+    ...
+  }
+}</pre>
+<p><img border="0" src="todo.png" width="82" height="32"> There are potentially more optimized approaches such as locking only the 
+specific <code>KBucket</code> being manipulated and only locking the <code>BucketList</code> when it 
+itself is being modified, however I leave those to some other time.</p>
+<p>It is also assumed that the storage implementation can be re-entrant.&nbsp; 
+In the virtual storage, this is handled by <code>ConcurrentDictionary</code> instances:</p>
+<pre>protected ConcurrentDictionary&lt;BigInteger, StoreValue&gt; store;</pre>
+<h3>Parallel Queries - Discussion</h3>
+<p><font color="#FF00FF">The initiator then sends parallel, asynchronous 
+find_node RPCs to the a nodes it has chosen, a is a system-wide concurrency 
+parameter, such as 3.</font></p>
+<p>In the lookup algorithm, Kademlia uses parallel, asynchronous queries to 
+reduce 
+timeout delays from failed nodes.&nbsp; Waiting for at least some of the nodes 
+to respond in each batch of 3 closest nodes gives the system a chance to get 
+even closer nodes to those first set of close nodes with the hope of acquiring
+<i>k</i> closer contacts without having to explore farther contacts.&nbsp;&nbsp;&nbsp; </p>
+<h4>Ambiguity #18</h4>
+<p>It's not particularly clear why all the <i>k</i> closer contacts aren't 
+queried in parallel to start with.&nbsp; Maybe the idea is that you want to try 
+to get closer contacts from already close contacts.&nbsp; Certainly all the 
+contacts could be queried and from the ones that respond first, we can select <i>
+k</i> closer ones.&nbsp; On the other hand, querying all the contacts 
+simultaneously probably results in unnecessary network traffic as many of the 
+FindNode RPC calls will be ignored. </p>
+<h3>Parallel Queries - Implementation</h3>
+<p>The lookup algorithm requires some refactoring, as currently we're passing 
+the collection of nodes to query to the method that makes the RPC call.&nbsp; 
+For example:</p>
+<pre>public (List&lt;Contact&gt; contacts, Contact foundBy, string val) RpcFindNodes(ID key, List&lt;Contact&gt; contacts)
+{
+  List&lt;Contact&gt; nodes = new List&lt;Contact&gt;();
+  contacts.ForEach(c =&gt; nodes.AddRange(c.Protocol.FindNode(node.OurContact, key)));
+
+  return (nodes, null, null);
+}</pre>
+<p>We could tweek this with <code>contacts.AsParallel().ForEach(</code>...) and 
+add a lock on nodes so the return results don't call <code>AddRange</code> simultaneously, 
+but this isn't the right place to do this, as we want to start processing 
+results as they come in.&nbsp; This requires:</p>
+<ol>
+	<li>Calling the RPC function one contact at a time.</li>
+	<li>Changing the algorithm at the top level so that processing continues as 
+	soon as the results appear from the RPC call.</li>
+</ol>
+<h4>The BaseRouter</h4>
+<p>For unit testing, it's useful to keep the non-parallel implementation, but 
+ideally both parallel and non-parallel calls to the <code>Router</code> should be made in the 
+same way.&nbsp; An abstract <code>BaseRouter</code> class allows for this:</p>
+<pre>public abstract class BaseRouter
+{
+  ...
+  public abstract (bool found, List&lt;Contact&gt; contacts, Contact foundBy, string val) Lookup(
+    ID key,
+    Func&lt;ID, List&lt;Contact&gt;, (List&lt;Contact&gt; contacts, Contact foundBy, string val)&gt; rpcCall,
+    bool giveMeAll = false);
+  ...
+}</pre>
+<p>We then pass the desired router to the <code>Dht</code> constructors:</p>
+<pre>public Dht(ID id, IProtocol protocol, Func&lt;IStorage&gt; storageFactory, BaseRouter router)
+...
+public Dht(ID id, IProtocol protocol, BaseRouter router, IStorage originatorStorage, IStorage republishStorage, IStorage cacheStorage)
+...</pre>
+<p>Several other methods common to the parallel and non-parallel routers have 
+been moved up to the base class as well, in additional to some extensive 
+refactoring around the fact that we're now passing only one contact, rather than 
+a list of contacts, to the RPC methods to query with either FindNode or 
+FindValue.</p>
+<p>One of the important pieces when multi-threading the GetCloserNodes method is 
+to ensure that threads don't simultaneously update the closer and farther 
+contact lists:</p>
+<pre>public bool GetCloserNodes( ID key,
+Contact nodeToQuery,
+Func&lt;ID, Contact, (List&lt;Contact&gt; contacts, Contact foundBy, string val)&gt; rpcCall,
+List&lt;Contact&gt; closerContacts,
+List&lt;Contact&gt; fartherContacts,
+out string val,
+out Contact foundBy)
+{
+  ...
+  lock (locker)
+  {
+    closerContacts.
+      AddRangeDistinctBy(peersNodes.
+      Where(p =&gt; (p.ID ^ key) &lt; nearestNodeDistance),
+      (a, b) =&gt; a.ID == b.ID);
+  }
+
+  lock (locker)
+  {
+    fartherContacts.
+      AddRangeDistinctBy(peersNodes.
+      Where(p =&gt; (p.ID ^ key) &gt;= nearestNodeDistance),
+      (a, b) =&gt; a.ID == b.ID);
+  }
+  ...
+}</pre>
+<h4>The ParallelRouter</h4>
+<p>The <code>ParallelRouter</code> queues contacts to query, in addition to some other 
+information each thread needs to know about when executing the RPC call.</p>
+<pre>public class ContactQueueItem
+{
+  public ID Key { get; set; }
+  public Contact Contact { get; set; }
+  public Func&lt;ID, Contact, (List&lt;Contact&gt; contacts, Contact foundBy, string val)&gt; RpcCall { get; set; }
+  public List&lt;Contact&gt; CloserContacts { get; set; }
+  public List&lt;Contact&gt; FartherContacts { get; set; }
+}</pre>
+<p>The <code>ParallelRouter</code> also initializes an internal thread pool:</p>
+<pre>protected void InitializeThreadPool()
+{
+  threads = new List&lt;Thread&gt;();
+  Constants.MAX_THREADS.ForEach(() =&gt;
+  {
+    Thread thread = new Thread(new ThreadStart(RpcCaller));
+    thread.IsBackground = true;
+    thread.Start();
+  });
+}</pre>
+<p>Work is queued and a semaphore is released for a thread to pick up the work:</p>
+<pre>protected void AddToQueue(
+  ID key,
+  Contact contact,
+  Func&lt;ID, Contact, (List&lt;Contact&gt; contacts, Contact foundBy, string val)&gt; rpcCall,
+  List&lt;Contact&gt; closerContacts,
+  List&lt;Contact&gt; fartherContacts
+)
+{
+  contactQueue.Enqueue(new ContactQueueItem()
+  {
+    Key = key,
+    Contact = contact,
+    RpcCall = rpcCall,
+    CloserContacts = closerContacts,
+    FartherContacts = fartherContacts
+  });
+
+  semaphore.Release();
+}</pre>
+<p>Each thread dequeues an item for work in the <code>RpcCaller</code> method:</p>
+<pre>protected void RpcCaller()
+{
+  while (true)
+  {
+    semaphore.WaitOne();
+    ContactQueueItem item;
+
+    if (contactQueue.TryDequeue(out item))
+    {
+      string val;
+      Contact foundBy;
+
+      if (GetCloserNodes(
+        item.Key,
+        item.Contact,
+        item.RpcCall,
+        item.CloserContacts,
+        item.FartherContacts,
+        out val,
+        out foundBy))
+      {
+        if (!stopWork)
+        {
+          // Possible multiple &quot;found&quot;
+          lock (locker)
+          {
+            item.FindResult.Found = true;
+            item.FindResult.FoundBy = foundBy;
+            item.FindResult.FoundValue = val;
+            item.FindResult.FoundContacts = new List&lt;Contact&gt;(item.CloserContacts);
+          }
+        }
+      }
+    }
+  }
+}</pre>
+<p>The salient point with the above code is that when a value is found, it takes 
+a snapshot of the current closer contacts and stores all the information about a 
+closer contact in fields belonging to the <code>ParallelLookup</code> class.</p>
+<p>The ParallelRouter must terminate its search after a certain amount of time, 
+which handles unresponsive contacts.&nbsp; Whenever a response is received and 
+new contacts are added to the list of contacts that can be queried, a timer is 
+reset.&nbsp; The Lookup call exits when a value is found (for FindValue), or <i>
+k</i> closer contacts have been found, or the time period expires:</p>
+<pre>/// &lt;summary&gt;
+/// Sets the time of the query to now.
+/// &lt;/summary&gt;
+protected void SetQueryTime()
+{
+  now = DateTime.Now;
+}
+
+/// &lt;summary&gt;
+/// Returns true if the query time has expired.
+/// &lt;/summary&gt;
+protected bool QueryTimeExpired()
+{
+  return (DateTime.Now - now).TotalMilliseconds &gt; Constants.QUERY_TIME;
+}</pre>
+<p>The <code>Lookup</code> inner loop is the where the work is done, as with the non-parallel 
+version, but notice instead how work is queued and we wait for responses -- 
+particularly the check for whether we've waited long enough in the <code>haveWork</code> 
+assignment:</p>
+<pre>...
+ret.AddRangeDistinctBy(closerContacts, (a, b) =&gt; a.ID == b.ID);
+
+while (ret.Count &lt; Constants.K &amp;&amp; haveWork)
+{
+  Thread.Sleep(Constants.RESPONSE_WAIT_TIME);
+
+  if (ParallelFound(findResult, ref foundReturn))
+  {
+    StopRemainingWork();
+
+    return foundReturn;
+  }
+
+  List&lt;Contact&gt; closerUncontactedNodes = closerContacts.Except(contactedNodes).ToList();
+  List&lt;Contact&gt; fartherUncontactedNodes = fartherContacts.Except(contactedNodes).ToList();
+  bool haveCloser = closerUncontactedNodes.Count &gt; 0;
+  bool haveFarther = fartherUncontactedNodes.Count &gt; 0;
+
+  haveWork = haveCloser || haveFarther || !QueryTimeExpired();
+
+  // Spec: Of the k nodes the initiator has heard of closest to the target...
+  if (haveCloser)
+  {
+    // We're about to contact these nodes.
+    var alphaNodes = closerUncontactedNodes.Take(Constants.ALPHA);
+    contactedNodes.AddRangeDistinctBy(alphaNodes, (a, b) =&gt; a.ID == b.ID);
+    alphaNodes.ForEach(n =&gt; AddToQueue(key, n, rpcCall, closerContacts, fartherContacts));
+    SetQueryTime();
+  }
+  else if (haveFarther)
+  {
+    // We're about to contact these nodes.
+    var alphaNodes = fartherUncontactedNodes.Take(Constants.ALPHA);
+    contactedNodes.AddRangeDistinctBy(alphaNodes, (a, b) =&gt; a.ID == b.ID);
+    alphaNodes.ForEach(n =&gt; AddToQueue(key, n, rpcCall, closerContacts, fartherContacts));
+    SetQueryTime();
+  }
+}
+</pre>
+<p>We can now take the Dht tests for non-parallel version and create parallel 
+versions of those tests, passing in the ParallelRouter instead:</p>
+<pre>Dht dht = new Dht(ID.RandomID, vp, () =&gt; new VirtualStorage(), new ParallelRouter());</pre>
+<p><img border="0" src="parallelTests.png" width="298" height="143"></p>
+<p>A potential problem occurs when there are threads still waiting for a 
+response and that response possibly occurs at some point after the <code>Lookup</code> method 
+exits.&nbsp; We deal with this in several ways:</p>
+<ol>
+	<li>Remove all pending queued work with <code>DequeueRemainingWork();</code>&nbsp;</li>
+	<li>Copy the closer contacts collection when executing the FindValue RPC 
+	call: <code>foundContacts = item.CloserContacts.ToList();</code>&nbsp; </li>
+	<li>Setting a &quot;stop work&quot; flag that ignores any further FindValue RPC 
+	successful return values for the current lookup.</li>
+	<li>Using a local (per-lookup call) <code>findResult</code> instance.</li>
+	<li>Using a common <code>locker</code> object to prevent both closer/farther 
+	contacts from being updated as well as updating the values in the <code>findResult</code> 
+	instance.</li>
+	<li>Using local closer/farther/contacted lists per lookup, such that any 
+	remaining thread will update only the collections associated with its 
+	current work item, which is why <code>ContactQueueItem</code> includes the 
+	closer/farther collections as well as the <code>findResult</code> instance in which to 
+	store any found value.</li>
+</ol>
+<p>This ensures that even if there are threads still performing work on a 
+previous lookup, they do not affect the results of the current lookup.</p>
+<p><img border="0" src="note.png" width="24" height="32"> While the use of a single <code>locker</code> for blocking updates to collections <i>and</i> 
+the updating the find value is slightly inefficient, it avoids using nested 
+locks, otherwise the thread, when if finds a value, would technically have to 
+lock both the <code>closerContacts</code> collection and the <code>findResult</code> instance.</p>
+<p><img border="0" src="important.png" width="38" height="32"> The Lookup method 
+itself is not intended to be re-entrant.</p>
+<h2>References</h2>
+<p>[1] -
+<a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
+http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>
+</p>
+<p>[2] -
+<a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia">
+https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia</a></p>
+<p>[3] -
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE">
+http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html</a></p>
+<p>[4] -
+<a href="https://github.com/bmuller/kademlia">
+https://github.com/bmuller/kademlia</a></p>
+
+<p>[5] - <a href="https://en.wikipedia.org/wiki/Smart_contract">
+https://en.wikipedia.org/wiki/Smart_contract</a></p>
+<p>[6] -
+<a href="http://sandhill.com/article/is-data-decentralization-the-new-trend/">
+http://sandhill.com/article/is-data-decentralization-the-new-trend/</a></p>
+<p>[7] - <a href="https://arxiv.org/pdf/1506.03471.pdf">
+https://arxiv.org/pdf/1506.03471.pdf</a></p>
+<p>[8] - <a href="https://en.wikipedia.org/wiki/BitTorrent">
+https://en.wikipedia.org/wiki/BitTorrent</a></p>
+<p>[9] - <a href="https://en.wikipedia.org/wiki/Kad_network">
+https://en.wikipedia.org/wiki/Kad_network</a></p>
+<p>[10] - <a href="https://en.wikipedia.org/wiki/Chord_(peer-to-peer)">https://en.wikipedia.org/wiki/Chord_(peer-to-peer)</a> </p>
+<p>[11] - <a href="https://en.wikipedia.org/wiki/Pastry_(DHT)">https://en.wikipedia.org/wiki/Pastry_(DHT)</a> </p>
+<p>[12] -
+<a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html">
+https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html</a> </p>
+
+<p>[13] -
+<a href="https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table">
+https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table</a></p>
+<p>[14] -
+<a href="https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170">
+https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170</a></p>
+<p>[15] - <a href="https://en.wikipedia.org/wiki/Kademlia">
+https://en.wikipedia.org/wiki/Kademlia</a> </p>
+
+[16] - <a href="https://forum.emule-project.net/index.php?showtopic=32335">
+https://forum.emule-project.net/index.php?showtopic=32335</a>
+
+<p>[17] - <a href="http://www.emule-project.net/home/perl/general.cgi?l=1">
+http://www.emule-project.net/home/perl/general.cgi?l=1</a> </p>
+<p>[18] -
+<a href="https://forum.emule-project.net/index.php?showtopic=32335&view=findpost&p=214837">
+https://forum.emule-project.net/index.php?showtopic=32335&amp;view=findpost&amp;p=214837</a> </p>
+<p>[19] - <a href="http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf">
+http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf</a> </p>
+<p>[20] - <a href="http://www.maymounkov.org/kademlia">
+http://www.maymounkov.org/kademlia</a> </p>
+
+<p>[21] - <a href="https://en.wikipedia.org/wiki/Sybil_attack">
+https://en.wikipedia.org/wiki/Sybil_attack</a></p>
+<p>&nbsp;</p>
+
+</body>
+
+</html>

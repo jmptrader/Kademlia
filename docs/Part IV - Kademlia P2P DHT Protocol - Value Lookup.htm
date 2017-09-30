@@ -1,0 +1,255 @@
+<html>
+
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<title>New Page 1</title>
+</head>
+
+<body>
+
+<h2>Value Lookup - Discussion</h2>
+<p>From the spec: <font color="#FF00FF">FIND_VALUE behaves like FIND_NODE - 
+returning (IP address, UDP port, Node ID) triples - with one exception. If the 
+RPC recipient has received a STORE RPC for the key, it just returns the stored 
+value.</font></p>
+<p>That seems clear enough, but we have to consider this part of the spec as 
+well:</p>
+<p><font color="#FF00FF">To find a (key,value) pair, a node starts by performing 
+a lookup to find the k nodes with IDs closest to the key. However, value lookups 
+use FIND_VALUE rather than FIND_NODE RPCS. Moreover, the procedure halts 
+immediately when any node returns the value. For caching purposes, once a lookup 
+succeeds, the requesting node stores the (key,value) pair at the closest node it 
+observed to the key that did not return the value.</font></p>
+<p>We now get to address ambiguity #10: The spec says this: &quot;<font color="#FF00FF">Most 
+operations are implemented in terms of the above lookup procedure.</font>&quot;&nbsp; 
+When we're performing a lookup, the initiator will be using the lookup call for 
+both finding nodes and finding values.&nbsp; If it's finding values, it needs to 
+stop if/when the value is found.&nbsp; </p>
+<h3>Ambiguity #11</h3>
+<p>&nbsp;This statement: <font color="#FF00FF">For caching purposes, once a 
+lookup succeeds, the requesting node stores the (key,value) pair at the closest node it 
+observed to the key that did not return the value.</font> can be ambiguous -- 
+what does &quot;requesting node&quot; mean?&nbsp; Is it the requesting performing the 
+lookup, or the node that made the GetValue request?&nbsp; It would seem to be 
+the former, because &quot;it observed to the key that did not return the value&quot; would 
+otherwise not make any sense.</p>
+<h3>Refactorings</h3>
+<p>We need to some refactoring to pass in 
+the RPC call that we want to make, and how we handle a found value for the FindValue RPC call.</p>
+<h4>Refactoring the Router.Lookup Method</h4>
+<p>We have some major refactoring to do to how lookups are performed.&nbsp; The 
+signature of the Lookup method changes so that:</p>
+<ol>
+	<li>We can pass in the particular RPC call to make.</li>
+<li>We get back either a list of contacts (val will be null) or the found value 
+(contacts will be null.)</li>
+</ol>
+<pre>public virtual (List&lt;Contact&gt; contacts, string val) Lookup(
+  ID key, 
+  Func&lt;ID, List&lt;Contact&gt;, (List&lt;Contact&gt; contacts, string val)&gt; rpcCall, 
+  bool giveMeAll = false)
+{
+  ...</pre>
+<p>We also need to pass the RPC call into <code>GetCloserNodes</code> (which meant 
+refactoring the unit tests!) and test whether it found a value (which will only 
+be true for when the RPC call is for finding values):</p>
+<pre>if (GetCloserNodes(key, rpcCall, nodesToQuery, closerContacts, fartherContacts, out val, out foundBy))
+{
+  return (true, closerContacts, foundBy, val);
+}</pre>
+<p>This stops the lookup immediately when a value is found.&nbsp; There are 
+other refactoring's in the router's <code>Lookup</code> method (for example the method 
+signature) that I'm omitting.</p>
+<h4>Refactoring the GetCloserNodes Method</h4>
+<p>The signature changes:</p>
+<pre>public bool GetCloserNodes(
+  ID key, 
+  Func&lt;ID, List&lt;Contact&gt;, (List&lt;Contact&gt; contacts, string val)&gt; rpcCall, 
+  List&lt;Contact&gt; nodesToQuery, 
+  List&lt;Contact&gt; closerContacts, 
+  List&lt;Contact&gt; fartherContacts,
+  out string val)</pre>
+<p>Also the way we call the RPC changes, and of course, the method now has a 
+return value:</p>
+<pre>var (contacts, foundVal) = rpcCall(key, nodesToQuery);
+val = foundVal;
+List&lt;Contact&gt; peersNodes = contacts.ExceptBy(node.OurContact, c =&gt; c.ID.Value).ExceptBy(nodesToQuery, c =&gt; c.ID.Value).ToList();
+...
+return val != null;</pre>
+<h4>Refactoring the RpcFindNodes Method</h4>
+<p>A minor change here (also handling something we haven't talked about yet), in that we know we're finding only nodes, but we need a 
+unified return with <code>RpcFindValue</code>.&nbsp; Notice the method is now 
+public so that the Dht (discussed later) and our unit tests can specify the 
+appropriate RPC call.</p>
+<pre>public (List&lt;Contact&gt; contacts, Contact foundBy, string val) RpcFindNodes(ID key, List&lt;Contact&gt; contacts)
+{
+  List&lt;Contact&gt; nodes = new List&lt;Contact&gt;();
+  contacts.ForEach(c =&gt; nodes.AddRange(c.Protocol.FindNode(node.OurContact, key)));
+
+  return (nodes, null, null);
+}
+</pre>
+<h3>Adding the RpcFindValue Method</h3>
+<p>The <code>foundBy</code> tuple field will be illustrated later when we talk about the Dht 
+class.</p>
+<pre> /// &lt;summary&gt;
+/// For each contact, call the FindNode and return all the nodes whose contacts responded
+/// within a &quot;reasonable&quot; period of time, unless a value is returned, at which point we stop.
+/// &lt;/summary&gt;
+public (List&lt;Contact&gt; contacts, Contact foundBy, string val) RpcFindValue(ID key, List&lt;Contact&gt; contacts)
+{
+  List&lt;Contact&gt; nodes = new List&lt;Contact&gt;();
+  string retval = null;
+  Contact foundBy = null;
+
+  foreach(Contact c in contacts)
+  {
+    (var otherContacts, var val) = c.Protocol.FindValue(node.OurContact, key);
+
+    if (otherContacts != null)
+    {
+      nodes.AddRange(otherContacts);
+    }
+    else
+    {
+      Validate.IsTrue&lt;ValueCannotBeNullException&gt;(val != null, &quot;Null values are not supported nor expected.&quot;);
+      nodes.Add(c); // The node we just contacted found the value.
+      foundBy = c;
+      retval = val;
+      break;
+    }
+  }
+
+  return (nodes, foundBy, retval);
+}
+</pre>
+<p>After making these structural changes and refactoring the unit tests, they 
+still pass (well, that should be expected, as these changes were really only 
+structural.)&nbsp; </p>
+<p><img border="0" src="note.png" width="24" height="32"> Discussing value 
+lookup tests doesn't make sense outside of the context of the <code>Dht</code> wrapper, so 
+the unit tests for the value lookup will be done in the <code>Dht</code> testing.</p>
+<h2>Value Lookup - Implementation</h2>
+<p>First, we need to implement a simple virtual (in memory) storage mechanism:</p>
+<pre>public class VirtualStorage : IStorage
+{
+  protected Dictionary&lt;BigInteger, string&gt; store;
+
+  public VirtualStorage()
+  {
+    store = new Dictionary&lt;BigInteger, string&gt;();
+  }
+
+  public bool Contains(ID key)
+  {
+    return store.ContainsKey(key.Value);
+  }
+
+  public string Get(ID key)
+  {
+    return store[key.Value];
+  }
+
+  public void Set(ID key, string val)
+  {
+    store[key.Value] = val;
+  }
+}</pre>
+<p>We can get away with using <code>BigInteger</code> as the key to the dictionary as it is a 
+<code>struct</code>.</p>
+<h3>The Store Implementation</h3>
+<p>In the <code>Node</code> class:</p>
+<pre>/// &lt;summary&gt;
+/// Store a key-value pair in our storage space, updating the contact if it's not us.
+/// &lt;/summary&gt;
+public void Store(Contact sender, ID key, string val)
+{
+  Validate.IsFalse&lt;SendingQueryToSelfException&gt;(sender.ID.Value == ourContact.ID.Value, &quot;Sender should not be ourself!&quot;);
+  bucketList.AddContact(sender);
+
+  storage.Set(key, val);
+}
+</pre>
+<h3>The FindValue Implementation</h3>
+<p>In the <code>Node</code> class:</p>
+<pre>/// &lt;summary&gt;
+/// Returns either a list of close contacts or a the value, if the node's storage contains the value for the key.
+/// &lt;/summary&gt;
+public (List&lt;Contact&gt; contacts, string val) FindValue(Contact sender, ID key)
+{
+  Validate.IsFalse&lt;SendingQueryToSelfException&gt;(sender.ID.Value == ourContact.ID.Value, &quot;Sender should not be ourself!&quot;);
+  bucketList.AddContact(sender);
+
+  if (storage.Contains(key))
+  {
+    return (null, storage.Get(key));
+  }
+  else
+  {
+    // Exclude sender.
+    return (bucketList.GetCloseContacts(key, sender.ID), null);
+  }
+}</pre>
+<h2>References</h2>
+<p>[1] -
+<a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
+http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>
+</p>
+<p>[2] -
+<a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia">
+https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia</a></p>
+<p>[3] -
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE">
+http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html</a></p>
+<p>[4] -
+<a href="https://github.com/bmuller/kademlia">
+https://github.com/bmuller/kademlia</a></p>
+
+<p>[5] - <a href="https://en.wikipedia.org/wiki/Smart_contract">
+https://en.wikipedia.org/wiki/Smart_contract</a></p>
+<p>[6] -
+<a href="http://sandhill.com/article/is-data-decentralization-the-new-trend/">
+http://sandhill.com/article/is-data-decentralization-the-new-trend/</a></p>
+<p>[7] - <a href="https://arxiv.org/pdf/1506.03471.pdf">
+https://arxiv.org/pdf/1506.03471.pdf</a></p>
+<p>[8] - <a href="https://en.wikipedia.org/wiki/BitTorrent">
+https://en.wikipedia.org/wiki/BitTorrent</a></p>
+<p>[9] - <a href="https://en.wikipedia.org/wiki/Kad_network">
+https://en.wikipedia.org/wiki/Kad_network</a></p>
+<p>[10] - <a href="https://en.wikipedia.org/wiki/Chord_(peer-to-peer)">https://en.wikipedia.org/wiki/Chord_(peer-to-peer)</a> </p>
+<p>[11] - <a href="https://en.wikipedia.org/wiki/Pastry_(DHT)">https://en.wikipedia.org/wiki/Pastry_(DHT)</a> </p>
+<p>[12] -
+<a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html">
+https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html</a> </p>
+
+<p>[13] -
+<a href="https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table">
+https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table</a></p>
+<p>[14] -
+<a href="https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170">
+https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170</a></p>
+<p>[15] - <a href="https://en.wikipedia.org/wiki/Kademlia">
+https://en.wikipedia.org/wiki/Kademlia</a> </p>
+
+[16] - <a href="https://forum.emule-project.net/index.php?showtopic=32335">
+https://forum.emule-project.net/index.php?showtopic=32335</a>
+
+<p>[17] - <a href="http://www.emule-project.net/home/perl/general.cgi?l=1">
+http://www.emule-project.net/home/perl/general.cgi?l=1</a> </p>
+<p>[18] -
+<a href="https://forum.emule-project.net/index.php?showtopic=32335&view=findpost&p=214837">
+https://forum.emule-project.net/index.php?showtopic=32335&amp;view=findpost&amp;p=214837</a> </p>
+<p>[19] - <a href="http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf">
+http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf</a> </p>
+<p>[20] - <a href="http://www.maymounkov.org/kademlia">
+http://www.maymounkov.org/kademlia</a> </p>
+
+<p>[21] - <a href="https://en.wikipedia.org/wiki/Sybil_attack">
+https://en.wikipedia.org/wiki/Sybil_attack</a></p>
+<p>&nbsp;</p>
+
+<p>&nbsp;</p>
+
+</body>
+
+</html>

@@ -1,0 +1,872 @@
+<html>
+
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<title>New Page 1</title>
+</head>
+
+<body>
+
+<p>Implementing the Kademlia Peer-to-Peer Distributed Hash Table</p>
+<p>
+<img border="0" src="bucketRefresh2.png" width="460" height="463">
+
+</p>
+
+<!-- INSERT contents -->
+
+
+<h2>Introduction</h2>
+<p>Kademlia, according to a paper<sup>1</sup> published in 2015 by Xing Shi Cai 
+and Luc Devoyre, &quot;is the defacto standard searching algorithm for P2P 
+(peer-to-peer) networks on the Internet.&quot;&nbsp; It seemed like a good 
+choice for doing a deep dive in P2P DHT implementations, ideally finding a solid 
+existing implementation rather than rolling my own.&nbsp; Alas, it was not to 
+be.&nbsp; As it turns out, there are two 
+different versions of the specification, both having certain contradictions, 
+particularly the second one.&nbsp; This results in a variety of implementations, 
+and most tend to have a loose interpretation of the contradictory and ambiguous 
+aspects of the specification.&nbsp; 
+On GitHub, I've found only two that appear both reasonably complete and well 
+implemented:</p>
+<ol>
+	<li>zencoders<sup>2</sup> C# implementation appears to be based on the 
+	shorter specification and seems to match Jim Dixon's<sup>3</sup> description 
+	of the algorithm.</li>
+	<li>Brian Muller<sup>4 </sup>has an excellent implementation in Python based 
+	on the longer specification.&nbsp; 
+	</li>
+</ol>
+<p><img border="0" src="note.png" width="24" height="32"> Note that the Python 3.5 branch should be 
+	used, the master branch contains some bugs and is written for Python 2.</p>
+<p>Rarely do I end up with multiple versions of an article.&nbsp; What started 
+off with the intent of &quot;here's the spec, let's find someone that did a decent 
+job coding it&quot; quickly became &quot;here's the spec, let's roll our own using the 
+spec&quot; to &quot;wait, the spec is contradicting itself here, it's confusing there, and 
+ambiguous over there&quot; to &quot;OMG, there's two different versions of the spec!&quot;&nbsp; 
+As a result, this is actually my third pass at writing an article on Kademlia 
+that makes some kind of sense.&nbsp; Special thanks go to Brian Muller who has 
+put up with a lot of my questions about the specification itself.</p>
+<h3>What is Kademlia?</h3>
+<p>From Wikipedia:</p>
+<p><i>Kademlia is a distributed hash table for decentralized peer-to-peer 
+computer networks designed by Petar Maymounkov and David Mazières in 2002. It 
+specifies the structure of the network and the exchange of information through 
+node lookups. Kademlia nodes communicate among themselves using UDP. A virtual 
+or overlay network is formed by the participant nodes. Each node is identified 
+by a number or node ID. The node ID serves not only as identification, but the 
+Kademlia algorithm uses the node ID to locate values (usually file hashes or 
+keywords). In fact, the node ID provides a direct map to file hashes and that 
+node stores information on where to obtain the file or resource.</i></p>
+<h3>Who Uses Kademlia?</h3>
+<p>Kademlia is used in file sharing networks.&nbsp; For example,
+BitTorrent<sup>8</sup> uses a DHT 
+based on an implementation of the Kademlia algorithm.&nbsp;
+Kad network<sup>9</sup> uses the Kademlia protocol, with <a href="https://en.wikipedia.org/wiki/EMule">eMule</a> 
+being an open source Windows client.</p>
+<h3>Why is Kademlia Important?</h3>
+<ol>
+	<li>The underlying technology of not just cryptocurrency but any blockchain, 
+	including those 
+	that implements smart 
+	contracts<sup>,5</sup> must include a peer-to-peer distributed hash 
+	table, at least with regards to how blockchain technology is being discussed 
+	and applied (using a blockchain in a centralized scenario is sort of 
+	pointless except perhaps for logging purposes.)&nbsp; Understanding how this 
+	works is important.</li>
+	<li>Centralized data, except for performance reasons, is
+	on its way out<sup>6</sup></a>.&nbsp; As that last link states: &quot;The more the data 
+	management industry consolidates, the more opposing forces decentralize the 
+	market.&quot;&nbsp; And peer-to-peer decentralizing has built in redundancy 
+	protecting from single-point data loss and access failures.&nbsp; Not that 
+	decentralizing has its own problems -- security will probably be the main 
+	one, if it isn't already.&nbsp; As an aside, read this short paper on
+	Enigma</a><sup>7</sup>.</li>
+</ol>
+<p>While this is a personal venture, it is also a recognition that there are 
+some interesting and complicated technologies coming down the road that need to 
+be properly understood, and protocols like Kademlia are a good starting point 
+for looking at a P2P DHT implementation.&nbsp; As to why Kademlia specifically, 
+the summary to the spec says it best:</p>
+<p><i>&quot;With its novel XOR-based metric topology, Kademlia is the first 
+peer-to-peer system to combine provable consistency and performance, 
+latency-minimizing routing, and a symmetric, unidirectional topology. Kademlia 
+furthermore introduces a concurrency parameter, a, that lets people trade a 
+constant factor in bandwidth for asynchronous lowest-latency hop selection and 
+delay-free fault recovery. Finally, Kademlia is the first peer-to-peer system to 
+exploit the fact that node failures are inversely related to uptime.&quot;</i></p>
+<h3>Where did the Name Come From?</h3>
+<p>As <a href="http://www.maymounkov.org/kademlia">Petar Maymounkov</a>, one of 
+the co-creators of Kademlia says: &quot;it is a Turkish word for a “lucky man” and, 
+more importantly, is the name of a mountain peak in Bulgaria.&quot;&nbsp; OK then.</p>
+<h3>Concerns with Existing Implementation</h3>
+<p>My major issue with zencoders C# implementation is that it is entangled with 
+the intended application -- a P2P audio file application.&nbsp; Brian Muller's 
+implementation is a straight forward library.&nbsp; In perusing numerous GitHub 
+repo's, I found many implementations that were incomplete or clearly buggy, 
+simply by inspecting the code.&nbsp; Beware of what's out there!</p>
+<h3>Other Languages</h3>
+<p>I have not looked carefully at implementations in other languages, those being 
+primarily written in Java and Javascript (personal lack of interest in those 
+languages) and Go (lack of familiarity with the language makes it difficult to 
+read.)&nbsp; Looking briefly at implementations in these other languages, it's 
+fairly easy to tell which version of the specification they implement, so again, 
+beware that depending on which specification the author worked with, you can 
+have very different implementations.&nbsp; For example, an implementation in 
+Java makes a very specific (yet seemingly arbitrary) rule about bucket splitting 
+(we'll get to that) that isn't found in the spec.</p>
+<h3>Requirements</h3>
+<p>C# 7 with .NET framework 4.7 is required to build this code.</p>
+<h3>Resources Used In This Research</h3>
+<p>What I call Version 1 of the Kademlia specification:
+<a href="http://www.cs.rice.edu/Conferences/IPTPS02/109.pdf">
+http://www.cs.rice.edu/Conferences/IPTPS02/109.pdf</a></p>
+<p>What I call Version 2 of the Kademlia specification:
+<a href="https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf">
+https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf</a></p>
+<p>Mike De Boer's description of k-buckets:
+<a href="https://github.com/mikedeboer/node-k-bucket">
+https://github.com/mikedeboer/node-k-bucket</a></p>
+<p>Brian Muller's Python implementation:
+<a href="https://github.com/bmuller/kademlia">
+https://github.com/bmuller/kademlia</a></p>
+<p>zencoders' implementation:
+<a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia">
+https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia</a></p>
+<p>Jim Dixon's post on the two different versions of the specification:
+<a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00039.html">
+https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00039.html</a></p>
+<p>Jim Dixon's description of the shorter specification:
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE">
+http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE</a></p>
+<p>Jim Dixon's description of Section 2.4 of the specification:
+<a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html">
+https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html</a> </p>
+<p>Implementation of Kademlia Distributed Hash Table, Semester Thesis Writen by 
+Bruno Spori, Swiss Federal Institute of Technology Zurich:
+<a href="http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf">
+http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf</a> </p>
+<p>Distributed Hash Tables and Self Organizing Networks, lecture by Jonathan 
+Perry, MIT:&nbsp;
+<a href="http://css.csail.mit.edu/6.824/2014/notes/dht/dht.pdf">
+http://css.csail.mit.edu/6.824/2014/notes/dht/dht.pdf</a> </p>
+<h3>Other Resources To Further This Work</h3>
+<p>IPFS - Content Addressed, Versions, P2P File System (Draft 3):
+<a href="https://ipfs.io/ipfs/QmR7GSQM93Cx5eAg6a6yRzNde1FQv7uL6X1o4k7zrJa3LX/ipfs.draft3.pdf">
+https://ipfs.io/ipfs/QmR7GSQM93Cx5eAg6a6yRzNde1FQv7uL6X1o4k7zrJa3LX/ipfs.draft3.pdf</a></p>
+<p>S/Kademlia: A Practicable Approach Towards Secure Key-Based Routing:
+<a href="http://www.tm.uka.de/doc/SKademlia_2007.pdf">
+http://www.tm.uka.de/doc/SKademlia_2007.pdf</a></p>
+<p>Improving Lookup Performance over a Widely-Deployed DHT:
+<a href="http://www.barsoom.org/papers/infocom-2006-kad.pdf">
+http://www.barsoom.org/papers/infocom-2006-kad.pdf</a> </p>
+<p>Review on Detection and Mitigation of Sybil attack in the network, Procedia 
+Computer Science 78 (2016) 395-401:
+<a href="https://tinyurl.com/y9a7ekzy">https://tinyurl.com/y9a7ekzy</a> </p>
+<h4>Distributed Ledgers</h4>
+<p>Flowchain: A Case Study on Building a Blockchain for the IoT:
+<a href="http://schd.ws/hosted_files/lc3china2017/43/Flowchain-LC3_2017_Beijing-20170614.pdf">
+http://schd.ws/hosted_files/lc3china2017/43/Flowchain-LC3_2017_Beijing-20170614.pdf</a> </p>
+<p>Distributed Ledger Technology: beyond block chain, A report by the UK 
+Government Chief Scientific Adviser:
+<a href="https://www.gov.uk/government/uploads/system/uploads/attachment_data/file/492972/gs-16-1-distributed-ledger-technology.pdf">
+https://www.gov.uk/government/uploads/system/uploads/attachment_data/file/492972/gs-16-1-distributed-ledger-technology.pdf</a> </p>
+<h3>Things Kademlia Doesn't Address</h3>
+<p>Some of the things the specification does not address:</p>
+<ul>
+	<li>Key collisions in key-values.&nbsp; While improbable, the best way to 
+	mitigate this is to have your own peer create a random key for you, so we 
+	don't all create a key called &quot;Nancy's Number.&quot;</li>
+	<li>Peer ID collision - again, the node ID should be created for you, so we 
+	don't all create peers called &quot;Marc's Peer.&quot;</li>
+	<li>Encrypting of values.</li>
+	<li>Privacy of keys - while not practical with today's technology, a 
+	malicious peer could query for stored values across the entire 2<sup>160</sup> 
+	key space.</li>
+	<li>Serialization format of packets sent over the wire.</li>
+	<li>Ability to limit what a peer stores based on value length.&nbsp; I 
+	certainly don't want to store the value for the key &quot;TheWholeInternet.&quot;</li>
+	<li>Private peer groups -- joining a public P2P network but creating a 
+	private peer group within the network.</li>
+	<li>Partial participation -- What if you want to participate in a peer network for storing / 
+	retrieving key-values, but don't want to store key-values yourself?&nbsp; 
+	Perhaps you're running an IoT device with limited storage?</li>
+	<li>Registering multiple peer ID's from the same network address - this is 
+	of particular concern because you can use this to degrade the performance of 
+	a peer, as discussed in the section "Degrading a Kademlia Peer."</li>
+	<li>Our peer tampering with a value when it propagates the value to other 
+	peers.&nbsp; This can be remedied by including a public key to ensure the 
+	value hasn't been changed.&nbsp; And while it's strange to say &quot;our peer&quot;, 
+	it becomes an issue when you download a peer application and you have no 
+	idea what's going on inside -- and even if you had the source, would you 
+	look, and know where to look?</li>
+</ul>
+<h3>What is Accomplished Here</h3>
+<p>The goal in this article is to:</p>
+<ol>
+	<li>Map specification with implementation.</li>
+<li>Discover any areas of concern with the specification.</li>
+	<li>Abstract key areas of the design so that:<ol>
+		<li>Different implementations can be selected.</li>
+	<li>Different communication protocols can be used.</li>
+		<li>The algorithm can be easily unit tested.</li>
+	</ol>
+</li>
+</ol>
+<h3>Notation</h3>
+<p>In this document, <font color="#FF00FF">fuchsia text</font> is used when 
+quoting from the Kademlia specification and other documents.</p>
+<h3>A Word About the Unit Tests</h3>
+<p>Some of the unit tests set up specific conditions for testing code.&nbsp; 
+Others use a randomly generated ID's (node ID's and keys) and verify results 
+through a different implementation of the same algorithm.&nbsp; Those tests 
+should probably be revised to set up specific conditions.&nbsp; To mitigate 
+one's horror at using random values in unit tests, the Random class is seed in 
+debug mode with the same value, and is exposed as a public static field so that 
+some unit tests can perform their tests with a range of seeds:</p>
+<pre>#if DEBUG
+public static Random rnd = new Random(1);
+#else
+private static Random rnd = new Random();
+#endif</pre>
+<p>At some point I might put more work into improving the unit tests and 
+removing the random ID key generation, except for the distribution tests of 
+course.</p>
+<p>Also, most of these unit tests are really system-level tests, or at least 
+partial system tests.&nbsp; Actual unit tests of specific code sections in a 
+particular method, well, it gets inane rather quickly.&nbsp; So you'll see a lot 
+of setup stuff being done in the higher level tests.</p>
+<h3>A Word About the Code&nbsp; </h3>
+<p>The code presented here is incremental, meaning that as additional features 
+are discussed and added, code is updated to reflect those new features and their 
+unit tests.&nbsp; Not every refactoring is included in the code here, therefore 
+its strongly recommended if you're interested in a particular method, use the 
+final implementation in the actual code base.</p>
+<p>The latest update to the code and the documentation can be found on GitHub:
+<a href="https://github.com/cliftonm/Kademlia">
+https://github.com/cliftonm/Kademlia</a> </p>
+<h2>Key Concepts</h2>
+<p>The Kademlia specification essentially consists of several sub-algorithms:</p>
+<ol>
+	<li>Registering new peers.</li>
+	<li>Updating peer lists.</li>
+	<li>Obtaining the closest peer to a key.</li>
+<li>Storing and retrieving key-values.</li>
+	<li>Managing stale key-value pairs and peers</li>
+</ol>
+<p>The most complex part of the code is in the registration of new peers, as 
+this involves some magic numbers based on the authors' research into the 
+performance of other networks as Chord<sup>10</sup> and Pasty<sup>11</sup> and 
+the behavior of peers in those networks.</p>
+<h3>General Terminology</h3>
+<p>There are several terms used in general discussions of P2P systems.</p>
+<h4>Overlay Network</h4>
+<p>An overlay network is one in which each node keeps a (usually partial) list 
+of other nodes participating in the network.</p>
+<h3>Kademlia Terminology</h3>
+<p>Terms used specifically in the Kademlia specification are described here.</p>
+<h4>Node</h4>
+<p>A node (also known as a contact) is a peer in the network.</p>
+<h4>Node ID</h4>
+<p>This is a 160 bit node identifier, obtained from a SHA1 hash.</p>
+<h4>k-Bucket</h4>
+<p>A collection of at most <i>k</i> nodes (or contacts.)&nbsp; Also simply 
+	called a bucket.&nbsp; Each node handles up to <i>k</i> contacts within a 
+range of ID's.&nbsp; Initially, the ID range is the entire spectrum from 0 &lt;= id 
+&lt;= 2<sup>160</sup> - 1.</p>
+<h4>Key-Value</h4>
+<p>Peers store values based on 160 bit SHA1 hashed keys.&nbsp; Each stored entry 
+consists of a key-value pair.</p>
+<h4>Router</h4>
+<p>The router manages the collection of k-buckets and also determines into which 
+nodes a key-value should be stored.</p>
+<h4>Distance / &quot;Closeness&quot;</h4>
+<p>The distance between a host and the key is an XOR computation of the host's 
+ID with the key.&nbsp; </p>
+<h4>Prefix</h4>
+<p>A prefix is the term used to describe the <i>n</i> most significant bits (MSB) of an ID.&nbsp; </p>
+<h4>Depth</h4>
+<p>The depth of a bucket is defined as the shared prefix of a bucket.&nbsp; 
+Since buckets are associated with ranges from 2<sup>i</sup> to 2<sup>i+1</sup> - 
+1 where 0 &lt;= i &lt; 160, one could say that the depth of a bucket is 160 - i.&nbsp; 
+We'll see later that this may not be the case.</p>
+<h4>Bucket Split</h4>
+<p>A bucket split is something potentially happens when a node's k-bucket is 
+full -- meaning it has <i>k</i> contacts -- and a new contact wants to register 
+within the bucket's range.&nbsp; At this point, an algorithm kicks in that:</p>
+<ol>
+	<li>Under one condition, splits the bucket at the range midpoint into two 
+	ranges, placing contacts into the appropriate new buckets.</li>
+	<li>Under a second condition, splits the bucket when a specific depth 
+	qualifier is met.</li>
+</ol>
+<p>If the bucket can't be split, there is a third fallback that replaces an old 
+contact that is no longer responding with the new contact.</p>
+<h3>Communication Protocol</h3>
+<p>The Kademlia protocol consists of four Remote Procedure Calls (RPC's).&nbsp; 
+All RPC's require that the sender provides a random RPC ID which must be echoed 
+by the recipient: <font color="#FF00FF">In all RPCs, the recipient must echo a 
+160-bit random RPC ID, which provides some resistance to address forgery, PINGS 
+can also be piggy-backed on RPC replies for the RPC recipient to obtain 
+additional assurance of the sender’s network address.</font></p>
+<p>Any time a peer is contacted with any of the four RPC's, it goes through the 
+process of adding/updating the contact in its own list.&nbsp; In the description 
+below, the concept of &quot;closeness&quot; will be discussed in detail later.</p>
+<h4>Ping</h4>
+<p><font color="#FF00FF">The PING RPC probes a node to see if it is online.</font>&nbsp; 
+This is considered a &quot;primitive&quot; function, in that it just returns the random 
+RPC ID that accompanied the Ping request.</p>
+<h4>Store</h4>
+<p>STORE instructs a node to store a (key, value) pair for later retrieval.&nbsp; 
+This is also considered a &quot;primitive&quot; function, as it again just returns the 
+random RPC ID that accompanied the Store request.&nbsp; <font color="#FF00FF">To 
+store a (key,value) pair, a participant locates the k closest nodes to the key 
+and sends them STORE RPCS.</font>&nbsp; The participant does this by inspecting 
+its own k closest nodes to the key.</p>
+<h4>Find Node</h4>
+<p><font color="#FF00FF">FIND_NODE takes a 160-bit ID as an argument. The 
+recipient of a the RPC returns (IP address, UDP port, Node ID) triples for the k 
+nodes it knows about closest to the target ID. These triples can come from a 
+single k-bucket, or they may come from multiple k-buckets if the closest 
+k-bucket is not full. In any case, the RPC recipient must return k items (unless 
+there are fewer than k nodes in all its k-buckets combined, in which case it 
+returns every node it knows about).</font></p>
+<p>In an abstracted communication protocol, the recipient needs to return 
+information about the protocol -- the kind of protocol and whatever is required 
+to contact a peer using that protocol.&nbsp; If multiple protocols are 
+supported, we can consider two options:</p>
+<ol>
+	<li>Return node information only for the protocols that the requester says 
+	it supports.</li>
+	<li>Alternatively (and not as good an option) is for the requester to filter 
+	out returned nodes whose protocols aren't supported.</li>
+</ol>
+<p>Other considerations when supporting multiple protocols are:</p>
+<ul>
+	<li>The peer itself may support multiple protocols, so it should probably 
+	indicate what those are when it registers with another peer.</li>
+	<li>The peer may have a preferred protocol.</li>
+</ul>
+<p>None of the issues of different protocols is discussed in the spec, this is 
+purely my own enhancement.</p>
+<p>The Find Node protocol has several purposes:</p>
+<ul>
+	<li>A peer can issue this RPC on contacts it knows about, updating its own 
+	list of &quot;close&quot; peers.</li>
+<li>A peer may issue this RPC to discover other peers on the network.</li>
+</ul>
+<h4>Find Value</h4>
+<p><font color="#FF00FF">FIND_VALUE behaves like FIND_NODE - returning (IP 
+address, UDP port, Node ID) triples - with one exception. If the RPC recipient 
+has received a STORE RPC for the key, it just returns the stored value.</font></p>
+<p>If the Find Value RPC returns a list of other peers, it is up to the 
+requester to continue searching for the desired value from that list.&nbsp; 
+Also, note this technique for caching key-values:</p>
+<p><font color="#FF00FF">To find a (key,value) pair, a node starts by performing 
+a lookup to find the k nodes with IDs closest to the key. However, value lookups 
+use FIND_VALUE rather than FIND_NODE RPCS. Moreover, the procedure halts 
+immediately when any node returns the value. For caching purposes, once a lookup 
+succeeds, the requesting node stores the (key,value) pair at the closest node it 
+observed to the key that did not return the value.</font></p>
+<h3>Other Considerations</h3>
+<h4>Expiration Time</h4>
+<p><font color="#FF00FF">Additionally, each node re-publishes (key,value) pairs 
+as necessary to keep them alive, as described later in Section 2.5. This ensures 
+persistence (as we show in our proof sketch) of the (key,value) pair with very 
+high probability. For Kademlia’s current application (file sharing), we also 
+require the original publisher of a (key,value) pair to republish it every 24 
+hours. Otherwise, (key,value) pairs expire 24 hours after publication, so as to 
+limit stale index information in the system. For other applications, such as 
+digital certificates or cryptographic hash to value mappings, longer expiration 
+times may be appropriate.</font></p>
+<p>If we want to consider using Kademlia in a distributed ledger 
+implementation, it would seem necessary that key-values never expire, otherwise 
+this would result in an integrity loss of the ledger data.</p>
+<h4>Over-caching</h4>
+<p><font color="#FF00FF">Because of the uni-directionality of the topology, 
+future searches for the same key are likely to hit cached entries before 
+querying the closest node. During times of high popularity for a certain key, 
+the system might end up caching it at many nodes. To avoid “over-caching,” we 
+make the expiration time of a (key,value) pair in any node’s database 
+exponentially inversely proportional to the number of nodes between the current 
+node and the node whose ID is closest to the key ID. While simple LRU eviction 
+would result in a similar lifetime distribution, there is no natural way of 
+choosing the cache size, since nodes have no a priori knowledge of how many 
+values the system will store.</font></p>
+<h4>Bucket Refreshes</h4>
+<p><font color="#FF00FF">Buckets are generally kept fresh by the traffic of 
+requests traveling through nodes. To handle pathological cases in which there 
+are no lookups for a particular ID range, each node refreshes any bucket to 
+which it has not performed a node lookup in the past hour. Refreshing means 
+picking a random ID in the bucket’s range and performing a node search for that 
+ID.</font></p>
+<h4>Joining a Network</h4>
+<p><font color="#FF00FF">To join the network, a node <i>u</i> must have a 
+contact to an already participating node <i>w</i>. <i>u</i> inserts <i>w</i> 
+into the appropriate k-bucket. <i>u</i> then performs a node lookup for its own 
+node ID. Finally, <i>u</i> refreshes all k-buckets further away than its closest 
+neighbor. During the refreshes, <i>u</i> both populates its own k-buckets and 
+inserts itself into other nodes’ k-buckets as necessary.</font></p>
+<h2>Node Requirements</h2>
+<p>Let's cover some basic implementation requirements for a node first.&nbsp; </p>
+<h3>The BigInteger Class</h3>
+<p>We could write our own byte array manipulation and comparison operators, 
+which is what zencoders did, or we could use the <code>BigInteger</code> class to handle the 
+range of ID's from 0 &lt;= id &lt;= 2<sup>160</sup> - 1.&nbsp; In ended up using 
+<code>BigInteger</code> has simply made the code smaller.&nbsp; As a side node, I was 
+impressed with Python's ability to handle these values without any special 
+classes:</p>
+<pre>&gt;&gt;&gt; 2 ** 160
+1461501637330902918203684832716283019655932542976L</pre>
+<h3>The Node Specification</h3>
+<p> <font color="#FF00FF">Participating computers each have a node ID in the 
+160-bit key space </font>(Introduction) which is simple enough.&nbsp; </p>
+<h4>Ambiguity #1</h4>
+<p>But then there's this:&nbsp; <font color="#FF00FF">Kademlia nodes store 
+contact information about each other to route query messages. For each 0 &lt; i &lt; 
+160, every node keeps a list of [contacts] of distance between 2<sup>i</sup> and 
+2<sup>i+1</sup> from itself.&nbsp; We call these lists k-buckets.&nbsp; <i>k</i> 
+is chosen such that any given k nodes are very unlikely to fail within an hour 
+of each other (for example k = 20). </font>
+(Section 2.2)<font color="#FF00FF"> </font>
+How is this distance defined?&nbsp; Is this the XOR distance or the integer 
+distance?&nbsp; And when the spec says &quot;distance from itself&quot;, what two values 
+are being compared?&nbsp; Why even make this comparison?</p>
+<h4>Contradiction #1</h4>
+<p><font color="#FF00FF">Initially, a node u’s routing tree has a single node— 
+one k-bucket covering the entire ID space.</font>&nbsp; (Section 2.4)&nbsp; So 
+from Section 2.2, we have each node contain 159 k-buckets (0 &lt; i &lt; 160) covering 
+2<sup>i</sup> through 2<sup>i+1</sup>, and from Section 2.4, we have a node 
+initialized with one k-bucket.&nbsp; You can see the former specification implemented 
+in zencoders code:</p>
+<pre>private const int BUCKET_SIZE = 20; // &quot;K&quot; in the spec
+private const int NUM_BUCKETS = 8 * ID.ID_LENGTH; // One per bit in an ID
+
+private List&lt;List&lt;Contact&gt;&gt; buckets;
+private List&lt;DateTime&gt; accessTimes; // last bucket write or explicit touch
+private ID ourID;
+
+/// &lt;summary&gt;
+/// Make a new bucket list, for holding node contacts.
+/// &lt;/summary&gt;
+/// &lt;param name=&quot;ourID&quot;&gt;The ID to center the list on.&lt;/param&gt;
+public BucketList(ID ourID)
+{
+  this.ourID = ourID;
+  buckets = new List&lt;List&lt;Contact&gt;&gt;(NUM_BUCKETS);
+  accessTimes = new List&lt;DateTime&gt;();
+
+  // Set up each bucket
+  for(int i = 0; i &lt; NUM_BUCKETS; i++) 
+  {
+    buckets.Add(new List&lt;Contact&gt;(BUCKET_SIZE));
+    accessTimes.Add(default(DateTime));
+  }
+}</pre>
+<p>Here <code>8 * ID.ID_LENGTH</code> (8 * 20 = 160) buckets are created at the 
+get go, each with 20 contacts (the suggested <i>k</i> value.)&nbsp; This is 
+hard-wired in the zencoders implementation.</p>
+<p>You can see the latter specification in the Brian Muller's Python code:</p>
+<pre>def flush(self):
+  self.buckets = [KBucket(0, 2 ** 160, self.ksize)]</pre>
+<p>Here, a single bucket is created spanning the ID space.&nbsp; The Python code 
+is correct because it also implements bucket splitting, which is in the second 
+version of the specification.</p>
+<h4>Artifact #1</h4>
+<p>In the former specification, this limits the total number of contacts that 
+your server can handle to 160 * 20, or 3200 contacts.</p>
+<h2>Initial ID, Router, Contact, KBucket, BucketList, Node, and Dht Implementations</h2>
+<p>After resolving the ambiguity and contradiction, we can implement most of the 
+relevant classes.&nbsp; Note that some of the properties in the following 
+implementation will be discussed later.</p>
+<p>When we're all done with the initial implementation, we have this class 
+model:</p>
+<ul>
+	<li>Blue - classes</li>
+	<li>Orangey - interfaces</li>
+	<li>Purple - collections</li>
+	<li>Green - value type fields</li>
+</ul>
+<p align="center"><img border="0" src="classmodel.png" width="793" height="673"></p>
+<h3>The ID Class</h3>
+<pre>using System.Numerics;
+
+namespace Clifton.Kademlia
+{
+  public class ID
+  {
+#if DEBUG // For unit testing.
+    public BigInteger Value { get { return id; } }
+#endif
+
+    protected BigInteger id;
+
+    /// &lt;summary&gt;
+    /// Construct the ID from a byte array.
+    /// &lt;/summary&gt;
+    public ID(byte[] data)
+    {
+      IDInit(data);
+    }
+
+    /// &lt;summary&gt;
+    /// Construct the ID from another BigInteger value.
+    /// &lt;/summary&gt;
+    public ID(BigInteger bi)
+    {
+      id = bi;
+    }
+
+    /// &lt;summary&gt;
+    /// Initialize the ID from a byte array, appending a 0 to force unsigned values.
+    /// &lt;/summary&gt;
+    protected void IDInit(byte[] data)
+    {
+      Validate.IsTrue(data.Length == Constants.ID_LENGTH_BYTES, &quot;ID must be &quot; + Constants.ID_LENGTH_BYTES + &quot; bytes in length.&quot;);
+      id = new BigInteger(data.Append0());    }
+  }
+}</pre>
+<p><img border="0" src="note.png" width="24" height="32"> Two things of note here.</p>
+<ol>
+	<li>The most interesting thing here is the appending the byte array with a 0 to 
+force unsigned values in the BigInteger.&nbsp; If we don't do this, any byte 
+array where the MSB of byte[0] is set will be treated as a negative number, 
+which we don't want when comparing the range of a bucket.&nbsp; This is handled 
+by a simple extension method:</li>
+</ol>
+<pre>/// &lt;summary&gt;
+/// Append a 0 to the byte array so that when converting to a BigInteger, the value remains positive.
+/// &lt;/summary&gt;
+public static byte[] Append0(this byte[] b)
+{
+  return b.Concat(new byte[] { 0 }).ToArray();
+}</pre>
+<ol>
+	<li value="2">The byte array is in little-endian order, meaning that the 
+	least significant value is stored first.</li>
+</ol>
+<h4>Unit Tests</h4>
+<p><img border="0" src="unittest.png" width="14" height="32"></p>
+<pre>[TestMethod]
+public void LittleEndianTest()
+{
+  byte[] test = new byte[20];
+  test[0] = 1;
+  Assert.IsTrue(new ID(test).Value == new BigInteger(1), &quot;Expected value to be 1.&quot;);
+}
+
+[TestMethod]
+public void PositiveValueTest()
+{
+  byte[] test = new byte[20];
+  test[19] = 0x80;
+  Assert.IsTrue(new ID(test).Value == BigInteger.Pow(new BigInteger(2), 159), &quot;Expected value to be 1.&quot;);
+}
+
+[TestMethod, ExpectedException(typeof(IDLengthException))]
+public void BadIDTest()
+{
+  byte[] test = new byte[21];
+  new ID(test);
+}</pre>
+<h3>The Router Class</h3>
+<p>At the moment, the router simply manages the host's node:</p>
+<pre>namespace Clifton.Kademlia
+{
+  public class Router
+  {
+#if DEBUG // for unit testing
+    public Node Node { get { return node; } }
+#endif
+
+    protected Node node;
+
+    public Router(Node node)
+    {
+      this.node = node;
+    }
+  }
+}</pre>
+<h3>The Contact Class</h3>
+<p>The contact class manages the contact's ID, last seen, and network 
+connectivity.&nbsp; Because I want to abstract the way network protocols are 
+handled, such that it is easy to test nodes in a virtual (in-memory) network, or 
+nodes that use different protocols (UDP, TCP/IP, WebSockets, etc.) the network 
+protocol is abstracted in an interface.</p>
+<pre>using System;
+
+namespace Clifton.Kademlia
+{
+  public class Contact
+  {
+#if DEBUG // For unit testing
+    public IProtocol Protocol { get; set; }
+#else
+    public IProtocol Protocol { get; protected set; }
+#endif
+
+    public DateTime LastSeen { get; protected set; }
+    public ID ID { get; protected set; }
+
+    /// &lt;summary&gt;
+    /// Initialize a contact with its protocol and ID.
+    /// &lt;/summary&gt;
+    public Contact(IProtocol protocol, ID contactID)
+    {
+      Protocol = protocol;
+      ID = contactID;
+      Touch();
+    }
+
+    /// &lt;summary&gt;
+    /// Update the fact that we've just seen this contact.
+    /// &lt;/summary&gt;
+    public void Touch()
+    {
+      LastSeen = DateTime.Now;
+    }
+  }
+}</pre>
+<h3>The KBucket Class</h3>
+<p>Each k-bucket maintains a list of up to <i>k</i> contacts.</p>
+<pre>using System.Collections.Generic;
+using System.Numerics;
+
+namespace Clifton.Kademlia
+{
+  public class KBucket
+  {
+#if DEBUG // For unit testing.
+    public List&lt;Contact&gt; Contacts { get { return contacts; } }
+    public BigInteger Low { get { return low; } }
+    public BigInteger High { get { return high; } }
+#endif
+
+    protected List&lt;Contact&gt; contacts;
+    protected BigInteger low;
+    protected BigInteger high;
+
+    /// &lt;summary&gt;
+    /// Initializes a k-bucket with the default range of 0 - 2^160
+    /// &lt;/summary&gt;
+    public KBucket()
+    {
+      contacts = new List&lt;Contact&gt;();
+      low = 0;
+      high = BigInteger.Pow(new BigInteger(2), 160);
+    }
+
+    /// &lt;summary&gt;
+    /// Initializes a k-bucket with a specific ID range.
+    /// &lt;/summary&gt;
+    public KBucket(BigInteger low, BigInteger high)
+    {
+      contacts = new List&lt;Contact&gt;();
+      this.low = low;
+      this.high = high;
+    }
+
+    /// &lt;summary&gt;
+    /// Add a contact to the bucket, at the end, as this is the most recently seen contact.
+    /// A full bucket throws an exception.
+    /// &lt;/summary&gt;
+    public void AddContact(Contact contact)
+    {
+      Validate.IsTrue&lt;TooManyContactsException&gt;(contacts.Count &lt; Constants.K, &quot;Bucket is full&quot;);
+      contacts.Add(contact);
+    }
+  }
+}</pre>
+<h4>Unit Test</h4>
+<p><img border="0" src="unittest.png" width="14" height="32"></p>
+<pre>[TestMethod, ExpectedException(typeof(TooManyContactsException))]
+public void TooManyContactsTest()
+{
+  KBucket kbucket = new KBucket();
+
+  // Add max # of contacts.
+  Constants.K.ForEach(n =&gt; kbucket.AddContact(new Contact(null, new ID(n))));
+
+  // Add one more.
+  kbucket.AddContact(new Contact(null, new ID(21)));
+}</pre>
+<h3>The BucketList Class</h3>
+<p>The bucket list class is a high level singleton container for buckets and operations 
+that manipulate buckets.&nbsp; For the moment, most of this is stubbed with 
+minimal behavior:</p>
+<pre>using System.Collections.Generic;
+
+namespace Clifton.Kademlia
+{
+  public class BucketList
+  {
+#if DEBUG // Used for unit testing.
+    public List&lt;KBucket&gt; Buckets { get { return buckets; } }
+#endif
+
+    protected List&lt;KBucket&gt; buckets;
+    protected ID ourID;
+
+    /// &lt;summary&gt;
+    /// Initialize the bucket list with our host ID and create a single bucket for the full ID range.
+    /// &lt;/summary&gt;
+    /// &lt;param name=&quot;ourID&quot;&gt;&lt;/param&gt;
+    public BucketList(ID ourID)
+    {
+      this.ourID = ourID;
+      buckets = new List&lt;KBucket&gt;();
+
+      // First kbucket has max range.
+      buckets.Add(new KBucket());
+    }
+
+    public void AddContact(Contact contact)
+    {
+      // to be implemented...
+    }
+  }
+}</pre>
+<h3>The Node Class</h3>
+<p>The node class is another high level singleton container for handling the Kademlia 
+commands sent over the wire.&nbsp; This is mostly stubbed for now:</p>
+<pre>using System.Collections.Generic;
+
+namespace Clifton.Kademlia
+{
+  public class Node
+  {
+#if DEBUG // For unit testing.
+    public BucketList BucketList { get { return bucketList; } }
+    public IStorage Storage { get { return storage; } }
+    public Contact OurContact { get { return ourContact; } }
+#endif
+
+    protected Contact ourContact;
+    protected BucketList bucketList;
+
+    public Node(Contact us, IStorage storage)
+    {
+      ourContact = us;
+      bucketList = new BucketList(us.ContactID);
+      this.storage = storage;
+    }
+
+    /// &lt;summary&gt;
+    /// Someone is pinging us. Register the contact and respond.
+    /// &lt;/summary&gt;
+    public Contact Ping(Contact sender)
+    {
+      // TODO...
+
+      return ourContact;
+    }
+
+    /// &lt;summary&gt;
+    /// Store a key-value pair in our storage space.
+    /// &lt;/summary&gt;
+    public void Store(Contact sender, ID keyID, string val)
+    {
+      // TODO...
+    }
+
+    /// &lt;summary&gt;
+    /// From the spec: FindNode takes a 160-bit ID as an argument. The recipient of the RPC returns (IP address, UDP port, Node ID) triples 
+    /// for the k nodes it knows about closest to the target ID. These triples can come from a single k-bucket, or they may come from 
+    /// multiple k-buckets if the closest k-bucket is not full. In any case, the RPC recipient must return k items (unless there are 
+    /// fewer than k nodes in all its k-buckets combined, in which case it returns every node it knows about).
+    /// &lt;/summary&gt;
+    /// &lt;returns&gt;&lt;/returns&gt;
+    public (List&lt;Contact&gt; contacts, string val) FindNode(Contact sender, ID toFind)
+    {
+      // TODO...
+      return (null, null);
+    }
+
+    /// &lt;summary&gt;
+    /// Returns either a list of close contacts or a the value, if the node's storage contains the value for the key.
+    /// &lt;/summary&gt;
+    public (List&lt;Contact&gt; contacts, string val) FindValue(Contact sender, ID keyID)
+    {
+      // TODO:
+
+      return (null, null);
+    }
+  }
+}</pre>
+<p><img border="0" src="note.png" width="24" height="32"> Of note here is the interface <code>IStorage</code> which abstracts the storage mechanism 
+for key-value pairs.</p>
+<h3>The Dht Class</h3>
+<p>The Dht class is the &quot;server&quot; - the entry point for instantiating our peer.&nbsp; At the moment, the Dht class is simply a container for the Router:</p>
+<pre>using System;
+
+namespace Clifton.Kademlia
+{
+  public class Dht
+  {
+#if DEBUG // for unit testing
+    public Router Router { get { return router; } }
+#endif
+
+    protected Router router;
+  }
+}</pre>
+<h2>References</h2>
+<p>[1] -
+<a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
+http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>
+</p>
+<p>[2] -
+<a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia">
+https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia</a></p>
+<p>[3] -
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE">
+http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html</a></p>
+<p>[4] -
+<a href="https://github.com/bmuller/kademlia">
+https://github.com/bmuller/kademlia</a></p>
+
+<p>[5] - <a href="https://en.wikipedia.org/wiki/Smart_contract">
+https://en.wikipedia.org/wiki/Smart_contract</a></p>
+<p>[6] -
+<a href="http://sandhill.com/article/is-data-decentralization-the-new-trend/">
+http://sandhill.com/article/is-data-decentralization-the-new-trend/</a></p>
+<p>[7] - <a href="https://arxiv.org/pdf/1506.03471.pdf">
+https://arxiv.org/pdf/1506.03471.pdf</a></p>
+<p>[8] - <a href="https://en.wikipedia.org/wiki/BitTorrent">
+https://en.wikipedia.org/wiki/BitTorrent</a></p>
+<p>[9] - <a href="https://en.wikipedia.org/wiki/Kad_network">
+https://en.wikipedia.org/wiki/Kad_network</a></p>
+<p>[10] - <a href="https://en.wikipedia.org/wiki/Chord_(peer-to-peer)">https://en.wikipedia.org/wiki/Chord_(peer-to-peer)</a> </p>
+<p>[11] - <a href="https://en.wikipedia.org/wiki/Pastry_(DHT)">https://en.wikipedia.org/wiki/Pastry_(DHT)</a> </p>
+<p>[12] -
+<a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html">
+https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html</a> </p>
+
+<p>[13] -
+<a href="https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table">
+https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table</a></p>
+<p>[14] -
+<a href="https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170">
+https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170</a></p>
+<p>[15] - <a href="https://en.wikipedia.org/wiki/Kademlia">
+https://en.wikipedia.org/wiki/Kademlia</a> </p>
+
+[16] - <a href="https://forum.emule-project.net/index.php?showtopic=32335">
+https://forum.emule-project.net/index.php?showtopic=32335</a>
+
+<p>[17] - <a href="http://www.emule-project.net/home/perl/general.cgi?l=1">
+http://www.emule-project.net/home/perl/general.cgi?l=1</a> </p>
+<p>[18] -
+<a href="https://forum.emule-project.net/index.php?showtopic=32335&view=findpost&p=214837">
+https://forum.emule-project.net/index.php?showtopic=32335&amp;view=findpost&amp;p=214837</a> </p>
+<p>[19] - <a href="http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf">
+http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf</a> </p>
+<p>[20] - <a href="http://www.maymounkov.org/kademlia">
+http://www.maymounkov.org/kademlia</a> </p>
+
+<p>[21] - <a href="https://en.wikipedia.org/wiki/Sybil_attack">
+https://en.wikipedia.org/wiki/Sybil_attack</a></p>
+
+</body>
+
+</html>

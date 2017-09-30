@@ -1,0 +1,826 @@
+<html>
+
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<title>New Page 1</title>
+</head>
+
+<body>
+
+<h2 align="left">Node Lookup - Discussion</h2>
+<p align="left"><font color="#FF00FF">The most important procedure a Kademlia 
+participant must perform is to locate the k closest nodes to some given node ID. 
+We call this procedure a node lookup. Kademlia employs a recursive algorithm for 
+node lookups. The lookup initiator starts by picking <i>a</i> nodes from its closest 
+non-empty k-bucket (or, if that bucket has fewer than <i>a</i> entries, it just takes 
+the <i>a</i> closest nodes it knows of). The initiator then sends parallel, 
+asynchronous FIND_NODE RPCS to the <i>a</i> nodes it has chosen, <i>a</i> is a system-wide 
+concurrency parameter, such as 3.</font></p>
+<p>and:</p>
+<p><font color="#FF00FF">In the recursive step, the initiator resends the 
+FIND_NODE to nodes it has learned about from previous RPCs. (This recursion can 
+begin before all <i>a</i> of the previous RPCs have returned). Of the <i>k</i> nodes the 
+initiator has heard of closest to the target, it picks <i>a</i> that it has not yet 
+queried and resends the FIND_NODE RPC to them. Nodes that fail to respond 
+quickly are removed from consideration until and unless they do respond. If a 
+round of FIND_NODES fails to return a node any closer than the closest already 
+seen, the initiator resends the FIND_NODE to all of the <i>k</i> closest nodes it has 
+not already queried. The lookup terminates when the initiator has queried and 
+gotten responses from the k closest nodes it has seen. When a = 1, the lookup 
+algorithm resembles Chord’s in terms of message cost and the latency of 
+detecting failed nodes. However, Kademlia can route for lower latency because it 
+has the flexibility of choosing any one of k nodes to forward a request to.</font></p>
+<p>The idea here is to:</p>
+<ol>
+	<li>Try really hard to return k close nodes.</li>
+	<li>Contact other peers in parallel to minimize latency.</li>
+</ol>
+<p align="center"><img border="0" src="lookup1.png" width="784" height="983"></p>
+<p>Got it?</p>
+<h3>Terminology</h3>
+<ul>
+	<li>The lookup initiator - this is your own peer wanting to make a store or 
+retrieve call to other peers.&nbsp; The node lookup is performed before you 
+	store or retrieve a value so that your peer has a reasonable.</li>
+</ul>
+<h3>Ambiguity #3</h3>
+<p>Given &quot;<font color="#FF00FF">To 
+store a (key,value) pair, a participant locates the k closest nodes to the key 
+and sends them STORE RPCS.</font>&quot; here the term &quot;locates&quot; actually means 
+performing the lookup.&nbsp; Contrast with &quot;<font color="#FF00FF">To find a (key,value) 
+pair, a node starts by performing a lookup to find the k nodes with IDs closest 
+to the key.</font>&quot; in which the term &quot;lookup&quot; is specifically used.</p>
+<p>We can see this implemented in the Python code:</p>
+<pre>async def get(self, key):
+  &quot;&quot;&quot;
+  Get a key if the network has it.
+  Returns:
+  :class:`None` if not found, the value otherwise.
+  &quot;&quot;&quot;
+  dkey = digest(key)
+  # if this node has it, return it
+  if self.storage.get(dkey) is not None:
+    return self.storage.get(dkey)
+    node = Node(dkey)
+<b>    nearest = self.protocol.router.findNeighbors(node)</b>
+    ...</pre>
+<p>and:</p>
+<pre>async def set(self, key, value):
+  &quot;&quot;&quot;
+  Set the given string key to the given value in the network.
+  &quot;&quot;&quot;
+  self.log.debug(&quot;setting '%s' = '%s' on network&quot; % (key, value))
+  dkey = digest(key)
+  return await self.set_digest(dkey, value)
+
+async def set_digest(self, dkey, value):
+  &quot;&quot;&quot;
+  Set the given SHA1 digest key (bytes) to the given value in the network.
+  &quot;&quot;&quot;
+  node = Node(dkey)
+
+  nearest = self.protocol.router.findNeighbors(node)
+  ...</pre>
+<p>where <code>findNeighbors</code> is the lookup algorithm described in the specification.</p>
+<h3>Ambiguity #4</h3>
+<p>What does &quot;<font color="#FF00FF">Nodes that fail to respond quickly&quot; </font>
+mean?&nbsp; Particularly, the term &quot;quickly?&quot;</p>
+<h3>Ambiguity #5</h3>
+<p>What if the peer you yourself don't have peers in any k-buckets?&nbsp; That 
+shouldn't happen (you should at least have the peer you are contacting) but if 
+that peer only has you in its k-buckets, then there's nothing to return.</p>
+<h3>Ambiguity #6</h3>
+<p>In &quot;<font color="#FF00FF"> from its closest non-empty k-bucket&quot;</font>, what 
+does &quot;closest&quot; mean?&nbsp; I am assuming here that it is the XOR distance 
+metric, but then the question is, what do we use as the &quot;key&quot; for a bucket with 
+a range of contacts?&nbsp; Since this is not defined, the implementation will 
+search all the contacts across all buckets for the initial set of contacts that 
+are closer.&nbsp; Also, the XOR distance computation means that we can't just 
+ping-pong in an outer search from the bucket containing the range in which the 
+key resides.&nbsp; This more matches the other condition &quot;<font color="#FF00FF">or, 
+if that bucket has fewer than <i>a</i> entries, it just takes 
+the <i>a</i> closest nodes it knows of</font>&quot; which implies searching for all 
+<i>a</i> closest nodes across all buckets.</p>
+<h3>Ambiguity #7</h3>
+<p>In &quot;<font color="#FF00FF">The lookup initiator starts by picking <i>a</i> 
+nodes</font>&quot; what does &quot;picking&quot; mean?&nbsp; Does this mean additionally 
+sorting the contacts in the &quot;closest bucket&quot; also by closeness?&nbsp; It's 
+completely undefined.</p>
+<p>If you want to try the &quot;closest bucket&quot; version, enable the define 
+<code>TRY_CLOSEST_BUCKET</code>, which is implemented like this:</p>
+<pre>// Spec: The lookup initiator starts by picking a nodes from its closest non-empty k-bucket
+KBucket bucket = FindClosestNonEmptyKBucket(key);
+
+// Not in spec -- sort by the closest nodes in the closest bucket.
+List&lt;Contact&gt; nodesToQuery = GetClosestNodes(key, bucket).Take(Constants.ALPHA).ToList();</pre>
+<p>otherwise, the implementation simply gets the closest <i>a</i> contacts 
+across all buckets:</p>
+<pre>List&lt;Contact&gt; nodesToQuery = node.BucketList.GetCloseContacts(key, node.OurContact.ID).Take(Constants.ALPHA).ToList();</pre>
+<p>However, this implementation, when testing with virtual nodes (where the 
+system essentially knows every other node) effectively gets the k closest 
+contacts, because it's searched all the buckets in virtual node space.&nbsp; So, 
+if we want to exercise the algorithm, this is better:</p>
+<pre>#if DEBUG
+  List&lt;Contact&gt; allNodes = node.BucketList.GetKBucket(key).Contacts.Take(Constants.K).ToList();
+#else
+  // This is a bad way to get a list of close contacts with virtual nodes because we're always going to get the closest nodes right at the get go.
+  List&lt;Contact&gt; allNodes = node.BucketList.GetCloseContacts(key, node.OurContact.ID).Take(Constants.K).ToList(); 
+#endif
+
+  List&lt;Contact&gt; nodesToQuery = allNodes.Take(Constants.ALPHA).ToList();</pre>
+<p>This actually leads to the next ambiguity.</p>
+<h3>Ambiguity #8</h3>
+<p>In the initial acquisition of a contacts as per the code above, should 
+contacts (I'm using &quot;contact&quot; and &quot;node&quot; rather interchangeably) that are closer 
+at this point be added to the list of closer contacts?&nbsp; The spec doesn't 
+say not to, but it doesn't explicitly say one should do this.&nbsp; Given that 
+we pick only <i>a</i> contacts to start with, we definitely don't have the k 
+contacts that the lookup is expected to return, so I'm implementing this as 
+described above -- the <i>a</i> closest contacts we have are added to the 
+&quot;closer&quot; list, and the <i>a</i> farther contacts we have are added to the 
+&quot;farther&quot; list.</p>
+<pre>List&lt;Contact&gt; nodesToQuery = allNodes.Take(Constants.ALPHA).ToList();
+
+// Also not explicitly in spec:
+// Any closer node in the alpha list is immediately added to our closer contact list, and
+// any farther node in the alpha list is immediately added to our farther contact list.
+closerContacts.AddRange(nodesToQuery.Where(n =&gt; (n.ID.Value ^ key.Value) &lt; (node.OurContact.ID.Value ^ key.Value)));
+fartherContacts.AddRange(nodesToQuery.Where(n =&gt; (n.ID.Value ^ key.Value) &gt;= (node.OurContact.ID.Value ^ key.Value)));</pre>
+<h3>Ambiguity #9</h3>
+<p>What do we do with the contacts outside of <i>a</i>?&nbsp; Given this: &quot;<font color="#FF00FF">If 
+a round of FIND_NODES fails to return a node any closer than the closest already 
+seen, the initiator resends the FIND_NODE to all of the <i>k</i> closest nodes 
+it has not already queried.&quot; </font>does it apply to the first query of <i>a</i> 
+nodes, or only to the set of nodes returned after the query?&nbsp; I'm going to 
+assume that it applies to the remainder of the <i>a</i> nodes not queried in the 
+first query, which will be a maximum of <i>k</i>-<i>a</i> contacts.</p>
+<h3>Ambiguity #10</h3>
+<p>The spec says this: &quot;<font color="#FF00FF">Most operations are implemented in 
+terms of the above lookup procedure.</font>&quot;&nbsp; What operations, and when?&nbsp; 
+We'll have to address this later.</p>
+<h3>The Concept of Closeness</h3>
+<p><font color="#FF00FF">Many of Kademlia’s benefits result from its use of a 
+novel XOR metric for distance between points in the key space. XOR is symmetric, 
+allowing Kademlia participants to receive lookup queries from precisely the same 
+distribution of nodes contained in their routing tables.</font></p>
+<p>Therefore, the distance between a node and a key is the node ID XOR'd with 
+the key.&nbsp; Unfortunately, an XOR distance metric is not amenable to a 
+pre-sorted list of ID's.&nbsp; The resulting &quot;distance&quot; computation can be very 
+different for two keys when XOR'd with the contact list.&nbsp; As described on 
+Stack Overflow<sup>13 </sup>:</p>
+<blockquote>
+	<p>&quot;The thing is that buckets don't have to be full, and if you want to 
+	send, let's say 20 nodes in a response a single bucket will not suffice.&nbsp; 
+	So you have to traverse the routing table (either sorted based on your own 
+	node ID or by the natural distance) in ascending distance (XOR) order 
+	relative to the target key to visit multiple buckets.&nbsp; Since the XOR 
+	distance metric folds at each bit-carry (XOR == carry-less addition) it does 
+	not map nicely to any routing table layout. In other words, visiting the 
+	nearest buckets won't do...I figure that many people simply iterate over the 
+	whole routing table because for regular nodes it will only contain a few 
+	dozen buckets at most and a DHT node does not see much traffic, so it only 
+	has to execute this operation a few times per second and if you implement 
+	this in a dense, cache-friendly datastructure then the lion's share might 
+	actually be the memory traffic and not the CPU instructions doing a few XORs 
+	and comparisons.<br>
+	<br>
+	I.e. a full-table-scan is just easy to implement.&quot;</p>
+</blockquote>
+<p>The author of that post provides an implementation<sup>14</sup> that doesn't 
+require a full table scan, but in my implementation, we'll just do a full scan 
+of the bucket list contacts.</p>
+<h2>Node Lookup - Implementation</h2>
+<p>Let's start with a baseline implementation that for the moment:</p>
+<ol>
+	<li>Doesn't deal with the issue of parallelism.</li>
+<li>Doesn't deal with querying only <i>a</i> nodes - we set it that constant to
+<i>k</i> for the moment.</li>
+	<li>At the moment, we're also ignoring the fact that this algorithm is the 
+	same for node lookup as it is for value lookup.</li>
+</ol>
+<p>This simplifies the implementation so that we can provide some unit tests for 
+the basic algorithm, then add the parallelism and <i>a</i> concept later, and 
+our unit tests should still pass.</p>
+<p>Also, the methods here are all marked as <code>virtual</code> in case you want to override 
+the implementation.&nbsp; First, some helper methods:</p>
+<h3>FindClosestNonEmptyKBucket</h3>
+<pre>/// &lt;summary&gt;
+/// Using the k-bucket's key (it's high value), find the closest 
+/// k-bucket the given key that isn't empty.
+/// &lt;/summary&gt;
+#if DEBUG // For unit testing.
+  public virtual KBucket FindClosestNonEmptyKBucket(ID key)
+#else
+  protected virtual KBucket FindClosestNonEmptyKBucket(ID key)
+#endif
+{
+  KBucket closest = Node.BucketList.Buckets.Where(b =&gt; b.Contacts.Count &gt; 0).OrderBy(b =&gt; b.Key ^ key.Value).FirstOrDefault();
+  Validate.IsTrue&lt;NoNonEmptyBucketsException&gt;(closest != null, &quot;No non-empty buckets exist. You must first register a peer and add that peer to your bucketlist.&quot;);
+
+  return closest;
+}
+</pre>
+<h3>GetClosestNodes</h3>
+<pre>/// &lt;summary&gt;
+/// Get sorted list of closest nodes to the given key.
+/// &lt;/summary&gt;
+#if DEBUG // For unit testing.
+  public List&lt;Contact&gt; GetClosestNodes(ID key, KBucket bucket)
+#else
+  protected List&lt;Contact&gt; GetClosestNodes(ID key, KBucket bucket)
+#endif
+{
+  return bucket.Contacts.OrderBy(c =&gt; c.ID.Value ^ key.Value).ToList();
+}</pre>
+<h3>RpcFindNodes</h3>
+<pre>/// &lt;summary&gt;
+/// For each contact, call the FindNodes and return all the nodes whose contacts responded
+/// within a &quot;reasonable&quot; period of time.
+/// &lt;/summary&gt;
+protected List&lt;Contact&gt; RpcFindNodes(ID key, List&lt;Contact&gt; contacts)
+{
+  List&lt;Contact&gt; nodes = new List&lt;Contact&gt;();
+  contacts.ForEach(c =&gt; nodes.AddRange(c.Protocol.FindNode(key)));
+
+  return nodes;
+}</pre>
+<h3>GetCloserNodes</h3>
+<p><img border="0" src="note.png" width="24" height="32"> Note that we always 
+exclude our own node and the nodes we're contacting.</p>
+<pre>/// &lt;summary&gt;
+/// Get closer nodes to the current uncontacted nodes and update the list of closer and farther nodes.
+/// &lt;/summary&gt;
+#if DEBUG // For unit testing.
+public void GetCloserNodes(ID key, List&lt;Contact&gt; nodesToQuery, List&lt;Contact&gt; closerContacts, List&lt;Contact&gt; fartherContacts)
+#else
+protected void GetCloserNodes(ID key, List&lt;Contact&gt; nodesToQuery, List&lt;Contact&gt; closerContacts, List&lt;Contact&gt; fartherContacts)
+#endif
+{
+  // As in, peer's nodes:
+  // Exclude ourselves and the peers we're contacting to a get unique list of new peers.
+  // Compare by ID's as Contact is different instance except with a virtual network.
+  List&lt;Contact&gt; peersNodes = RpcFindNodes(key, nodesToQuery).ExceptBy(node.OurContact, c =&gt; c.ID.Value).ExceptBy(nodesToQuery, c =&gt; c.ID.Value).ToList();
+  var nearestNodeDistance = nodesToQuery.OrderBy(n =&gt; n.ID.Value ^ key.Value).First().ID.Value;
+
+  closerContacts.
+    AddRangeDistinctBy(peersNodes.
+      Where(p =&gt; (p.ID.Value ^ key.Value) &lt; nearestNodeDistance),
+      (a, b) =&gt; a.ID.Value == b.ID.Value);
+
+  fartherContacts.
+    AddRangeDistinctBy(peersNodes.
+      Where(p =&gt; (p.ID.Value ^ key.Value) &gt;= nearestNodeDistance),
+      (a, b) =&gt; a.ID.Value == b.ID.Value);
+}</pre>
+<h3>Lookup</h3>
+<p>This flowchart all comes together here:</p>
+<pre>public virtual List&lt;Contact&gt; Lookup(ID key, bool giveMeAll = false)
+{
+  bool haveWork = true;
+  List&lt;Contact&gt; ret = new List&lt;Contact&gt;();
+  List&lt;Contact&gt; contactedNodes = new List&lt;Contact&gt;();
+  List&lt;Contact&gt; closerContacts = new List&lt;Contact&gt;();
+  List&lt;Contact&gt; fartherContacts = new List&lt;Contact&gt;();
+
+#if TRY_CLOSEST_BUCKET
+  // Spec: The lookup initiator starts by picking a nodes from its closest non-empty k-bucket
+KBucket bucket = FindClosestNonEmptyKBucket(key);
+
+  // Not in spec -- sort by the closest nodes in the closest bucket.
+  List&lt;Contact&gt; allNodes = node.BucketList.GetCloseContacts(key, node.OurContact.ID).Take(Constants.K).ToList(); 
+  List&lt;Contact&gt; nodesToQuery = allNodes.Take(Constants.ALPHA).ToList();
+  fartherContacts.AddRange(allNodes.Skip(Constants.ALPHA).Take(Constants.K - Constants.ALPHA));
+#else
+#if DEBUG
+  List&lt;Contact&gt; allNodes = node.BucketList.GetKBucket(key).Contacts.Take(Constants.K).ToList();
+#else
+  // This is a bad way to get a list of close contacts with virtual nodes because we're always going to get the closest nodes right at the get go.
+  List&lt;Contact&gt; allNodes = node.BucketList.GetCloseContacts(key, node.OurContact.ID).Take(Constants.K).ToList(); 
+#endif
+  List&lt;Contact&gt; nodesToQuery = allNodes.Take(Constants.ALPHA).ToList();
+
+  // Also not explicitly in spec:
+  // Any closer node in the alpha list is immediately added to our closer contact list, and
+  // any farther node in the alpha list is immediately added to our farther contact list.
+  closerContacts.AddRange(nodesToQuery.Where(n =&gt; (n.ID.Value ^ key.Value) &lt; (node.OurContact.ID.Value ^ key.Value)));
+  fartherContacts.AddRange(nodesToQuery.Where(n =&gt; (n.ID.Value ^ key.Value) &gt;= (node.OurContact.ID.Value ^ key.Value)));
+
+  // The remaining contacts not tested yet can be put here.
+  fartherContacts.AddRange(allNodes.Skip(Constants.ALPHA).Take(Constants.K - Constants.ALPHA));
+#endif
+
+  // We're about to contact these nodes.
+  contactedNodes.AddRangeDistinctBy(nodesToQuery, (a, b) =&gt; a.ID.Value == b.ID.Value);
+
+  // Spec: The initiator then sends parallel, asynchronous FIND_NODE RPCS to the a nodes it has chosen, a is a system-wide concurrency parameter, such as 3.
+  GetCloserNodes(key, nodesToQuery, closerContacts, fartherContacts);
+
+  // Add any new closer contacts to the list we're going to return.
+  ret.AddRangeDistinctBy(closerContacts, (a, b) =&gt; a.ID.Value == b.ID.Value);
+
+  // Spec: The lookup terminates when the initiator has queried and gotten responses from the k closest nodes it has seen.
+  while (ret.Count &lt; Constants.K &amp;&amp; haveWork)
+  {
+    List&lt;Contact&gt; closerUncontactedNodes = closerContacts.Except(contactedNodes).ToList();
+    List&lt;Contact&gt; fartherUncontactedNodes = fartherContacts.Except(contactedNodes).ToList();
+    bool haveCloser = closerUncontactedNodes.Count &gt; 0;
+    bool haveFarther = fartherUncontactedNodes.Count &gt; 0;
+
+    haveWork = haveCloser || haveFarther;
+
+    // Spec: Of the k nodes the initiator has heard of closest to the target...
+    if (haveCloser)
+    {
+      // We're about to contact these nodes.
+      contactedNodes.AddRangeDistinctBy(closerUncontactedNodes, (a, b) =&gt; a.ID.Value == b.ID.Value);
+
+      // Spec: ...it picks a that it has not yet queried and resends the FIND_NODE RPC to them. 
+      GetCloserNodes(key, closerUncontactedNodes.Take(Constants.ALPHA).ToList(), closerContacts, fartherContacts);
+    }
+    else if (haveFarther)
+    {
+      // We're about to contact these nodes.
+      contactedNodes.AddRangeDistinctBy(fartherUncontactedNodes, (a, b) =&gt; a.ID.Value == b.ID.Value);
+      GetCloserNodes(key, fartherUncontactedNodes, closerContacts, fartherContacts);
+    }
+  }
+
+#if DEBUG // For unit testing.
+  CloserContacts = closerContacts;
+  FartherContacts = fartherContacts;
+#endif
+
+  // Spec (sort of): Return max(k) closer nodes, sorted by distance.
+  // For unit testing, giveMeAll can be true so that we can match against our alternate way of getting closer contacts.
+  return giveMeAll ? ret : ret.Take(Constants.K).OrderBy(c=&gt;c.ID.Value ^ key.Value).ToList();
+}</pre>
+<p><img border="0" src="note.png" width="24" height="32"> This algorithm is 
+iteration, not recursion, as the specification states.&nbsp; Every 
+implementation I've seen uses iteration.</p>
+<h3>Extension Methods</h3>
+<p>A few extension methods that are used:</p>
+<h4>AddRangeDistinctBy</h4>
+<pre>public static void AddRangeDistinctBy&lt;T&gt;(this List&lt;T&gt; target, IEnumerable&lt;T&gt; src, Func&lt;T, T, bool&gt; equalityComparer)
+{
+  src.ForEach(item =&gt;
+  {
+    // no items in the list must match the item.
+    if (target.None(q =&gt; equalityComparer(q, item)))
+    {
+      target.Add(item);
+    }
+  });
+}</pre>
+<h4>ExceptBy</h4>
+<pre>public static IEnumerable&lt;T&gt; ExceptBy&lt;T, TKey&gt;(this IEnumerable&lt;T&gt; src, T item, Func&lt;T, TKey&gt; keySelector)
+{
+  TKey itemKey = keySelector(item);
+
+  using (var enumerator = src.GetEnumerator())
+  {
+    while (enumerator.MoveNext())
+    {
+      T current = enumerator.Current;
+
+      if (!keySelector(current).Equals(itemKey))
+      {
+        yield return current;
+      }
+    }
+  }
+}
+
+public static IEnumerable&lt;T&gt; ExceptBy&lt;T, TKey&gt;(this IEnumerable&lt;T&gt; src, IEnumerable&lt;T&gt; items, Func&lt;T, TKey&gt; keySelector)
+{
+  using (var enumerator = src.GetEnumerator())
+  {
+    while (enumerator.MoveNext())
+    {
+      T current = enumerator.Current;
+
+      if (items.None(i =&gt; keySelector(current).Equals(keySelector(i))))
+      {
+        yield return current;
+      }
+    }
+  }
+}</pre>
+<h2>Node Lookup - Unit Tests</h2>
+<p>Before Getting Into Unit Tests we need to be able to create virtual nodes, which means implementing a 
+minimal virtual protocol:</p>
+<h3>Virtual Node/Protocol</h3>
+<pre>public class VirtualProtocol : IProtocol
+{
+  public Node Node { get { return node; } set { node = value; } }
+
+  protected Node node;
+
+  /// &lt;summary&gt;
+  /// For unit testing with deferred node setup.
+  /// &lt;/summary&gt;
+  public VirtualProtocol()
+  {
+  }
+
+  /// &lt;summary&gt;
+  /// Register the in-memory node with our virtual protocol.
+  /// &lt;/summary&gt;
+  public VirtualProtocol(Node node)
+  {
+    this.node = node;
+  }
+
+  /// &lt;summary&gt;
+  /// Get the list of contacts for this node closest to the key.
+  /// &lt;/summary&gt;
+  public List&lt;Contact&gt; FindNode(Contact sender, ID key)
+  {
+    return node.FindNode(sender, key).contacts;
+  }
+}</pre>
+<h3>Missing Implementation Needs to be Added Now</h3>
+<p>We also have to implement FindNode in the Node class:</p>
+<pre>/// &lt;summary&gt;
+/// From the spec: FindNode takes a 160-bit ID as an argument. The recipient of the RPC returns (IP address, UDP port, Node ID) triples 
+/// for the k nodes it knows about closest to the target ID. These triples can come from a single k-bucket, or they may come from 
+/// multiple k-buckets if the closest k-bucket is not full. In any case, the RPC recipient must return k items (unless there are 
+/// fewer than k nodes in all its k-buckets combined, in which case it returns every node it knows about).
+/// &lt;/summary&gt;
+/// &lt;returns&gt;&lt;/returns&gt;
+public (List&lt;Contact&gt; contacts, string val) FindNode(Contact sender, ID toFind)
+{
+  Validate.IsFalse&lt;SendingQueryToSelfException&gt;(sender.ID.Value == ourContact.ID.Value, &quot;Sender should not be ourself!&quot;);
+  bucketList.AddContact(sender);
+  // Exclude sender.
+  var contacts = bucketList.GetCloseContacts(toFind, sender.ID);
+
+  return (contacts, null);
+}</pre>
+<p>Note how this also registers the sender as a contact, which either adds 
+(maybe) the contact to the recipient's bucket list or updates the contact 
+information.&nbsp; Ignore the tuple return for now.</p>
+<p>And we need an algorithm for finding close contacts across the recipient's 
+bucket range:</p>
+<pre>/// &lt;summary&gt;
+/// Brute force distance lookup of all known contacts, sorted by distance, then we take at most k (20) of the closest.
+/// &lt;/summary&gt;
+/// &lt;param name=&quot;toFind&quot;&gt;The ID for which we want to find close contacts.&lt;/param&gt;
+/// &lt;param name=&quot;exclude&quot;&gt;The ID to exclude (the requestor's ID)&lt;/param&gt;
+public List&lt;Contact&gt; GetCloseContacts(ID toFind, ID exclude)
+{
+  var contacts = buckets.
+    SelectMany(b =&gt; b.Contacts).
+    Where(c =&gt; c.ID.Value != exclude.Value).
+    Select(c =&gt; new { contact = c, distance = c.ID.Value ^ toFind.Value }).
+    OrderBy(d =&gt; d.distance).
+    Take(Constants.K);
+
+  // Spec (sort of): Return max(k) closer nodes, sorted by distance.
+  return ret.Take(Constants.K).OrderBy(c=&gt;c.ID.Value ^ key.Value).ToList();
+}</pre>
+<h3>GetCloseContacts Test</h3>
+<p>This tests the 
+sorting and the maximum number of contacts returned limit.&nbsp; Note that it's 
+probably not the most ideal situation that I'm using all random ID's, however, 
+to ensure consistent unit testing, we seed the random number generator with the 
+same value in DEBUG mode:</p>
+<pre>#if DEBUG
+private static Random rnd = new Random(1);
+#else
+private static Random rnd = new Random();
+#endif</pre>
+<p><img border="0" src="unittest.png" width="14" height="32">&nbsp; Our test method:</p>
+<pre>[TestMethod]
+public void GetCloseContactsOrderedTest()
+{
+  Contact sender = new Contact(null, ID.RandomID);
+  Node node = new Node(new Contact(null, ID.RandomID), null);
+  List&lt;Contact&gt; contacts = new List&lt;Contact&gt;();
+  // Force multiple buckets.
+  100.ForEach(() =&gt; contacts.Add(new Contact(null, ID.RandomID)));
+  contacts.ForEach(c =&gt; node.BucketList.AddContact(c));
+  ID key = ID.RandomID; // Pick an ID
+  List&lt;Contact&gt; closest = node.FindNode(sender, key).contacts;
+
+  Assert.IsTrue(closest.Count == Constants.K, &quot;Expected K contacts to be returned.&quot;);
+
+  // The contacts should be in ascending order with respect to the key.
+  var distances = closest.Select(c =&gt; c.ID.Value ^ key.Value).ToList();
+  var distance = distances[0];
+
+  // Verify distances are in ascending order:
+  distances.Skip(1).ForEach(d =&gt;
+  {
+    Assert.IsTrue(distance &lt; d, &quot;Expected contacts ordered by distance.&quot;);
+    distance = d;
+  });
+
+
+  // Verify the contacts with the smallest distances were returned from all possible distances.
+  var lastDistance = distances[distances.Count - 1];
+  var others = node.BucketList.Buckets.SelectMany(b =&gt; b.Contacts.Except(closest)).Where(c =&gt; (c.ID.Value ^ key.Value) &lt; lastDistance);
+  Assert.IsTrue(others.Count() == 0, &quot;Expected no other contacts with a smaller distance than the greatest distance to exist.&quot;);
+}</pre>
+<h3>NoNodesToQuery Test</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> This test simply 
+verifies that we get no new nodes to query given that all the nodes we're 
+contacting are already being contacted.</p>
+<pre> /// &lt;summary&gt;
+/// Given that all the nodes we're contacting are nodes *being* contacted, 
+/// the result should be no new nodes to contact.
+/// &lt;/summary&gt;
+[TestMethod]
+public void NoNodesToQueryTest()
+{
+  // Setup
+  router = new Router(new Node(new Contact(null, ID.Mid), null));
+
+  nodes = new List&lt;Node&gt;();
+  20.ForEach((n) =&gt; nodes.Add(new Node(new Contact(null, new ID(BigInteger.Pow(new BigInteger(2), n))), null)));
+
+  // Fixup protocols:
+  nodes.ForEach(n =&gt; n.OurContact.Protocol = new VirtualProtocol(n));
+
+  // Our contacts:
+  nodes.ForEach(n =&gt; router.Node.BucketList.AddContact(n.OurContact));
+
+  // Each peer needs to know about the other peers except of course itself.
+  nodes.ForEach(n =&gt; nodes.Where(nOther =&gt; nOther != n).ForEach(nOther =&gt; n.BucketList.AddContact(nOther.OurContact)));
+
+  // Select the key such that n ^ 0 == n
+  // This ensures that the distance metric uses only the node ID, which makes for an integer difference for distance, not an XOR distance.
+  key = ID.Zero; 
+  contactsToQuery = router.Node.BucketList.Buckets[0].Contacts; // all contacts are in one bucket.
+
+  closerContacts = new List&lt;Contact&gt;();
+  fartherContacts = new List&lt;Contact&gt;();
+  router.GetCloserNodes(key, contactsToQuery, closerContacts, fartherContacts);
+
+  Assert.IsTrue(closerContacts.Count == 0, &quot;No new nodes expected.&quot;);
+  Assert.IsTrue(fartherContacts.Count == 0, &quot;No new nodes expected.&quot;);
+}</pre>
+<h3>GetCloserNodes Test</h3>
+<p>Getting the system to exercise the different paths in the flowchart is an 
+interesting exercise.&nbsp; Again, note that it's probably not the most ideal 
+situation that I'm using all random ID's.&nbsp; Let's start with one of the first more complicated 
+helper methods, <code>GetCloserNodes</code>.&nbsp; </p>
+<p><img border="0" src="unittest.png" width="14" height="32">&nbsp; The unit test itself is a beast:</p>
+<pre>[TestMethod]
+public void GetCloserNodesTest()
+{
+  // Seed with different random values
+  100.ForEach(seed =&gt;
+  {
+    ID.rnd = new Random(seed);
+    // Setup
+    Router router = new Router(new Node(new Contact(null, ID.RandomID), null));
+
+    List&lt;Node&gt; nodes = new List&lt;Node&gt;();
+    100.ForEach(() =&gt; nodes.Add(new Node(new Contact(null, ID.RandomID), null)));
+
+    // Fixup protocols:
+    nodes.ForEach(n =&gt; n.OurContact.Protocol = new VirtualProtocol(n));
+
+    // Our contacts:
+    nodes.ForEach(n =&gt; router.Node.BucketList.AddContact(n.OurContact));
+
+    // Each peer needs to know about the other peers except of course itself.
+    nodes.ForEach(n =&gt; nodes.Where(nOther =&gt; nOther != n).ForEach(nOther =&gt; n.BucketList.AddContact(nOther.OurContact)));
+
+    ID key = ID.RandomID; // Pick an ID
+    // TODO: Pick a random bucket, or bucket where the key is in range, otherwise we're defeating the purpose of the algorithm.
+    // DO NOT DO THIS:
+    // List&lt;Contact&gt; nodesToQuery = router.Node.BucketList.GetCloseContacts(key, router.Node.OurContact.ID).Take(Constants.ALPHA).ToList();
+
+    List&lt;Contact&gt; nodesToQuery = router.Node.BucketList.GetKBucket(key).Contacts.Take(Constants.ALPHA).ToList();
+    // or:
+    // List&lt;Contact&gt; nodesToQuery = router.FindClosestNonEmptyKBucket(key).Contacts.Take(Constants.ALPHA).ToList();
+
+    List&lt;Contact&gt; closerContacts = new List&lt;Contact&gt;();
+    List&lt;Contact&gt; fartherContacts = new List&lt;Contact&gt;();
+
+    List&lt;Contact&gt; closerContactsAltComputation = new List&lt;Contact&gt;();
+    List&lt;Contact&gt; fartherContactsAltComputation = new List&lt;Contact&gt;();
+    Contact theNearestContactedNode = nodesToQuery.OrderBy(n =&gt; n.ID.Value ^ key.Value).First();
+    var distance = theNearestContactedNode.ID.Value;
+
+    // Setup done.
+
+    router.GetCloserNodes(key, nodesToQuery, closerContacts, fartherContacts);
+
+    // Test whether the results are correct: 
+
+    // For each node (ALPHA == K for testing) in our bucket (nodesToQuery) we're going to get k nodes closest to the key:
+    foreach (Contact contact in nodesToQuery)
+    {
+      // Find the node we're contacting:
+      Node contactNode = nodes.Single(n =&gt; n.OurContact == contact);
+
+      // Close contacts except ourself and the nodes we're contacting.
+      // Note that of all the contacts in the bucket list, many of the k returned
+      // by the GetCloseContacts call are contacts we're querying, so they are being excluded.
+      var closeContactsOfContactedNode =
+        contactNode.
+          BucketList.
+          GetCloseContacts(key, router.Node.OurContact.ID).
+          ExceptBy(nodesToQuery, c =&gt; c.ID.Value);
+
+      foreach (Contact closeContactOfContactedNode in closeContactsOfContactedNode)
+      {
+        // Which of these contacts are closer?
+        if ((closeContactOfContactedNode.ID.Value ^ key.Value) &lt; distance)
+        {
+          closerContactsAltComputation.AddDistinctBy(closeContactOfContactedNode, c =&gt; c.ID.Value);
+        }
+
+        // Which of these contacts are farther?
+        if ((closeContactOfContactedNode.ID.Value ^ key.Value) &gt;= distance)
+        {
+          fartherContactsAltComputation.AddDistinctBy(closeContactOfContactedNode, c =&gt; c.ID.Value);
+        }
+      }
+    }
+
+    Assert.IsTrue(closerContacts.Count == closerContactsAltComputation.Count, &quot;Closer computations do not match.&quot;);
+    Assert.IsTrue(fartherContacts.Count == fartherContactsAltComputation.Count, &quot;Farther computations do not match.&quot;);
+  });
+}</pre>
+<p>The idea here is that with virtual nodes, we first get the results using the 
+&quot;RPC&quot; calls and some hopefully readable Linq.&nbsp; Then, using a different 
+algorithm with a lot less Linq, we then iterate over the contacts in the nodes 
+we're querying, as set up by the unit test.&nbsp; This actually tests a lot of 
+the system, and interestingly, as a result of these two different approaches, I found a bug in the <code>GetCloseContacts</code> 
+-- so much for &quot;it's not practical testing all the simple methods.&quot;&nbsp; As a 
+side note, it's interesting to see how much shorter the Linq for the code that 
+obtains the close and far contacts.</p>
+<h3>Lookup Unit Test</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> Ironically, there really is no alternative way of getting these nodes, 
+particularly with regards to the <code>while</code> loop in the <code>Lookup</code> method.&nbsp; 
+So without beating my head over the issue, I implemented this test:</p>
+<pre>[TestMethod]
+public void LookupTest()
+{
+  // Seed with different random values
+  100.ForEach(seed =&gt;
+  {
+    ID.rnd = new Random(seed);
+    Setup();
+
+    List&lt;Contact&gt; closeContacts = router.Lookup(key, true);
+    List&lt;Contact&gt; contactedNodes = new List&lt;Contact&gt;(closeContacts);
+
+    // Is the above call returning the correct number of close contacts?
+    // The unit test for this is sort of lame. We should get at least as many contacts 
+    // as when calling GetCloserNodes. 
+
+    GetAltCloseAndFar(contactsToQuery, closerContactsAltComputation, fartherContactsAltComputation);
+
+    Assert.IsTrue(closeContacts.Count &gt;= closerContactsAltComputation.Count, &quot;Expected at least as many contacts.&quot;);
+
+    // Technically, we can't even test whether the contacts returned in GetCloserNodes exists
+    // in router.Lookup because it may have found nodes even closer, and it only returns K nodes!
+    // We can overcome this by eliminating the Take in the return of router.Lookup().
+
+    closerContactsAltComputation.ForEach(c =&gt; Assert.IsTrue(closeContacts.Contains(c)));
+  });
+}</pre>
+<h3>Simple Closer Contacts Test</h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> This test, and the 
+next one, essentially exercises the part of the <code>Lookup</code> algorithm before the 
+<code>while</code> loop.&nbsp;
+<img border="0" src="note.png" width="24" height="32">Note how the bucket and ID's are set 
+up.</p>
+<pre> /// &lt;summary&gt;
+/// Creates a single bucket with node ID's 2^i for i in [0, K) and
+/// 1. use a key with ID.Value == 0 to that distance computation is an integer difference
+/// 2. use an ID.Value == ID.Max for our node ID so all other nodes are closer.
+/// &lt;/summary&gt;
+[TestMethod]
+public void SimpleAllCloserContacts()
+{
+  // Setup
+  // By selecting our node ID to zero, we ensure that all distances of other nodes are &gt; the distance to our node.
+  router = new Router(new Node(new Contact(null, ID.Max), null));
+
+  nodes = new List&lt;Node&gt;();
+  Constants.K.ForEach((n) =&gt; nodes.Add(new Node(new Contact(null, new ID(BigInteger.Pow(new BigInteger(2), n))), null)));
+
+  // Fixup protocols:
+  nodes.ForEach(n =&gt; n.OurContact.Protocol = new VirtualProtocol(n));
+
+  // Our contacts:
+  nodes.ForEach(n =&gt; router.Node.BucketList.AddContact(n.OurContact));
+
+  // Each peer needs to know about the other peers except of course itself.
+  nodes.ForEach(n =&gt; nodes.Where(nOther =&gt; nOther != n).ForEach(nOther =&gt; n.BucketList.AddContact(nOther.OurContact)));
+
+  // Select the key such that n ^ 0 == n
+  // This ensures that the distance metric uses only the node ID, which makes for an integer difference for distance, not an XOR distance.
+  key = ID.Zero;
+  contactsToQuery = router.Node.BucketList.Buckets[0].Contacts; // all contacts are in one bucket.
+
+  var contacts = router.Lookup(key, true);
+
+  Assert.IsTrue(contacts.Count == Constants.K, &quot;Expected k closer contacts.&quot;);
+  Assert.IsTrue(router.CloserContacts.Count == Constants.K, &quot;All contacts should be closer.&quot;);
+  Assert.IsTrue(router.FartherContacts.Count == 0, &quot;Did not expected farther contacts.&quot;);
+}</pre>
+<h3>Simple Farther Contacts Test</h3>
+<p><img border="0" src="unittest.png" width="14" height="32">
+<img border="0" src="note.png" width="24" height="32"> Again note how the bucket 
+and ID's 
+are set up:</p>
+<pre> /// &lt;summary&gt;
+/// Creates a single bucket with node ID's 2^i for i in [0, K) and
+/// 1. use a key with ID.Value == 0 to that distance computation is an integer difference
+/// 2. use an ID.Value == 0 for our node ID so all other nodes are farther.
+/// &lt;/summary&gt;
+[TestMethod]
+public void SimpleAllFartherContacts()
+{
+  // Setup
+  // By selecting our node ID to zero, we ensure that all distances of other nodes are &gt; the distance to our node.
+  router = new Router(new Node(new Contact(null, ID.Zero), null));
+
+  nodes = new List&lt;Node&gt;();
+  Constants.K.ForEach((n) =&gt; nodes.Add(new Node(new Contact(null, new ID(BigInteger.Pow(new BigInteger(2), n))), null)));
+
+  // Fixup protocols:
+  nodes.ForEach(n =&gt; n.OurContact.Protocol = new VirtualProtocol(n));
+
+  // Our contacts:
+  nodes.ForEach(n =&gt; router.Node.BucketList.AddContact(n.OurContact));
+
+  // Each peer needs to know about the other peers except of course itself.
+  nodes.ForEach(n =&gt; nodes.Where(nOther =&gt; nOther != n).ForEach(nOther =&gt; n.BucketList.AddContact(nOther.OurContact)));
+
+  // Select the key such that n ^ 0 == n
+  // This ensures that the distance metric uses only the node ID, which makes for an integer difference for distance, not an XOR distance.
+  key = ID.Zero;
+  contactsToQuery = router.Node.BucketList.Buckets[0].Contacts; // all contacts are in one bucket.
+
+  var contacts = router.Lookup(key, true);
+
+  Assert.IsTrue(contacts.Count == 0, &quot;Expected no closer contacts.&quot;);
+  Assert.IsTrue(router.CloserContacts.Count == 0, &quot;Did not expected closer contacts.&quot;);
+  Assert.IsTrue(router.FartherContacts.Count == Constants.K, &quot;All contacts should be farther.&quot;);
+}</pre>
+
+<h2>References</h2>
+<p>[1] -
+<a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
+http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>
+</p>
+<p>[2] -
+<a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia">
+https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia</a></p>
+<p>[3] -
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE">
+http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html</a></p>
+<p>[4] - <a href="https://github.com/bmuller/kademlia">
+https://github.com/bmuller/kademlia</a></p>
+<p>[5] - <a href="https://en.wikipedia.org/wiki/Smart_contract">
+https://en.wikipedia.org/wiki/Smart_contract</a></p>
+<p>[6] -
+<a href="http://sandhill.com/article/is-data-decentralization-the-new-trend/">
+http://sandhill.com/article/is-data-decentralization-the-new-trend/</a></p>
+<p>[7] - <a href="https://arxiv.org/pdf/1506.03471.pdf">
+https://arxiv.org/pdf/1506.03471.pdf</a></p>
+<p>[8] - <a href="https://en.wikipedia.org/wiki/BitTorrent">
+https://en.wikipedia.org/wiki/BitTorrent</a></p>
+<p>[9] - <a href="https://en.wikipedia.org/wiki/Kad_network">
+https://en.wikipedia.org/wiki/Kad_network</a></p>
+<p>[10] - <a href="https://en.wikipedia.org/wiki/Chord_(peer-to-peer)">
+https://en.wikipedia.org/wiki/Chord_(peer-to-peer)</a> </p>
+<p>[11] - <a href="https://en.wikipedia.org/wiki/Pastry_(DHT)">
+https://en.wikipedia.org/wiki/Pastry_(DHT)</a> </p>
+<p>[12] -
+<a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html">
+https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html</a> </p>
+<p>[13] -
+<a href="https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table">
+https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table</a></p>
+<p>[14] -
+<a href="https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170">
+https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170</a></p>
+<p>[15] - <a href="https://en.wikipedia.org/wiki/Kademlia">
+https://en.wikipedia.org/wiki/Kademlia</a> </p>
+[16] - <a href="https://forum.emule-project.net/index.php?showtopic=32335">
+https://forum.emule-project.net/index.php?showtopic=32335</a>
+
+<p>[17] - <a href="http://www.emule-project.net/home/perl/general.cgi?l=1">
+http://www.emule-project.net/home/perl/general.cgi?l=1</a> </p>
+<p>[18] -
+<a href="https://forum.emule-project.net/index.php?showtopic=32335&view=findpost&p=214837">
+https://forum.emule-project.net/index.php?showtopic=32335&amp;view=findpost&amp;p=214837</a>
+</p>
+<p>[19] - <a href="http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf">
+http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf</a> </p>
+<p>[20] - <a href="http://www.maymounkov.org/kademlia">
+http://www.maymounkov.org/kademlia</a> </p>
+<p>[21] - <a href="https://en.wikipedia.org/wiki/Sybil_attack">
+https://en.wikipedia.org/wiki/Sybil_attack</a></p>
+
+</body>
+
+</html>
