@@ -5,27 +5,27 @@ using System.Linq;
 using System.Numerics;
 using System.Timers;
 
+// using Newtonsoft.Json;
+
 using Clifton.Kademlia.Common;
 
 namespace Clifton.Kademlia
 {
     public class Dht : IDht
     {
-#if DEBUG       // for unit testing and demo
-        public BaseRouter Router { get { return router; } }
+        public BaseRouter Router { get { return router; } set { router = value; } }
         public ConcurrentDictionary<BigInteger, int> EvictionCount { get { return evictionCount; } }
         public IStorage RepublishStorage { get { return republishStorage; } }
-#endif
-
-        public List<Contact> PendingContacts { get { return pendingContacts; } }
-        public Node Node { get { return node; } }
-        public Contact Contact { get { return ourContact; } }
-        public ID ID { get { return ourId; } }
 
         /// <summary>
         /// Server has access to this.
         /// </summary>
         public IStorage OriginatorStorage { get { return originatorStorage; } }
+
+        public List<Contact> PendingContacts { get { return pendingContacts; } }
+        public Node Node { get { return node; } set { node = value; } }
+        public Contact Contact { get { return ourContact; } set { ourContact = value; } }
+        public ID ID { get { return ourId; } set { ourId = value; } }
 
         protected BaseRouter router;
         protected IStorage originatorStorage;
@@ -42,6 +42,11 @@ namespace Clifton.Kademlia
 
         protected ConcurrentDictionary<BigInteger, int> evictionCount;
         protected List<Contact> pendingContacts;
+
+        // For serializer, empty constructor needed.
+        public Dht()
+        {
+        }
 
         /// <summary>
         /// Use this constructor to initialize the stores to the same instance.
@@ -65,6 +70,18 @@ namespace Clifton.Kademlia
             this.republishStorage = republishStorage;
             this.cacheStorage = cacheStorage;
             FinishInitialization(id, protocol, router);
+        }
+
+        public string Save()
+        {
+            return "";
+            // return JsonConvert.SerializeObject(this, Formatting.Indented);
+        }
+
+        public static Dht Load(string json)
+        {
+            return null;
+            // return JsonConvert.DeserializeObject<Dht>(json);
         }
 
 /// <summary>

@@ -290,5 +290,29 @@ namespace UnitTests2
 
             Assert.IsTrue(dhtUs.Router.Node.BucketList.Buckets.Sum(c => c.Contacts.Count) == 31, "Expected our peer to have 31 contacts.");
         }
+
+        [TestMethod]
+        public void DhtSerializationTest()
+        {
+            VirtualProtocol vp1 = new VirtualProtocol();
+            VirtualProtocol vp2 = new VirtualProtocol();
+            VirtualStorage store1 = new VirtualStorage();
+            VirtualStorage store2 = new VirtualStorage();
+
+            // Ensures that all nodes are closer, because ID.Max ^ n < ID.Max when n > 0.
+            Dht dht = new Dht(ID.Max, vp1, new Router(), store1, store1, new VirtualStorage());
+            vp1.Node = dht.Router.Node;
+
+            ID contactID = ID.Mid;      // a closer contact.
+            Contact otherContact = new Contact(vp2, contactID);
+            Node otherNode = new Node(otherContact, store2);
+            vp2.Node = otherNode;
+
+            // Add this other contact to our peer list.
+            dht.Node.BucketList.AddContact(otherContact);
+            string json = dht.Save();
+
+            Dht newDht = Dht.Load(json);
+        }
     }
 }
