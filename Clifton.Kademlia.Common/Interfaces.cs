@@ -20,6 +20,8 @@ namespace Clifton.Kademlia.Common
     {
         List<KBucket> Buckets { get; }
         IDht Dht { get; set; }
+        ID OurID { get; set; }
+        Contact OurContact { get; set; }
         void AddContact(Contact contact);
         KBucket GetKBucket(ID otherID);
         List<Contact> GetCloseContacts(ID key, ID exclude);

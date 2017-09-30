@@ -21,11 +21,16 @@ namespace Clifton.Kademlia
         [JsonIgnore]
         public List<Contact> PendingContacts { get { return pendingContacts; } }
 
+        [JsonIgnore]
         public Node Node { get { return node; } set { node = value; } }
+
         public IStorage RepublishStorage { get { return republishStorage; } set { republishStorage = value; } }
         public IStorage OriginatorStorage { get { return originatorStorage; } set { originatorStorage = value; } }
         public Contact Contact { get { return ourContact; } set { ourContact = value; } }
+
+        [JsonIgnore]
         public ID ID { get { return ourId; } set { ourId = value; } }
+        [JsonIgnore]
         public IProtocol Protocol { get { return protocol; } set { protocol = value; } }
 
         protected BaseRouter router;
@@ -58,6 +63,7 @@ namespace Clifton.Kademlia
             republishStorage = storageFactory();
             cacheStorage = storageFactory();
             FinishInitialization(id, protocol, router);
+            SetupTimers();
         }
 
         /// <summary>
@@ -71,6 +77,7 @@ namespace Clifton.Kademlia
             this.republishStorage = republishStorage;
             this.cacheStorage = cacheStorage;
             FinishInitialization(id, protocol, router);
+            SetupTimers();
         }
 
         public string Save()
@@ -95,13 +102,19 @@ namespace Clifton.Kademlia
 
             Dht dht = JsonConvert.DeserializeObject<Dht>(json, settings);
             dht.DeserializationFixups();
-            dht.FinishInitialization(dht.ID, dht.Protocol, dht.Router);
+            dht.SetupTimers();
 
             return dht;
         }
 
         protected void DeserializationFixups()
         {
+            ID = ourContact.ID;
+            protocol = ourContact.Protocol;
+            node = router.Node;
+            node.OurContact = ourContact;
+            node.BucketList.OurID = ID;
+            node.BucketList.OurContact = ourContact;
             router.Dht = this;
             node.Dht = this;
         }
@@ -337,6 +350,10 @@ namespace Clifton.Kademlia
             this.router = router;
             this.router.Node = node;
             this.router.Dht = this;
+        }
+
+        protected void SetupTimers()
+        {
             SetupBucketRefreshTimer();
             SetupKeyValueRepublishTimer();
             SetupOriginatorRepublishTimer();

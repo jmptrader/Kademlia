@@ -31,6 +31,10 @@ namespace Clifton.Kademlia.Common
             LastSeen = DateTime.Now;
         }
 
+        // IComparable and operator overloading is implemented because on deserialization, Contact instances
+        // are all unique but we need to be able to compare our DHT's contacts, so without worrying about
+        // whether we're comparing Contact references or their ID's, we're doing it correctly here.
+
         public int CompareTo(object obj)
         {
             Validate.IsTrue<NotContactException>(obj is Contact, "Cannot compare non-Contact objects to a Contact");
@@ -44,6 +48,7 @@ namespace Clifton.Kademlia.Common
         {
             if ((((object)a) == null) && (((object)b) != null)) return false;
             if ((((object)a) != null) && (((object)b) == null)) return false;
+            if ((((object)a) == null) && (((object)b) == null)) return true;
 
             return a.ID == b.ID;
         }

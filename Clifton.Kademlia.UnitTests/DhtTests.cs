@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using Clifton.Kademlia;
 using Clifton.Kademlia.Common;
+using Clifton.Kademlia.Protocols;
 
 namespace UnitTests2
 {
@@ -294,25 +295,27 @@ namespace UnitTests2
         [TestMethod]
         public void DhtSerializationTest()
         {
-            VirtualProtocol vp1 = new VirtualProtocol();
-            VirtualProtocol vp2 = new VirtualProtocol();
+            TcpSubnetProtocol p1 = new TcpSubnetProtocol("http://127.0.0.1", 2720, 1);
+            TcpSubnetProtocol p2 = new TcpSubnetProtocol("http://127.0.0.1", 2720, 2);
             VirtualStorage store1 = new VirtualStorage();
             VirtualStorage store2 = new VirtualStorage();
 
             // Ensures that all nodes are closer, because ID.Max ^ n < ID.Max when n > 0.
-            Dht dht = new Dht(ID.Max, vp1, new Router(), store1, store1, new VirtualStorage());
-            vp1.Node = dht.Router.Node;
+            Dht dht = new Dht(ID.Max, p1, new Router(), store1, store1, new VirtualStorage());
 
             ID contactID = ID.Mid;      // a closer contact.
-            Contact otherContact = new Contact(vp2, contactID);
+            Contact otherContact = new Contact(p2, contactID);
             Node otherNode = new Node(otherContact, store2);
-            vp2.Node = otherNode;
 
             // Add this other contact to our peer list.
             dht.Node.BucketList.AddContact(otherContact);
+
             string json = dht.Save();
 
             Dht newDht = Dht.Load(json);
+            Assert.IsTrue(newDht.Node.BucketList.Buckets.Sum(b => b.Contacts.Count) == 1, "Expected our node to have 1 contact.");
+            Assert.IsTrue(newDht.Node.BucketList.ContactExists(otherContact), "Expected our contact to have the other contact.");
+            Assert.IsTrue(newDht.Router.Node == newDht.Node, "Router node not initialized.");
         }
     }
 }

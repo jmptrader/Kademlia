@@ -11,7 +11,11 @@ namespace Clifton.Kademlia
     public class BucketList : IBucketList
     {
         public List<KBucket> Buckets { get { return buckets; } set { buckets = value; } }
+
+        [JsonIgnore]
         public ID OurID { get { return ourID; } set { ourID = value; } }
+
+        [JsonIgnore]
         public Contact OurContact { get { return ourContact; } set { ourContact = value; } }
 
         [JsonIgnore]

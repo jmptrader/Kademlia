@@ -10,7 +10,9 @@ namespace Clifton.Kademlia
 {
     public class Node : INode
     {
+        [JsonIgnore]
         public Contact OurContact { get { return ourContact; } set { ourContact = value; } }
+
         public IBucketList BucketList { get { return bucketList; } set { bucketList = value; } }
         public IStorage Storage { get { return storage; } set { storage = value; } }
         public IStorage CacheStorage { get { return cacheStorage; } set { cacheStorage = value; } }
