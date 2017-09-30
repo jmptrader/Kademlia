@@ -5,7 +5,7 @@ using System.Linq;
 using System.Numerics;
 using System.Timers;
 
-// using Newtonsoft.Json;
+using Newtonsoft.Json;
 
 using Clifton.Kademlia.Common;
 
@@ -14,18 +14,19 @@ namespace Clifton.Kademlia
     public class Dht : IDht
     {
         public BaseRouter Router { get { return router; } set { router = value; } }
+
+        [JsonIgnore]
         public ConcurrentDictionary<BigInteger, int> EvictionCount { get { return evictionCount; } }
-        public IStorage RepublishStorage { get { return republishStorage; } }
 
-        /// <summary>
-        /// Server has access to this.
-        /// </summary>
-        public IStorage OriginatorStorage { get { return originatorStorage; } }
-
+        [JsonIgnore]
         public List<Contact> PendingContacts { get { return pendingContacts; } }
+
         public Node Node { get { return node; } set { node = value; } }
+        public IStorage RepublishStorage { get { return republishStorage; } set { republishStorage = value; } }
+        public IStorage OriginatorStorage { get { return originatorStorage; } set { originatorStorage = value; } }
         public Contact Contact { get { return ourContact; } set { ourContact = value; } }
         public ID ID { get { return ourId; } set { ourId = value; } }
+        public IProtocol Protocol { get { return protocol; } set { protocol = value; } }
 
         protected BaseRouter router;
         protected IStorage originatorStorage;
@@ -74,14 +75,35 @@ namespace Clifton.Kademlia
 
         public string Save()
         {
-            return "";
-            // return JsonConvert.SerializeObject(this, Formatting.Indented);
+            //XmlSerializer xs = new XmlSerializer(GetType());
+            //StringBuilder sb = new StringBuilder();
+            //TextWriter tw = new StringWriter(sb);
+            //xs.Serialize(tw, this);
+            //return sb.ToString();
+
+            var settings = new JsonSerializerSettings();
+            settings.TypeNameHandling = TypeNameHandling.Auto;
+            string json = JsonConvert.SerializeObject(this, Formatting.Indented, settings);
+
+            return json;
         }
 
         public static Dht Load(string json)
         {
-            return null;
-            // return JsonConvert.DeserializeObject<Dht>(json);
+            var settings = new JsonSerializerSettings();
+            settings.TypeNameHandling = TypeNameHandling.Auto;
+
+            Dht dht = JsonConvert.DeserializeObject<Dht>(json, settings);
+            dht.DeserializationFixups();
+            dht.FinishInitialization(dht.ID, dht.Protocol, dht.Router);
+
+            return dht;
+        }
+
+        protected void DeserializationFixups()
+        {
+            router.Dht = this;
+            node.Dht = this;
         }
 
 /// <summary>
@@ -178,7 +200,7 @@ namespace Clifton.Kademlia
 
         public void PerformStoreRepublish()
         {
-            republishStorage.ForEach(k =>
+            republishStorage.Keys.ForEach(k =>
             {
                 ID key = new ID(k);
                 StoreOnCloserContacts(key, republishStorage.Get(key));
@@ -311,6 +333,7 @@ namespace Clifton.Kademlia
             node = new Node(ourContact, republishStorage, cacheStorage);
             node.Dht = this;
             node.BucketList.Dht = this;
+            this.protocol = protocol;
             this.router = router;
             this.router.Node = node;
             this.router.Dht = this;
@@ -376,7 +399,7 @@ namespace Clifton.Kademlia
         {
             DateTime now = DateTime.Now;
 
-			republishStorage.Where(k => (now - republishStorage.GetTimeStamp(k)).TotalMilliseconds >= Constants.KEY_VALUE_REPUBLISH_INTERVAL).ForEach(k=>
+			republishStorage.Keys.Where(k => (now - republishStorage.GetTimeStamp(k)).TotalMilliseconds >= Constants.KEY_VALUE_REPUBLISH_INTERVAL).ForEach(k=>
 			{
                 ID key = new ID(k);
 				StoreOnCloserContacts(key, republishStorage.Get(key));
@@ -388,7 +411,7 @@ namespace Clifton.Kademlia
         {
             DateTime now = DateTime.Now;
 
-            originatorStorage.Where(k => (now - originatorStorage.GetTimeStamp(k)).TotalMilliseconds >= Constants.ORIGINATOR_REPUBLISH_INTERVAL).ForEach(k =>
+            originatorStorage.Keys.Where(k => (now - originatorStorage.GetTimeStamp(k)).TotalMilliseconds >= Constants.ORIGINATOR_REPUBLISH_INTERVAL).ForEach(k =>
             {
                 ID key = new ID(k);
                 // Just use close contacts, don't do a lookup.
@@ -417,7 +440,7 @@ namespace Clifton.Kademlia
         {
             DateTime now = DateTime.Now;
             // ToList so our key list is resolved now as we remove keys.
-            store.Where(k => (now - store.GetTimeStamp(k)).TotalSeconds >= store.GetExpirationTimeSec(k)).ToList().ForEach(k =>
+            store.Keys.Where(k => (now - store.GetTimeStamp(k)).TotalSeconds >= store.GetExpirationTimeSec(k)).ToList().ForEach(k =>
             {
                 store.Remove(k);
             });

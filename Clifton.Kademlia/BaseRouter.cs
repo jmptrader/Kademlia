@@ -2,16 +2,23 @@
 using System.Collections.Generic;
 using System.Linq;
 
+using Newtonsoft.Json;
+
 namespace Clifton.Kademlia.Common
 {
     public abstract class BaseRouter
     {
 #if DEBUG       // for unit testing
+        [JsonIgnore]
         public List<Contact> CloserContacts { get; protected set; }
+
+        [JsonIgnore]
         public List<Contact> FartherContacts { get; protected set; }
 #endif
 
         public Node Node { get { return node; } set { node = value; } }
+
+        [JsonIgnore]
         public Dht Dht { get { return dht; } set { dht = value; } }
 
         protected Dht dht;

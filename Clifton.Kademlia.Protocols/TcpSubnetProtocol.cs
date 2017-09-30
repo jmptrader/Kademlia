@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 using Clifton.Kademlia.Common;
 
@@ -14,7 +13,6 @@ namespace Clifton.Kademlia.Protocols
     public class TcpSubnetProtocol : IProtocol
     {
 #if DEBUG       // for unit tests
-        [JsonIgnore]
         public bool Responds { get; set; }
 #endif
 
@@ -28,7 +26,7 @@ namespace Clifton.Kademlia.Protocols
         protected int subnet;
 
         /// <summary>
-        /// For creating protocols when deserializing contacts from RPC calls.
+        /// For serialization.
         /// </summary>
         public TcpSubnetProtocol()
         {

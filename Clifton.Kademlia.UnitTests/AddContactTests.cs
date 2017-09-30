@@ -302,7 +302,7 @@ namespace UnitTests2
             existing.SimpleStore(ID.One, val1);
             existing.SimpleStore(ID.Mid, valMid);
 
-            Assert.IsTrue(existing.Storage.Count() == 2, "Expected the existing node to have two key-values.");
+            Assert.IsTrue(existing.Storage.Keys.Count == 2, "Expected the existing node to have two key-values.");
 
             // Create a contact in the existing node's bucket list that is closer to one of the values.
             // This contact has the prefix 010000....
@@ -316,7 +316,7 @@ namespace UnitTests2
             Node unseen = new Node(unseenContact, new VirtualStorage());
             unseenvp.Node = unseen;     // final fixup.
 
-            Assert.IsTrue(unseen.Storage.Count() == 0, "The unseen node shouldn't have any key-values!");
+            Assert.IsTrue(unseen.Storage.Keys.Count == 0, "The unseen node shouldn't have any key-values!");
 
             // An unseen node pings, and we should get back valMin only, as ID.One ^ ID.Mid < ID.Max ^ ID.Mid
             existing.Ping(unseenContact);
@@ -332,7 +332,7 @@ namespace UnitTests2
             // c1 ^ V1 > c1 ^ V2, so v1 doesn't get sent to the unseen node.
             // c1 ^ V2 < c2 ^ V2, so it does get sent.
 
-            Assert.IsTrue(unseen.Storage.Count() == 1, "Expected 1 value stored in our new node.");
+            Assert.IsTrue(unseen.Storage.Keys.Count == 1, "Expected 1 value stored in our new node.");
             Assert.IsTrue(unseen.Storage.Contains(ID.Mid), "Expected valMid to be stored.");
             Assert.IsTrue(unseen.Storage.Get(ID.Mid) == valMid, "Expected valMid value to match.");
         }

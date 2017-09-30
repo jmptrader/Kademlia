@@ -44,6 +44,12 @@ namespace Clifton.Kademlia.Common
         public NotAnIDException(string msg) : base(msg) { }
     }
 
+    public class NotContactException : Exception
+    {
+        public NotContactException() { }
+        public NotContactException(string msg) : base(msg) { }
+    }
+
     public class NullIDException : Exception
     {
         public NullIDException() { }

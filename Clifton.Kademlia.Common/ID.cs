@@ -2,15 +2,18 @@
 using System.Linq;
 using System.Numerics;
 
+using Newtonsoft.Json;
+
 namespace Clifton.Kademlia.Common
 {
     public class ID : IComparable
     {
-        public BigInteger Value { get { return id; } }
+        public BigInteger Value { get { return id; } set { id = value; } }
 
         /// <summary>
         /// The array returned is in little-endian order (lsb at index 0)
         /// </summary>
+        [JsonIgnore]
         public byte[] Bytes
         {
             get
@@ -24,16 +27,19 @@ namespace Clifton.Kademlia.Common
             }
         }
 
+        [JsonIgnore]
         public string AsBigEndianString
         {
             get { return String.Join("", Bytes.Bits().Reverse().Select(b => b ? "1" : "0")); }
         }
 
+        [JsonIgnore]
         public bool[] AsBigEndianBool { get { return Bytes.Bits().Reverse().ToArray(); } }
 
         /// <summary>
         /// Produce a random ID distributed evenly across the 160 bit space.
         /// </summary>
+        [JsonIgnore]
         public static ID RandomIDInKeySpace
         {
             get
@@ -54,6 +60,7 @@ namespace Clifton.Kademlia.Common
         /// <summary>
         /// Produce a random ID.
         /// </summary>
+        [JsonIgnore]
         public static ID RandomID
         {
             get
@@ -65,8 +72,10 @@ namespace Clifton.Kademlia.Common
             }
         }
 
+        [JsonIgnore]
         public static ID Zero { get { return new ID(new byte[Constants.ID_LENGTH_BYTES]); } }
 
+        [JsonIgnore]
         public static ID One
         {
             get
@@ -78,6 +87,7 @@ namespace Clifton.Kademlia.Common
             }
         }
 
+        [JsonIgnore]
         public static ID Mid
         {
             get
@@ -89,6 +99,7 @@ namespace Clifton.Kademlia.Common
             }
         }
 
+        [JsonIgnore]
         public static ID Max { get { return new ID(Enumerable.Repeat((byte)0xFF, Constants.ID_LENGTH_BYTES).ToArray()); } }
 
         protected BigInteger id;
@@ -98,6 +109,13 @@ namespace Clifton.Kademlia.Common
 #else
         private static Random rnd = new Random();
 #endif
+
+        /// <summary>
+        /// For serialization.
+        /// </summary>
+        public ID()
+        {
+        }
 
         /// <summary>
         /// Construct the ID from a byte array.

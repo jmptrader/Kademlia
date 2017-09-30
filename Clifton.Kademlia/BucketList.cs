@@ -2,13 +2,19 @@
 using System.Linq;
 using System.Numerics;
 
+using Newtonsoft.Json;
+
 using Clifton.Kademlia.Common;
 
 namespace Clifton.Kademlia
 {
     public class BucketList : IBucketList
     {
-        public List<KBucket> Buckets { get { return buckets; } }
+        public List<KBucket> Buckets { get { return buckets; } set { buckets = value; } }
+        public ID OurID { get { return ourID; } set { ourID = value; } }
+        public Contact OurContact { get { return ourContact; } set { ourContact = value; } }
+
+        [JsonIgnore]
         public IDht Dht { get { return dht; } set { dht = value; } }
 
         protected List<KBucket> buckets;
@@ -27,6 +33,13 @@ namespace Clifton.Kademlia
             buckets.Add(new KBucket());
         }
 #endif
+
+        /// <summary>
+        /// For serialization.
+        /// </summary>
+        public BucketList()
+        {
+        }
 
         /// <summary>
         /// Initialize the bucket list with our host ID and create a single bucket for the full ID range.

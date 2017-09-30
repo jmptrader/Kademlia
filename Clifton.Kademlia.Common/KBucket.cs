@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 
+using Newtonsoft.Json;
+
 namespace Clifton.Kademlia.Common
 {
     public class KBucket 
@@ -15,8 +17,10 @@ namespace Clifton.Kademlia.Common
         /// <summary>
         /// We are going to assume that the "key" for this bucket is it's high range.
         /// </summary>
+        [JsonIgnore]
         public BigInteger Key { get { return high; } }
 
+        [JsonIgnore]
         public bool IsBucketFull { get { return contacts.Count == Constants.K; } }
 
         protected List<Contact> contacts;

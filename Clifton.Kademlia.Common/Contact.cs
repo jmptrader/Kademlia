@@ -2,12 +2,16 @@
 
 namespace Clifton.Kademlia.Common
 {
-    public class Contact
+    public class Contact  : IComparable
     {
         public IProtocol Protocol { get; set; }
-        public DateTime LastSeen { get; protected set; }
+        public DateTime LastSeen { get; set; }
+        public ID ID { get; set; }
 
-        public ID ID { get; protected set; }
+        // For serialization.  Don't want to use JsonConstructor because we don't want to touch the LastSeen.
+        public Contact()
+        {
+        }
 
         /// <summary>
         /// Initialize a contact with its protocol and ID.
@@ -25,6 +29,44 @@ namespace Clifton.Kademlia.Common
         public void Touch()
         {
             LastSeen = DateTime.Now;
+        }
+
+        public int CompareTo(object obj)
+        {
+            Validate.IsTrue<NotContactException>(obj is Contact, "Cannot compare non-Contact objects to a Contact");
+
+            Contact c = (Contact)obj;
+
+            return ID.CompareTo(c.ID);
+        }
+
+        public static bool operator ==(Contact a, Contact b)
+        {
+            if ((((object)a) == null) && (((object)b) != null)) return false;
+            if ((((object)a) != null) && (((object)b) == null)) return false;
+
+            return a.ID == b.ID;
+        }
+
+        public static bool operator !=(Contact a, Contact b)
+        {
+            if ((((object)a) == null) && (((object)b) != null)) return true;
+            if ((((object)a) != null) && (((object)b) == null)) return true;
+            if ((((object)a) == null) && (((object)b) == null)) return false;
+
+            return !(a.ID == b.ID);
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (obj == null || !(obj is Contact)) return false;
+
+            return this == (Contact)obj;
+        }
+
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
         }
     }
 }

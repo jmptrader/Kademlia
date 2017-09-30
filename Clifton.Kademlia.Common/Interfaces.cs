@@ -23,6 +23,7 @@ namespace Clifton.Kademlia.Common
         void AddContact(Contact contact);
         KBucket GetKBucket(ID otherID);
         List<Contact> GetCloseContacts(ID key, ID exclude);
+        bool ContactExists(Contact contact);
     }
 
     public interface IProtocol
@@ -39,7 +40,7 @@ namespace Clifton.Kademlia.Common
         IBucketList BucketList { get; }
     }
 
-    public interface IStorage : IEnumerable<BigInteger>
+    public interface IStorage
     {
         bool HasValues { get; }
         bool Contains(ID key);
@@ -50,6 +51,7 @@ namespace Clifton.Kademlia.Common
         void Set(ID key, string value, int expirationTimeSec = 0);
         int GetExpirationTimeSec(BigInteger key);
         void Remove(BigInteger key);
+        List<BigInteger> Keys { get; }
 
         /// <summary>
         /// Updates the republish timestamp.

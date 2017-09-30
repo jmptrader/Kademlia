@@ -1,13 +1,24 @@
 ﻿using System.Collections.Generic;
 
+using Newtonsoft.Json;
+
 using Clifton.Kademlia.Common;
 
 namespace Clifton.Kademlia
 {
     public class VirtualProtocol : IProtocol
     {
+        [JsonIgnore]
         public Node Node { get; set; }
+        [JsonIgnore]
         public bool Responds { get; set; }
+
+        /// <summary>
+        /// For serialization.
+        /// </summary>
+        public VirtualProtocol()
+        {
+        }
 
         /// <summary>
         /// For unit testing with deferred node setup.

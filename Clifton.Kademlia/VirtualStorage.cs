@@ -4,6 +4,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Numerics;
 
+using Newtonsoft.Json;
+
 using Clifton.Kademlia.Common;
 
 namespace Clifton.Kademlia
@@ -20,7 +22,11 @@ namespace Clifton.Kademlia
     /// </summary>
     public class VirtualStorage : IStorage
     {
+        [JsonIgnore]
         public bool HasValues { get { return store.Count > 0; } }
+
+        [JsonIgnore]
+        public List<BigInteger> Keys { get { return new List<BigInteger>(store.Keys); } }
 
         protected ConcurrentDictionary<BigInteger, StoreValue> store;
 
@@ -85,16 +91,6 @@ namespace Clifton.Kademlia
         public void Remove(BigInteger key)
         {
             store.TryRemove(key, out _);
-        }
-
-        public IEnumerator<BigInteger> GetEnumerator()
-        {
-            return store.Keys.GetEnumerator();
-        }
-
-        IEnumerator IEnumerable.GetEnumerator()
-        {
-            return store.Keys.GetEnumerator();
         }
     }
 }

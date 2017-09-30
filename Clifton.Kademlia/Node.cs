@@ -1,9 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 using Clifton.Kademlia.Common;
 using Clifton.Kademlia.Protocols;
@@ -12,19 +10,24 @@ namespace Clifton.Kademlia
 {
     public class Node : INode
     {
-        public Contact OurContact { get { return ourContact; } }
-        public IBucketList BucketList { get { return bucketList; } }
-        public IStorage Storage { get { return storage; } }
-        public IStorage CacheStorage { get { return cacheStorage; } }
+        public Contact OurContact { get { return ourContact; } set { ourContact = value; } }
+        public IBucketList BucketList { get { return bucketList; } set { bucketList = value; } }
+        public IStorage Storage { get { return storage; } set { storage = value; } }
+        public IStorage CacheStorage { get { return cacheStorage; } set { cacheStorage = value; } }
+
+        [JsonIgnore]
         public Dht Dht { get { return dht; } set { dht = value; } }
 
         protected Contact ourContact;
-        protected BucketList bucketList;
+        protected IBucketList bucketList;
         protected IStorage storage;
         protected IStorage cacheStorage;
         protected Dht dht;
 
-        protected Node()
+        /// <summary>
+        /// For serialization.
+        /// </summary>
+        public Node()
         {
         }
 
@@ -200,7 +203,7 @@ namespace Clifton.Kademlia
                 if (contacts.Count() > 0)
                 {
                     // and our distance to the key < any other contact's distance to the key...
-                    storage.AsParallel().ForEach(k =>
+                    storage.Keys.AsParallel().ForEach(k =>
                     {
                     // our min distance to the contact.
                     var distance = contacts.Min(c => k ^ c.ID);
