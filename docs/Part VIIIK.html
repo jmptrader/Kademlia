@@ -1,0 +1,751 @@
+<html>
+
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<title>New Page 1</title>
+</head>
+
+<body>
+<a href="PartI">Part I - Introduction and Basic Concepts</a><br>
+<a href="PartII">Part II - Adding Contacts</a><br>
+<a href="PartIII">Part III - Node Lookup</a><br>
+<a href="PartIV">Part IV - Value Lookup</a><br>
+<a href="PartV">Part V - The DHT</a><br>
+<a href="PartVI">Part VI - Bucket and Key-Value Management</a><br>
+<a href="PartVII">Part VII - Asynchronous Considerations and Parallel Queries</a><br>
+<a href="PartVIII">Part VIII - A Basic TCP Subnet Procotol</a> (This Article)<br>
+<a href="PartIX">Part IX - Demo and Conclusion</a>
+<p>
+<h2>Contents</h2><ul>
+<li><a href="#ABasicTCPSubnetProtocol0">A Basic TCP Subnet Protocol</a></li>
+<ul>
+<li><a href="#RequestMessages1">Request Messages</a></li>
+<li><a href="#RequestHandlers2">Request Handlers</a></li>
+<li><a href="#Responses3">Responses</a></li>
+<li><a href="#ServerImplementation4">Server Implementation</a></li>
+<li><a href="#TheTCPSubnetProtocol5">The TCP Subnet Protocol</a></li>
+<li><a href="#ErrorReporting6">Error Reporting</a></li>
+<li><a href="#TCPSubnetUnitTesting7">TCP Subnet Unit Testing</a></li>
+<ul>
+<li><a href="#PingRouteTest8">PingRouteTest</a></li>
+<li><a href="#StoreRouteTest9"> StoreRouteTest</a></li>
+<li><a href="#FindNodesRouteTest10"> FindNodesRouteTest</a></li>
+<li><a href="#FindValueRouteTest11"> FindValueRouteTest</a></li>
+<li><a href="#UnresponsiveNodeTest12"> UnresponsiveNodeTest</a></li>
+</ul>
+</ul>
+<li><a href="#RPCErrorHandlingandDelayedEviction13">RPC Error Handling and Delayed Eviction</a></li>
+<ul>
+<li><a href="#Discussion14">Discussion</a></li>
+<ul>
+<li><a href="#Ambiguity#1915">Ambiguity #19</a></li>
+</ul>
+<li><a href="#Implementation16">Implementation</a></li>
+<li><a href="#UnitTests17">Unit Tests</a></li>
+</ul>
+<li><a href="#References18">References</a></li>
+</ul>
+
+</p>
+
+<h2><a name="ABasicTCPSubnetProtocol0">A Basic TCP Subnet Protocol</a></h2>
+<p>There's a few points to make in this implementation:</p>
+<ol>
+	<li>A single port is used along with a subnet identifier to route requests 
+	to the correct handler.&nbsp; The subnet identifier makes it easier to test 
+	multiple &quot;servers&quot; on the same machine as we don't need to open (and 
+	&quot;allow&quot;) a unique port number per &quot;server.&quot;</li>
+	<li>JSON is used as the serialization format for request and response data.</li>
+	<li>RPC calls are synchronous, in that they wait for a response.&nbsp; There 
+	are other implementations that continue based on the random ID and handler, 
+	which I chose not to implement.</li>
+</ol>
+<h3><a name="RequestMessages1">Request Messages</a></h3>
+<p>Requests issued by the DHT are serialized to JSON from the following classes:</p>
+<pre>public abstract class BaseRequest
+{
+  public BigInteger RandomID { get; set; }
+  public BigInteger Sender { get; set; }
+
+  public BaseRequest()
+  {
+    RandomID = ID.RandomID.Value;
+  }
+}
+
+public abstract class BaseSubnetRequest : BaseRequest
+{
+  public int Subnet { get; set; }
+}
+
+public class FindNodeRequest : BaseSubnetRequest
+{
+  public BigInteger Key { get; set; }
+}
+
+public class FindValueRequest : BaseSubnetRequest
+{
+  public BigInteger Key { get; set; }
+}
+
+public class PingRequest : BaseSubnetRequest { }
+
+public class StoreRequest : BaseSubnetRequest
+{
+  public BigInteger Key { get; set; }
+  public string Value { get; set; }
+  public bool IsCached { get; set; }
+  public int ExpirationTimeSec { get; set; }
+}</pre>
+<p>On the server side, which receives these messages, they are handled by a 
+common request class:</p>
+<pre>/// &lt;summary&gt;
+/// For passing to Node handlers with common parameters.
+/// &lt;/summary&gt;
+public class CommonRequest
+{
+  public BigInteger RandomID { get; set; }
+  public BigInteger Sender { get; set; }
+  public BigInteger Key { get; set; }
+  public string Value { get; set; }
+  public bool IsCached { get; set; }
+  public int ExpirationTimeSec { get; set; }
+}</pre>
+<p>As the comment states, the common request simplifies the server 
+implementation by having RPC handler methods with the same parameter.</p>
+<h3><a name="RequestHandlers2">Request Handlers</a></h3>
+<p>The request handlers extract the pertinent pieces of the CommonRequest and 
+call the appropriate method of the Node class.&nbsp; The important part here is 
+that the contact protocol must be returned as part of the FindNode and FindValue 
+response.&nbsp; Note that the returns are anonymous objects:</p>
+<pre>public object ServerPing(CommonRequest request)
+{
+  Ping(new Contact(null, new ID(request.Sender)));
+
+  return new { RandomID = request.RandomID };
+}
+
+public object ServerStore(CommonRequest request)
+{
+  Store(new Contact(null, new ID(request.Sender)), new ID(request.Key), request.Value, request.IsCached, request.ExpirationTimeSec);
+
+  return new { RandomID = request.RandomID };
+}
+
+public object ServerFindNode(CommonRequest request)
+{
+  var (contacts, val) = FindNode(new Contact(null, new ID(request.Sender)), new ID(request.Key));
+
+  return new 
+  { 
+    Contacts = contacts.Select(c =&gt; 
+      new 
+      { 
+        Contact = c.ID.Value, 
+        Protocol = c.Protocol, ProtocolName = c.Protocol.GetType().Name 
+      }).ToList(), 
+      RandomID = request.RandomID 
+  };
+}
+
+public object ServerFindValue(CommonRequest request)
+{
+  var (contacts, val) = FindValue(new Contact(null, new ID(request.Sender)), new ID(request.Key));
+
+  return new 
+  { 
+    Contacts = contacts?.Select(c =&gt; 
+    new 
+    { 
+      Contact = c.ID.Value, 
+      Protocol = c.Protocol, ProtocolName=c.Protocol.GetType().Name 
+    })?.ToList(), 
+    RandomID = request.RandomID, 
+    Value = val 
+  };
+}</pre>
+<h3><a name="Responses3">Responses</a></h3>
+<p>JSON responses are deserialized into the following classes:</p>
+<pre>public abstract class BaseResponse
+{
+  public BigInteger RandomID { get; set; }
+}
+
+public class ErrorResponse : BaseResponse
+{
+  public string ErrorMessage { get; set; }
+}
+
+public class FindNodeResponse : BaseResponse
+{
+  public List&lt;BigInteger&gt; Contacts { get; set; }
+}
+
+public class FindValueResponse : BaseResponse
+{
+  public List&lt;BigInteger&gt; Contacts { get; set; }
+  public string Value { get; set; }
+}
+
+public class PingResponse : BaseResponse { }
+public class StoreResponse : BaseResponse { }</pre>
+<h3><a name="ServerImplementation4">Server Implementation</a></h3>
+<p>The server is a straightforward <code>HttpListener</code> but note how the subnet ID is 
+used to route the request to the specific node associated with the subnet:</p>
+<pre>protected virtual async void ProcessRequest(HttpListenerContext context)
+{
+  string data = new StreamReader(context.Request.InputStream, context.Request.ContentEncoding).ReadToEnd();
+
+  if (context.Request.HttpMethod == &quot;POST&quot;)
+  {
+    Type requestType;
+    string path = context.Request.RawUrl;
+
+    if (routePackets.TryGetValue(path, out requestType))
+    {
+      CommonRequest commonRequest = JsonConvert.DeserializeObject&lt;CommonRequest&gt;(data);
+      int subnet = ((BaseSubnetRequest)JsonConvert.DeserializeObject(data, requestType)).Subnet;
+      Node node;
+
+      if (subnets.TryGetValue(subnet, out node))
+      {
+        // Remove &quot;//&quot;
+        // Prefix our call with &quot;Server&quot; so that the method name is unambiguous.
+        string methodName = &quot;Server&quot; + path.Substring(2); 
+
+#if DEBUG // For unit testing
+        if (!((TcpSubnetProtocol)node.OurContact.Protocol).Responds)
+        {
+          // Exceeds 500ms timeout.
+          System.Threading.Thread.Sleep(1000);
+          context.Response.Close();
+          return; // bail now.
+        }
+#endif
+
+        try
+        {
+          MethodInfo mi = node.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
+          object response = await Task.Run(() =&gt; mi.Invoke(node, new object[] { commonRequest }));
+          SendResponse(context, response);
+        }
+        catch (Exception ex)
+        {
+          SendErrorResponse(context, new ErrorResponse() { ErrorMessage = ex.Message });
+        }
+      }
+      else
+      {
+        SendErrorResponse(context, new ErrorResponse() { ErrorMessage = &quot;Subnet node not found.&quot; });
+      }
+    }
+    else
+    {
+      SendErrorResponse(context, new ErrorResponse() { ErrorMessage = &quot;Method not recognized.&quot; });
+    }
+  }
+
+  context.Response.Close();
+}
+</pre>
+<h3><a name="TheTCPSubnetProtocol5">The TCP Subnet Protocol</a></h3>
+<p>The protocol implements the four RPC calls, issuing HTTP POST's to the 
+server.&nbsp; Notice how the protocol is instantiated from the JSON return, and 
+if the protocol isn't supported, the contact is removed from the contacts 
+returned by FindNode and FindValue.&nbsp; </p><p> The RPC calls:</p>
+<pre>public (List&lt;Contact&gt; contacts, RpcError error) FindNode(Contact sender, ID key)
+{
+  ErrorResponse error;
+  ID id = ID.RandomID;
+  bool timeoutError;
+
+  var ret = RestCall.Post&lt;FindNodeResponse, ErrorResponse&gt;(url + &quot;:&quot; + port + &quot;//FindNode&quot;,
+    new FindNodeRequest() { Subnet = subnet, Sender = sender.ID.Value, Key = key.Value, RandomID = id.Value }, out error, out timeoutError);
+
+  try
+  {
+    var contacts = ret?.Contacts?.Select(val =&gt; new Contact(InstantiateProtocol(val.Protocol, val.ProtocolName), new ID(val.Contact))).ToList();
+
+    // Return only contacts with supported protocols.
+    return (contacts?.Where(c =&gt; c.Protocol != null).ToList() ?? EmptyContactList(), GetRpcError(id, ret, timeoutError, error));
+  }
+  catch (Exception ex)
+  {
+    return (null, new RpcError() { ProtocolError = true, ProtocolErrorMessage = ex.Message });
+  }
+}
+
+/// &lt;summary&gt;
+/// Attempt to find the value in the peer network.
+/// &lt;/summary&gt;
+/// &lt;returns&gt;A null contact list is acceptable here as it is a valid return if the value is found.
+/// The caller is responsible for checking the timeoutError flag to make sure null contacts is not
+/// the result of a timeout error.&lt;/returns&gt;
+public (List&lt;Contact&gt; contacts, string val, RpcError error) FindValue(Contact sender, ID key)
+{
+  ErrorResponse error;
+  ID id = ID.RandomID;
+  bool timeoutError;
+
+  var ret = RestCall.Post&lt;FindValueResponse, ErrorResponse&gt;(url + &quot;:&quot; + port + &quot;//FindValue&quot;,
+    new FindValueRequest() { Subnet = subnet, Sender = sender.ID.Value, Key = key.Value, RandomID = id.Value }, out error, out timeoutError);
+
+  try
+  {
+    var contacts = ret?.Contacts?.Select(val =&gt; new Contact(InstantiateProtocol(val.Protocol, val.ProtocolName), new ID(val.Contact))).ToList();
+
+    // Return only contacts with supported protocols.
+    return (contacts?.Where(c=&gt;c.Protocol != null).ToList(), ret.Value, GetRpcError(id, ret, timeoutError, error));
+  }
+  catch (Exception ex)
+  {
+    return (null, null, new RpcError() { ProtocolError = true, ProtocolErrorMessage = ex.Message });
+  }
+
+public RpcError Ping(Contact sender)
+{
+  ErrorResponse error;
+  ID id = ID.RandomID;
+  bool timeoutError;
+
+  var ret = RestCall.Post&lt;FindValueResponse, ErrorResponse&gt;(url + &quot;:&quot; + port + &quot;//Ping&quot;,
+  new PingRequest() { Subnet = subnet, Sender = sender.ID.Value, RandomID = id.Value}, out error, out timeoutError);
+
+  return GetRpcError(id, ret, timeoutError, error);
+}
+
+public RpcError Store(Contact sender, ID key, string val, bool isCached = false, int expirationTimeSec = 0)
+{
+  ErrorResponse error;
+  ID id = ID.RandomID;
+  bool timeoutError;
+
+  var ret = RestCall.Post&lt;FindValueResponse, ErrorResponse&gt;(url + &quot;:&quot; + port + &quot;//Store&quot;,
+  new StoreRequest()
+  {
+    Subnet = subnet,
+    Sender = sender.ID.Value,
+    Key = key.Value,
+    Value = val,
+    IsCached = isCached,
+    ExpirationTimeSec = expirationTimeSec,
+    RandomID = id.Value
+  }, out error, out timeoutError);
+
+  return GetRpcError(id, ret, timeoutError, error);
+}
+
+protected RpcError GetRpcError(ID id, BaseResponse resp, bool timeoutError, ErrorResponse peerError)
+{
+  return new RpcError() { IDMismatchError = id != resp.RandomID, TimeoutError = timeoutError, PeerError = peerError != null, PeerErrorMessage = peerError?.ErrorMessage };
+}
+
+protected List&lt;Contact&gt; EmptyContactList()
+{
+  return new List&lt;Contact&gt;();
+}</pre>
+<p>Newtonsoft.Json is a great serializer, as illustrated in the 
+<code>InstantiateProtocol</code> method:</p>
+<pre>/// &lt;summary&gt;
+/// Returns the contact's protocol or, if not supported, null.
+/// &lt;/summary&gt;
+protected IProtocol InstantiateProtocol(object protocol, string protocolName)
+{
+  IProtocol ret = null;
+  Type t = Type.GetType(&quot;Clifton.Kademlia.Protocols.&quot; + protocolName);
+
+  if (t != null)
+  {
+    JObject jobj = (JObject)protocol;
+    ret = (IProtocol)JsonConvert.DeserializeObject(protocol.ToString(), t);
+  }
+
+  return ret;
+}</pre>
+<p><img border="0" src="note.png" width="24" height="32"> Notice the namespace 
+prefixed to the protocol name.&nbsp; A different implementation (say in Python) 
+would only need to specify the protocol name, and as long as the type matches 
+the C# type with the namespace prefix, we should be good to go. </p>
+<h3><a name="ErrorReporting6">Error Reporting</a></h3>
+<p>Note how the protocol has been refactored to return any errors from the RPC 
+call.&nbsp; This is handled by the <code>RpcResponse</code> class:</p>
+<pre>public class RpcError
+{
+  public bool HasError { get { return TimeoutError || IDMismatchError || PeerError; } }
+
+  public bool TimeoutError { get; set; }
+  public bool IDMismatchError { get; set; }
+  public bool PeerError { get; set; }
+  public string PeerErrorMessage { get; set; }
+}</pre>
+<p>Note that this class reflects several different errors that can occur:</p>
+<ol>
+	<li>Timeout - the peer failed to respond in the <code>RestCall.REQUEST_TIMEOUT</code> 
+	period, which by default is 500ms.</li>
+	<li>ID mismatch - the peer responded but not with an ID that matched the 
+	sender's random ID.</li>
+	<li>Peer error - the peer encountered an exception, in which case the 
+	exception message is returned to the caller.</li>
+	<li>Deserialization errors - The <code>Post</code> method catches JSON 
+	deserialization errors which also indicates an error with the peer response.</li>
+</ol>
+<p>Error handling will be discussed in the next major section, RPC Error 
+Handling.</p>
+<h3><a name="TCPSubnetUnitTesting7">TCP Subnet Unit Testing</a></h3>
+<p>The following unit 
+tests validate the round trip calls, exercising the protocol calls and the 
+server.&nbsp; Each test initializes the server and then tears it down:</p>
+<pre>protected string localIP = &quot;http://127.0.0.1&quot;;
+protected int port = 2720;
+protected TcpSubnetServer server;
+
+[TestInitialize]
+public void Initialize()
+{
+  server = new TcpSubnetServer(localIP, port);
+}
+
+[TestCleanup]
+public void TestCleanup()
+{
+  server.Stop();
+}</pre>
+<p>The unit tests exercise each of the four RPC calls as well as a timeout 
+error.</p>
+<h4><a name="PingRouteTest8">PingRouteTest</a></h4>
+<p><img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
+verifies the Ping RPC call.</p>
+<pre>[TestMethod]
+public void PingRouteTest()
+{
+  TcpSubnetProtocol p1 = new TcpSubnetProtocol(localIP, port, 1);
+  TcpSubnetProtocol p2 = new TcpSubnetProtocol(localIP, port, 2);
+  ID ourID = ID.RandomID;
+  Contact c1 = new Contact(p1, ourID);
+  Node n1 = new Node(c1, new VirtualStorage());
+  Node n2 = new Node(new Contact(p2, ID.RandomID), new VirtualStorage());
+  server.RegisterProtocol(p1.Subnet, n1);
+  server.RegisterProtocol(p2.Subnet, n2);
+  server.Start();
+
+  p2.Ping(c1);
+}</pre>
+<h4><a name="StoreRouteTest9"> StoreRouteTest</a></h4>
+<p> <img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
+verifies the Store RPC call;</p>
+<pre>[TestMethod]
+public void StoreRouteTest()
+{
+  TcpSubnetProtocol p1 = new TcpSubnetProtocol(localIP, port, 1);
+  TcpSubnetProtocol p2 = new TcpSubnetProtocol(localIP, port, 2);
+  ID ourID = ID.RandomID;
+  Contact c1 = new Contact(p1, ourID);
+  Node n1 = new Node(c1, new VirtualStorage());
+  Node n2 = new Node(new Contact(p2, ID.RandomID), new VirtualStorage());
+  server.RegisterProtocol(p1.Subnet, n1);
+  server.RegisterProtocol(p2.Subnet, n2);
+  server.Start();
+
+  Contact sender = new Contact(p1, ID.RandomID);
+  ID testID = ID.RandomID;
+  string testValue = &quot;Test&quot;;
+  p2.Store(sender, testID, testValue);
+  Assert.IsTrue(n2.Storage.Contains(testID), &quot;Expected remote peer to have value.&quot;);
+  Assert.IsTrue(n2.Storage.Get(testID) == testValue, &quot;Expected remote peer to contain stored value.&quot;);
+}</pre>
+<h4><a name="FindNodesRouteTest10"> FindNodesRouteTest</a></h4>
+<p> <img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
+verifies the FindNodes RPC call:</p>
+
+<pre>[TestMethod]
+public void FindNodesRouteTest()
+{
+  TcpSubnetProtocol p1 = new TcpSubnetProtocol(localIP, port, 1);
+  TcpSubnetProtocol p2 = new TcpSubnetProtocol(localIP, port, 2);
+  ID ourID = ID.RandomID;
+  Contact c1 = new Contact(p1, ourID);
+  Node n1 = new Node(c1, new VirtualStorage());
+  Node n2 = new Node(new Contact(p2, ID.RandomID), new VirtualStorage());
+
+  // Node 2 knows about another contact, that isn't us (because we're excluded.)
+  ID otherPeer = ID.RandomID;
+  n2.BucketList.Buckets[0].Contacts.Add(new Contact(null, otherPeer));
+
+  server.RegisterProtocol(p1.Subnet, n1);
+  server.RegisterProtocol(p2.Subnet, n2);
+  server.Start();
+
+  ID id = ID.RandomID;
+  List&lt;Contact&gt; ret = p2.FindNode(c1, id).contacts;
+
+  Assert.IsTrue(ret.Count == 1, &quot;Expected 1 contact.&quot;);
+  Assert.IsTrue(ret[0].ID == otherPeer, &quot;Expected contact to the other peer (not us).&quot;);
+}</pre>
+<h4><a name="FindValueRouteTest11"> FindValueRouteTest</a></h4>
+<p> <img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
+verifies the FindValueRouteTest:</p>
+
+<pre>[TestMethod]
+public void FindValueRouteTest()
+{
+  TcpSubnetProtocol p1 = new TcpSubnetProtocol(localIP, port, 1);
+  TcpSubnetProtocol p2 = new TcpSubnetProtocol(localIP, port, 2);
+  ID ourID = ID.RandomID;
+  Contact c1 = new Contact(p1, ourID);
+  Node n1 = new Node(c1, new VirtualStorage());
+  Node n2 = new Node(new Contact(p2, ID.RandomID), new VirtualStorage());
+
+  server.RegisterProtocol(p1.Subnet, n1);
+  server.RegisterProtocol(p2.Subnet, n2);
+  server.Start();
+
+  ID testID = ID.RandomID;
+  string testValue = &quot;Test&quot;;
+  p2.Store(c1, testID, testValue);
+
+  Assert.IsTrue(n2.Storage.Contains(testID), &quot;Expected remote peer to have value.&quot;);
+  Assert.IsTrue(n2.Storage.Get(testID) == testValue, &quot;Expected remote peer to contain stored value.&quot;);
+
+  var ret = p2.FindValue(c1, testID);
+
+  Assert.IsTrue(ret.contacts == null, &quot;Expected to find value.&quot;);
+  Assert.IsTrue(ret.val == testValue, &quot;Value does not match expected value from peer.&quot;);
+}</pre>
+<h4><a name="UnresponsiveNodeTest12"> UnresponsiveNodeTest</a></h4>
+<p> <img border="0" src="unittest.png" width="14" height="32">&nbsp; This test 
+verifies that an unresponsive node results in a timeout error.</p>
+<pre>[TestMethod]
+public void UnresponsiveNodeTest()
+{
+  TcpSubnetProtocol p1 = new TcpSubnetProtocol(localIP, port, 1);
+  TcpSubnetProtocol p2 = new TcpSubnetProtocol(localIP, port, 2);
+  p2.Responds = false;
+  ID ourID = ID.RandomID;
+  Contact c1 = new Contact(p1, ourID);
+  Node n1 = new Node(c1, new VirtualStorage());
+  Node n2 = new Node(new Contact(p2, ID.RandomID), new VirtualStorage());
+
+  server.RegisterProtocol(p1.Subnet, n1);
+  server.RegisterProtocol(p2.Subnet, n2);
+  server.Start();
+
+  ID testID = ID.RandomID;
+  string testValue = &quot;Test&quot;;
+  RpcError error = p2.Store(c1, testID, testValue);
+
+  Assert.IsTrue(error.TimeoutError, &quot;Expected timeout.&quot;);
+}</pre>
+<h2><a name="RPCErrorHandlingandDelayedEviction13">RPC Error Handling and Delayed Eviction</a></h2>
+<h3><a name="Discussion14">Discussion</a></h3>
+<p>One of the optimizations in the Kademlia protocol can now be implemented -- 
+delayed eviction:</p>
+<p><font color="#FF00FF">When a Kademlia node receives an RPC 
+from an unknown contact and the k-bucket for that contact is already full with 
+<i>k</i> entries, the node places the new contact in a replacement cache of 
+nodes eligible to replace stale k-bucket entries. The next time the node queries 
+contacts in the k-bucket, any unresponsive ones can be evicted and replaced with 
+entries in the replacement cache. The replacement cache is kept sorted by time 
+last seen, with the most recently seen entry having the highest priority as a 
+replacement candidate.</font></p>
+<h4><a name="Ambiguity#1915">Ambiguity #19</a></h4>
+<p>What happens when the peer throws an exception or the random ID that the peer 
+responds with doesn't match what was sent?&nbsp; To make matters simple, in this 
+implementation we'll handle all error conditions, including timeouts, in the 
+same way.</p>
+<h3><a name="Implementation16">Implementation</a></h3>
+<p>The implementation for handling evictions and replacing them with contacts 
+waiting to be added to the bucket is handled in the Dht.&nbsp; First, the error 
+handler:</p>
+<pre>/// &lt;summary&gt;
+/// Put the timed out contact into a collection and increment the number of times it has timed out.
+/// If it has timed out a certain amount, remove it from the bucket and replace it with the most
+/// recent pending contact that are queued for that bucket.
+/// &lt;/summary&gt;
+public void HandleError(RpcError error, Contact contact)
+{
+  // For all errors:
+  int count = AddContactToEvict(contact.ID.Value);
+
+  if (count == Constants.EVICTION_LIMIT)
+  {
+    ReplaceContact(contact);
+  }
+}</pre>
+<p>We also have the special case for attempting to add a contact to a bucket 
+that cannot be split in the BucketList.AddContact method:</p>
+<pre>...
+if (error.HasError)
+{
+  // Null continuation is used because unit tests may not initialize a DHT.
+  dht?.DelayEviction(lastSeenContact, contact);
+}
+...</pre>
+<p>And the implementation of <code>DelayEviction</code>:</p>
+<pre> /// &lt;summary&gt;
+/// The contact that did not respond (or had an error) gets n tries before being evicted
+/// and replaced with the most recently contact that wants to go into the non-responding contact's kbucket.
+/// &lt;/summary&gt;
+/// &lt;param name=&quot;toEvict&quot;&gt;The contact that didn't respond.&lt;/param&gt;
+/// &lt;param name=&quot;toReplace&quot;&gt;The contact that can replace the non-responding contact.&lt;/param&gt;
+public void DelayEviction(Contact toEvict, Contact toReplace)
+{
+  // Non-concurrent list needs locking.
+  lock (pendingContacts)
+  {
+    pendingContacts.AddDistinctBy(toReplace, c=&gt;c.ID);
+  }
+
+  BigInteger key = toEvict.ID.Value;
+  int count = AddContactToEvict(key);
+
+  if (count == Constants.EVICTION_LIMIT)
+  {
+    ReplaceContact(toEvict);
+  }
+}
+</pre>
+<p>Note the difference:</p>
+<ul>
+	<li>When a contact fails to respond with an RPC call, its eviction count is 
+	incremented, and if exceeded, it is removed and replaced with the most 
+	recently seen contact that goes in the bucket.</li>
+	<li>Conversely, when a contact is being added to a full bucket and the last 
+	seen contact fails to respond (or has an error), it is added to the eviction 
+	pool and the new contact wanting to be added is placed into the pending 
+	contacts pool.</li>
+</ul>
+<p>The rest is just the implementation of the helper methods:</p>
+<pre>protected int AddContactToEvict(BigInteger key)
+{
+  if (!evictionCount.ContainsKey(key))
+  {
+    evictionCount[key] = 0;
+  }
+
+  int count = evictionCount[key] + 1;
+  evictionCount[key] = count;
+
+  return count;
+}
+
+protected void ReplaceContact(Contact toEvict)
+{
+  KBucket bucket = node.BucketList.GetKBucket(toEvict.ID);
+
+  // Prevent other threads from manipulating the bucket list or buckets.
+  lock (node.BucketList)
+  {
+    EvictContact(bucket, toEvict);
+    ReplaceWithPendingContact(bucket);
+  }
+}
+
+protected void EvictContact(KBucket bucket, Contact toEvict)
+{
+  evictionCount.TryRemove(toEvict.ID.Value, out _);
+  Validate.IsTrue&lt;BucketDoesNotContainContactToEvict&gt;(bucket.Contains(toEvict.ID), &quot;Bucket doesn't contain the contact to be evicted.&quot;);
+  bucket.EvictContact(toEvict);
+}
+
+/// &lt;summary&gt;
+/// Find a pending contact that goes into the bucket that now has room.
+/// &lt;/summary&gt;
+protected void ReplaceWithPendingContact(KBucket bucket)
+{
+  Contact contact;
+
+  // Non-concurrent list needs locking while we query it.
+  lock (pendingContacts)
+  {
+    contact = pendingContacts.Where(c =&gt; node.BucketList.GetKBucket(c.ID) == bucket).OrderBy(c =&gt; c.LastSeen).LastOrDefault();
+
+    if (contact != null)
+    {
+      pendingContacts.Remove(contact);
+      bucket.AddContact(contact);
+    }
+  }
+}</pre>
+<h3><a name="UnitTests17">Unit Tests</a></h3>
+<p><img border="0" src="unittest.png" width="14" height="32"> We can now modify the existing test for a non-responding contact by checking 
+the pending buffer and eviction count dictionary.&nbsp; The assertions change to 
+this:</p>
+<pre>Assert.IsTrue(dht.PendingContacts.Count == 1, &quot;Expected one pending contact.&quot;);
+Assert.IsTrue(dht.PendingContacts.Contains(nextNewContact), &quot;Expected pending contact to be the 21st contact.&quot;);
+Assert.IsTrue(dht.EvictionCount.Count == 1, &quot;Expected one contact to be pending eviction.&quot;);</pre>
+<p><img border="0" src="unittest.png" width="14" height="32"> We can also add a 
+unit test that verifies that after the contact has had <code>Constants.EVICTION_LIMIT</code> 
+tries, it is evicted and the pending contact set up by the unit test replaced 
+it.&nbsp; The unit test is modified slightly to make sure we try enough times:</p>
+<pre>// Hit the non-responding contact EVICTION_LIMIT times, which will trigger the eviction algorithm.
+Constants.EVICTION_LIMIT.ForEach(() =&gt; bucketList.AddContact(nextNewContact));</pre>
+<p>and then we assert the expected conditions:</p>
+<pre>Assert.IsTrue(bucketList.Buckets[1].Contacts.Count == 20, &quot;Expected 20 contacts in bucket 1.&quot;);
+Assert.IsTrue(dht.PendingContacts.Count == 0, &quot;Pending contact list should now be empty.&quot;);
+Assert.IsFalse(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nonRespondingContact), &quot;Expected bucket to NOT contain non-responding contact.&quot;);
+Assert.IsTrue(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nextNewContact), &quot;Expected bucket to contain new contact.&quot;);
+Assert.IsTrue(dht.EvictionCount.Count == 0, &quot;Expected no contacts to be pending eviction.&quot;);</pre>
+<p><b>To Be Continued...</b><a href="PartIX"> Part IX - Demo and Conclusion</a></p>
+<h2><a name="References18">References</a></h2>
+<p>[1] -
+<a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
+http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>
+</p>
+<p>[2] -
+<a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia">
+https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia</a></p>
+<p>[3] -
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE">
+http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html</a></p>
+<p>[4] -
+<a href="https://github.com/bmuller/kademlia">
+https://github.com/bmuller/kademlia</a></p>
+
+<p>[5] - <a href="https://en.wikipedia.org/wiki/Smart_contract">
+https://en.wikipedia.org/wiki/Smart_contract</a></p>
+<p>[6] -
+<a href="http://sandhill.com/article/is-data-decentralization-the-new-trend/">
+http://sandhill.com/article/is-data-decentralization-the-new-trend/</a></p>
+<p>[7] - <a href="https://arxiv.org/pdf/1506.03471.pdf">
+https://arxiv.org/pdf/1506.03471.pdf</a></p>
+<p>[8] - <a href="https://en.wikipedia.org/wiki/BitTorrent">
+https://en.wikipedia.org/wiki/BitTorrent</a></p>
+<p>[9] - <a href="https://en.wikipedia.org/wiki/Kad_network">
+https://en.wikipedia.org/wiki/Kad_network</a></p>
+<p>[10] - <a href="https://en.wikipedia.org/wiki/Chord_(peer-to-peer)">https://en.wikipedia.org/wiki/Chord_(peer-to-peer)</a> </p>
+<p>[11] - <a href="https://en.wikipedia.org/wiki/Pastry_(DHT)">https://en.wikipedia.org/wiki/Pastry_(DHT)</a> </p>
+<p>[12] -
+<a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html">
+https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html</a> </p>
+
+<p>[13] -
+<a href="https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table">
+https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table</a></p>
+<p>[14] -
+<a href="https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170">
+https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170</a></p>
+<p>[15] - <a href="https://en.wikipedia.org/wiki/Kademlia">
+https://en.wikipedia.org/wiki/Kademlia</a> </p>
+
+[16] - <a href="https://forum.emule-project.net/index.php?showtopic=32335">
+https://forum.emule-project.net/index.php?showtopic=32335</a>
+
+<p>[17] - <a href="http://www.emule-project.net/home/perl/general.cgi?l=1">
+http://www.emule-project.net/home/perl/general.cgi?l=1</a> </p>
+<p>[18] -
+<a href="https://forum.emule-project.net/index.php?showtopic=32335&view=findpost&p=214837">
+https://forum.emule-project.net/index.php?showtopic=32335&amp;view=findpost&amp;p=214837</a> </p>
+<p>[19] - <a href="http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf">
+http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf</a> </p>
+<p>[20] - <a href="http://www.maymounkov.org/kademlia">
+http://www.maymounkov.org/kademlia</a> </p>
+
+<p>[21] - <a href="https://en.wikipedia.org/wiki/Sybil_attack">
+https://en.wikipedia.org/wiki/Sybil_attack</a></p>
+<p>&nbsp;</p>
+
+<p>&nbsp;</p>
+
+</body>
+
+</html>

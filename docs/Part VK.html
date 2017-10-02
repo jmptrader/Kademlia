@@ -8,20 +8,54 @@
 <p>
 <a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-I">Part I - Introduction and Basic Concepts</a><br>
 <a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-II">Part II - Adding Contacts</a><br>
-<a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-III">Part III - Node Lookup</a> (This Article)<br>
-<a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-IV">Part IV - Value Looup</a><br>
-<a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-V">Part V - The DHT</a><br>
+<a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-III">Part III - Node Lookup</a> <br>
+<a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-IV">Part IV - Value Lookup</a><br>
+<a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-V">Part V - The DHT</a> (This Article)<br>
 <a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-VI">Part VI - Bucket and Key-Value Management</a><br>
 <a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-VII">Part VII - Asynchronous Considerations and Parallel Queries</a><br>
 <a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-VIII">Part VIII - A Basic TCP Subnet Procotol</a><br>
 <a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-IX">Part IX - Demo and Conclusion</a></br>
 </p>
 <p>
-<!-- INSERT contents -->
+<h2>Contents</h2><ul>
+<li><a href="#TheDhtClass-Discussion0">The Dht Class - Discussion</a></li>
+<li><a href="#TheDhtClass-Implementation1">The Dht Class - Implementation</a></li>
+<ul>
+<li><a href="#Ambiguity#122">Ambiguity #12</a></li>
+</ul>
+<li><a href="#TheDhtClass-UnitTests3">The Dht Class - Unit Tests</a></li>
+<ul>
+<li><a href="#LocalStoreFoundValueTest4">LocalStoreFoundValueTest</a></li>
+<li><a href="#ValueStoredInCloserNodeTest5">ValueStoredInCloserNodeTest</a></li>
+<li><a href="#ValueFoundInFartherNodeTest6">ValueFoundInFartherNodeTest</a></li>
+<li><a href="#ValueStoredGetsPropagatedTest7">ValueStoredGetsPropagatedTest</a></li>
+<li><a href="#GetValuePropagatesToCloserNodeTest8">GetValuePropagatesToCloserNodeTest</a></li>
+</ul>
+<li><a href="#TheDht-BootstrappingDiscussion9">The Dht - Bootstrapping Discussion</a></li>
+<li><a href="#TheDht-BootstrappingImplementation10">The Dht - Bootstrapping Implementation</a></li>
+<ul>
+<li><a href="#RandomIDWithinBucket11">RandomIDWithinBucket</a></li>
+<li><a href="#Bootstrap12">Bootstrap</a></li>
+</ul>
+<li><a href="#TheDht-BootstrappingUnitTests13">The Dht - Bootstrapping Unit Tests</a></li>
+<ul>
+<li><a href="#RandomWithinBucketTests14">RandomWithinBucketTests</a></li>
+<li><a href="#BootstrapWithinBootstrappingBucketTest15">BootstrapWithinBootstrappingBucketTest</a></li>
+<li><a href="#BootstrapOutsideBootstrappingBucketTest16">BootstrapOutsideBootstrappingBucketTest</a></li>
+</ul>
+<li><a href="#PersistingtheDht17">Persisting the Dht</a></li>
+<ul>
+<li><a href="#Serializing18">Serializing</a></li>
+<li><a href="#Deserializing19">Deserializing</a></li>
+<li><a href="#UnitTest20">Unit Test</a></li>
+</ul>
+<li><a href="#References21">References</a></li>
+</ul>
+
 </p>
 
 
-<h2>The Dht Class - Discussion</h2>
+<h2><a name="TheDhtClass-Discussion0">The Dht Class - Discussion</a></h2>
 <p>We use a wrapper <code>Dht</code> class, which will 
 become the main entry point for <i>our</i> peer, for interacting with <i>other</i> 
 peers.&nbsp; The purpose of this class is:</p>
@@ -34,7 +68,7 @@ the lookup algorithm to find other closer nodes that might have the value.</li>
 	another peer and initializes our bucket list with that peer's closest 
 	contacts.</li>
 </ol>
-<h2>The Dht Class - Implementation</h2>
+<h2><a name="TheDhtClass-Implementation1">The Dht Class - Implementation</a></h2>
 <pre>public class Dht
 {
 #if DEBUG // for unit testing
@@ -94,14 +128,14 @@ the lookup algorithm to find other closer nodes that might have the value.</li>
     return ret;
   }
 }</pre>
-<h3>Ambiguity #12</h3>
+<h3><a name="Ambiguity#122">Ambiguity #12</a></h3>
 <p>What exactly should the sender do when a value is not found?&nbsp; The DHT 
 returns the nearest nodes, but given that the lookup failed to find the value, 
 we know these nodes also do not have the value.&nbsp; As far as I've been able 
 to determine, neither the spec nor a cursory search of the web indicates what to 
 do.</p>
-<h2>The Dht Class - Unit Tests</h2>
-<h3>LocalStoreFoundValueTest</h3>
+<h2><a name="TheDhtClass-UnitTests3">The Dht Class - Unit Tests</a></h2>
+<h3><a name="LocalStoreFoundValueTest4">LocalStoreFoundValueTest</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> To get started, let's just make sure we can set/get values in our local store 
 with an empty bucket list.</p>
 <pre>[TestMethod]
@@ -116,7 +150,7 @@ public void LocalStoreFoundValueTest()
   string retval = dht.FindValue(key).val;
   Assert.IsTrue(retval == val, &quot;Expected to get back what we stored&quot;);
 }</pre>
-<h3>ValueStoredInCloserNodeTest</h3>
+<h3><a name="ValueStoredInCloserNodeTest5">ValueStoredInCloserNodeTest</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> This test creates a single contact and stores the value in that contact.&nbsp; 
 We set up the ID's so that the contact's ID is less (XOR metric) than our peer's 
 ID, and we use a key of ID.Zero to prevent further complexities when computing 
@@ -166,7 +200,7 @@ public void SimpleStore(ID key, string val)
 }
 #endif
 </pre>
-<h3>ValueFoundInFartherNodeTest</h3>
+<h3><a name="ValueFoundInFartherNodeTest6">ValueFoundInFartherNodeTest</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> We can change the setup of the ID's and verify that the we find the value in 
 a farther node.</p>
 <pre>[TestMethod]
@@ -204,7 +238,7 @@ public void ValueStoredInFartherNodeTest()
   Assert.IsTrue(retval == val, &quot;Expected to get back what we stored&quot;);
   Assert.IsTrue(store1.Contains(key), &quot;Expected our peer to have cached the key-value.&quot;);
 }</pre>
-<h3>ValueStoredGetsPropagatedTest</h3>
+<h3><a name="ValueStoredGetsPropagatedTest7">ValueStoredGetsPropagatedTest</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> Here we test that when we store a value to our peer, it 
 also gets propagated to 
 another peer that our peer knows about:</p>
@@ -240,7 +274,7 @@ public void ValueStoredGetsPropagatedTest()
   Assert.IsTrue(store1.Contains(key), &quot;Expected our peer to have stored the key-value.&quot;);
   Assert.IsTrue(store2.Contains(key), &quot;Expected the other peer to have stored the key-value.&quot;);
 }</pre>
-<h3>GetValuePropagatesToCloserNodeTest</h3>
+<h3><a name="GetValuePropagatesToCloserNodeTest8">GetValuePropagatesToCloserNodeTest</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> This test verifies 
 that, given three nodes (the first of which is us), where node 2 has the value, 
 a get value also propagates to node 3 because a lookup was performed.</p>
@@ -292,7 +326,7 @@ public void GetValuePropagatesToCloserNodeTest()
   Assert.IsTrue(ret.found, &quot;Expected value to be found.&quot;);
   Assert.IsTrue(store3.Contains(key), &quot;Expected the third peer to have stored the key-value.&quot;);
 }</pre>
-<h2>The Dht - Bootstrapping Discussion</h2>
+<h2><a name="TheDht-BootstrappingDiscussion9">The Dht - Bootstrapping Discussion</a></h2>
 <p>From the spec: <font color="#FF00FF">To join the network, a node <i>u</i> 
 must have a contact to an already participating node <i>w</i>. <i>u</i> inserts
 <i>w</i> into the appropriate k-bucket. <i>u</i> then performs a node lookup for 
@@ -328,8 +362,8 @@ splits.&nbsp; We'll see how the network self-corrects later on.</p>
 to realize that &quot;joining&quot; actually means contacting another node with any one of 
 the four RPC calls.&nbsp; A new peer could join an existing network with its 
 first RPC being FindValue!</p>
-<h2>The Dht - Bootstrapping Implementation</h2>
-<h3>RandomIDWithinBucket</h3>
+<h2><a name="TheDht-BootstrappingImplementation10">The Dht - Bootstrapping Implementation</a></h2>
+<h3><a name="RandomIDWithinBucket11">RandomIDWithinBucket</a></h3>
 <p>Getting a random ID within a bucket range is interesting and based on knowing 
 that bucket ranges are always powers of 2:</p>
 <pre> /// &lt;summary&gt;
@@ -361,7 +395,7 @@ public static ID RandomIDWithinBucket(KBucket bucket, bool forceBit1 = false)
 
   return id;
 }</pre>
-<h3>Bootstrap</h3>
+<h3><a name="Bootstrap12">Bootstrap</a></h3>
 <pre>/// &lt;summary&gt;
 /// Bootstrap our peer by contacting another peer, adding its contacts
 /// to our list, then getting the contacts for other peers not in the
@@ -385,8 +419,8 @@ protected void RefreshBucket(KBucket bucket)
   List&lt;Contact&gt; contacts = bucket.Contacts.ToList();
   contacts.ForEach(c =&gt; c.Protocol.FindNode(ourContact, rndId).ForEach(otherContact =&gt; node.BucketList.AddContact(otherContact)));
 }</pre>
-<h2>The Dht - Bootstrapping Unit Tests</h2>
-<h3>RandomWithinBucketTests</h3>
+<h2><a name="TheDht-BootstrappingUnitTests13">The Dht - Bootstrapping Unit Tests</a></h2>
+<h3><a name="RandomWithinBucketTests14">RandomWithinBucketTests</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> Getting a random 
 ID within a bucket range was 
 complicated enough that it deserves a unit test:</p>
@@ -419,7 +453,7 @@ public void RandomWithinBucketTests()
     Assert.IsTrue(id.Value == bitCheck, &quot;Expected bits are not correct.&quot;);
   }
 }</pre>
-<h3>BootstrapWithinBootstrappingBucketTest</h3>
+<h3><a name="BootstrapWithinBootstrappingBucketTest15">BootstrapWithinBootstrappingBucketTest</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> In the actual 
 bootstrapping unit test, we are setting up a bootstrapping peer we are joining 
 to with 10 contacts.&nbsp; One of those contacts also knows about 10 other 
@@ -468,7 +502,7 @@ public void BootstrapWithinBootstrappingBucketTest()
 
   Assert.IsTrue(dhtUs.Router.Node.BucketList.Buckets.Sum(c =&gt; c.Contacts.Count) == 11, &quot;Expected our peer to get 11 contacts.&quot;);
 }</pre>
-<h3>BootstrapOutsideBootstrappingBucketTest</h3>
+<h3><a name="BootstrapOutsideBootstrappingBucketTest16">BootstrapOutsideBootstrappingBucketTest</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> In this test, we 
 set up 20 nodes in the bootstrap peer in such a way that we know how the buckets 
 split <i>for us</i> (20 in the left one, 1 in the right one) and add 10 contacts 
@@ -531,7 +565,7 @@ public void BootstrapOutsideBootstrappingBucketTest()
 
   Assert.IsTrue(dhtUs.Router.Node.BucketList.Buckets.Sum(c =&gt; c.Contacts.Count) == 31, &quot;Expected our peer to have 31 contacts.&quot;);
 }</pre>
-<h2>Persisting the Dht</h2>
+<h2><a name="PersistingtheDht17">Persisting the Dht</a></h2>
 <p>The bucket lists and contacts in each bucketneed to be persisted so the last known state of the DHT can be restored.&nbsp; 
 This is baked into the Dht implementation, serializing the data in a JSON file.&nbsp; 
 The persistence of key-values is handled separately and is defined by the 
@@ -539,7 +573,7 @@ specific implementation needs.&nbsp; Note that the <code>VirtualStorage</code> c
 in the baseline code does not persist its data.&nbsp; Internally, various 
 attributes are marked as <code>JsonIgnore</code> to prevent circular serialization, and some 
 classes have parameter-less public constructors for deserialization.</p>
-<h3>Serializing</h3>
+<h3><a name="Serializing18">Serializing</a></h3>
 <p>This is really straight forward, the only trick is to enable the type name 
 handling in <code>Newtonsoft.Json</code> so that properties with abstract and interface types 
 also serialize their concrete type.</p>
@@ -554,7 +588,7 @@ public string Save()
 
   return json;
 }</pre>
-<h3>Deserializing</h3>
+<h3><a name="Deserializing19">Deserializing</a></h3>
 <p>The deserializer is equally simple, however note the call to 
 DeserializationFixups.&nbsp; This reduces the size of the JSON by not 
 serializing certain properties that can be obtained from other properties.&nbsp; 
@@ -582,7 +616,7 @@ protected void DeserializationFixups()
   router.Dht = this;
   node.Dht = this;
 }</pre>
-<h3>Unit Test</h3>
+<h3><a name="UnitTest20">Unit Test</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32">&nbsp; The unit test is a simple test that a contact in a bucket gets persisted and 
 restored correctly:</p>
 <pre>[TestMethod]
@@ -617,7 +651,7 @@ there are assumptions in the code regarding &quot;same instance&quot; and also a
 ensuring that we're comparing contacts correctly (using their ID's) the <code>Contact</code> 
 class implements <code>IComparable</code> and <code>operator ==</code> and <code>operator !=</code> overloads.</p>
 <p><b>To Be Continued...</b><a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-VI"> Part VI - Bucket and Key-Value Management</a></p>
-<h2>References</h2>
+<h2><a name="References21">References</a></h2>
 <p>[1] -
 <a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
 http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>

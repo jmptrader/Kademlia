@@ -18,10 +18,47 @@
 <a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-IX">Part IX - Demo and Conclusion</a></br>
 </p>
 <p>
-<!-- INSERT contents -->
+<h2>Contents</h2><ul>
+<li><a href="#Terminology0">Terminology</a></li>
+<li><a href="#Ambiguity#31">Ambiguity #3</a></li>
+<li><a href="#Ambiguity#42">Ambiguity #4</a></li>
+<li><a href="#Ambiguity#53">Ambiguity #5</a></li>
+<li><a href="#Ambiguity#64">Ambiguity #6</a></li>
+<li><a href="#Ambiguity#75">Ambiguity #7</a></li>
+<li><a href="#Ambiguity#86">Ambiguity #8</a></li>
+<li><a href="#Ambiguity#97">Ambiguity #9</a></li>
+<li><a href="#Ambiguity#108">Ambiguity #10</a></li>
+<li><a href="#TheConceptofCloseness9">The Concept of Closeness</a></li>
+<li><a href="#NodeLookup-Implementation10">Node Lookup - Implementation</a></li>
+<ul>
+<li><a href="#FindClosestNonEmptyKBucket11">FindClosestNonEmptyKBucket</a></li>
+<li><a href="#GetClosestNodes12">GetClosestNodes</a></li>
+<li><a href="#RpcFindNodes13">RpcFindNodes</a></li>
+<li><a href="#GetCloserNodes14">GetCloserNodes</a></li>
+<li><a href="#Lookup15">Lookup</a></li>
+<li><a href="#ExtensionMethods16">Extension Methods</a></li>
+<ul>
+<li><a href="#AddRangeDistinctBy17">AddRangeDistinctBy</a></li>
+<li><a href="#ExceptBy18">ExceptBy</a></li>
+</ul>
+</ul>
+<li><a href="#NodeLookup-UnitTests19">Node Lookup - Unit Tests</a></li>
+<ul>
+<li><a href="#VirtualNode/Protocol20">Virtual Node/Protocol</a></li>
+<li><a href="#MissingImplementationNeedstobeAddedNow21">Missing Implementation Needs to be Added Now</a></li>
+<li><a href="#GetCloseContactsTest22">GetCloseContacts Test</a></li>
+<li><a href="#NoNodesToQueryTest23">NoNodesToQuery Test</a></li>
+<li><a href="#GetCloserNodesTest24">GetCloserNodes Test</a></li>
+<li><a href="#LookupUnitTest25">Lookup Unit Test</a></li>
+<li><a href="#SimpleCloserContactsTest26">Simple Closer Contacts Test</a></li>
+<li><a href="#SimpleFartherContactsTest27">Simple Farther Contacts Test</a></li>
+</ul>
+<li><a href="#References28">References</a></li>
+</ul>
+
 </p>
-<h2>Node Lookup - Discussion</h2>
-<p><font color="#FF00FF">The most important procedure a Kademlia 
+<h2 align="left">Node Lookup - Discussion</h2>
+<p align="left"><font color="#FF00FF">The most important procedure a Kademlia 
 participant must perform is to locate the k closest nodes to some given node ID. 
 We call this procedure a node lookup. Kademlia employs a recursive algorithm for 
 node lookups. The lookup initiator starts by picking <i>a</i> nodes from its closest 
@@ -40,7 +77,7 @@ round of FIND_NODES fails to return a node any closer than the closest already
 seen, the initiator resends the FIND_NODE to all of the <i>k</i> closest nodes it has 
 not already queried. The lookup terminates when the initiator has queried and 
 gotten responses from the k closest nodes it has seen. When a = 1, the lookup 
-algorithm resembles Chord’s in terms of message cost and the latency of 
+algorithm resembles Chordï¿½s in terms of message cost and the latency of 
 detecting failed nodes. However, Kademlia can route for lower latency because it 
 has the flexibility of choosing any one of k nodes to forward a request to.</font></p>
 <p>The idea here is to:</p>
@@ -50,13 +87,13 @@ has the flexibility of choosing any one of k nodes to forward a request to.</fon
 </ol>
 <p align="center"><img border="0" src="lookup1.png" width="784" height="983"></p>
 <p>Got it?</p>
-<h3>Terminology</h3>
+<h3><a name="Terminology0">Terminology</a></h3>
 <ul>
 	<li>The lookup initiator - this is your own peer wanting to make a store or 
 retrieve call to other peers.&nbsp; The node lookup is performed before you 
 	store or retrieve a value so that your peer has a reasonable.</li>
 </ul>
-<h3>Ambiguity #3</h3>
+<h3><a name="Ambiguity#31">Ambiguity #3</a></h3>
 <p>Given &quot;<font color="#FF00FF">To 
 store a (key,value) pair, a participant locates the k closest nodes to the key 
 and sends them STORE RPCS.</font>&quot; here the term &quot;locates&quot; actually means 
@@ -95,14 +132,14 @@ async def set_digest(self, dkey, value):
   nearest = self.protocol.router.findNeighbors(node)
   ...</pre>
 <p>where <code>findNeighbors</code> is the lookup algorithm described in the specification.</p>
-<h3>Ambiguity #4</h3>
+<h3><a name="Ambiguity#42">Ambiguity #4</a></h3>
 <p>What does &quot;<font color="#FF00FF">Nodes that fail to respond quickly&quot; </font>
 mean?&nbsp; Particularly, the term &quot;quickly?&quot;</p>
-<h3>Ambiguity #5</h3>
+<h3><a name="Ambiguity#53">Ambiguity #5</a></h3>
 <p>What if the peer you yourself don't have peers in any k-buckets?&nbsp; That 
 shouldn't happen (you should at least have the peer you are contacting) but if 
 that peer only has you in its k-buckets, then there's nothing to return.</p>
-<h3>Ambiguity #6</h3>
+<h3><a name="Ambiguity#64">Ambiguity #6</a></h3>
 <p>In &quot;<font color="#FF00FF"> from its closest non-empty k-bucket&quot;</font>, what 
 does &quot;closest&quot; mean?&nbsp; I am assuming here that it is the XOR distance 
 metric, but then the question is, what do we use as the &quot;key&quot; for a bucket with 
@@ -114,7 +151,7 @@ key resides.&nbsp; This more matches the other condition &quot;<font color="#FF0
 if that bucket has fewer than <i>a</i> entries, it just takes 
 the <i>a</i> closest nodes it knows of</font>&quot; which implies searching for all 
 <i>a</i> closest nodes across all buckets.</p>
-<h3>Ambiguity #7</h3>
+<h3><a name="Ambiguity#75">Ambiguity #7</a></h3>
 <p>In &quot;<font color="#FF00FF">The lookup initiator starts by picking <i>a</i> 
 nodes</font>&quot; what does &quot;picking&quot; mean?&nbsp; Does this mean additionally 
 sorting the contacts in the &quot;closest bucket&quot; also by closeness?&nbsp; It's 
@@ -142,7 +179,7 @@ if we want to exercise the algorithm, this is better:</p>
 
   List&lt;Contact&gt; nodesToQuery = allNodes.Take(Constants.ALPHA).ToList();</pre>
 <p>This actually leads to the next ambiguity.</p>
-<h3>Ambiguity #8</h3>
+<h3><a name="Ambiguity#86">Ambiguity #8</a></h3>
 <p>In the initial acquisition of a contacts as per the code above, should 
 contacts (I'm using &quot;contact&quot; and &quot;node&quot; rather interchangeably) that are closer 
 at this point be added to the list of closer contacts?&nbsp; The spec doesn't 
@@ -159,7 +196,7 @@ described above -- the <i>a</i> closest contacts we have are added to the
 // any farther node in the alpha list is immediately added to our farther contact list.
 closerContacts.AddRange(nodesToQuery.Where(n =&gt; (n.ID.Value ^ key.Value) &lt; (node.OurContact.ID.Value ^ key.Value)));
 fartherContacts.AddRange(nodesToQuery.Where(n =&gt; (n.ID.Value ^ key.Value) &gt;= (node.OurContact.ID.Value ^ key.Value)));</pre>
-<h3>Ambiguity #9</h3>
+<h3><a name="Ambiguity#97">Ambiguity #9</a></h3>
 <p>What do we do with the contacts outside of <i>a</i>?&nbsp; Given this: &quot;<font color="#FF00FF">If 
 a round of FIND_NODES fails to return a node any closer than the closest already 
 seen, the initiator resends the FIND_NODE to all of the <i>k</i> closest nodes 
@@ -167,12 +204,12 @@ it has not already queried.&quot; </font>does it apply to the first query of <i>
 nodes, or only to the set of nodes returned after the query?&nbsp; I'm going to 
 assume that it applies to the remainder of the <i>a</i> nodes not queried in the 
 first query, which will be a maximum of <i>k</i>-<i>a</i> contacts.</p>
-<h3>Ambiguity #10</h3>
+<h3><a name="Ambiguity#108">Ambiguity #10</a></h3>
 <p>The spec says this: &quot;<font color="#FF00FF">Most operations are implemented in 
 terms of the above lookup procedure.</font>&quot;&nbsp; What operations, and when?&nbsp; 
 We'll have to address this later.</p>
-<h3>The Concept of Closeness</h3>
-<p><font color="#FF00FF">Many of Kademlia’s benefits result from its use of a 
+<h3><a name="TheConceptofCloseness9">The Concept of Closeness</a></h3>
+<p><font color="#FF00FF">Many of Kademliaï¿½s benefits result from its use of a 
 novel XOR metric for distance between points in the key space. XOR is symmetric, 
 allowing Kademlia participants to receive lookup queries from precisely the same 
 distribution of nodes contained in their routing tables.</font></p>
@@ -202,7 +239,7 @@ Stack Overflow<sup>13 </sup>:</p>
 <p>The author of that post provides an implementation<sup>14</sup> that doesn't 
 require a full table scan, but in my implementation, we'll just do a full scan 
 of the bucket list contacts.</p>
-<h2>Node Lookup - Implementation</h2>
+<h2><a name="NodeLookup-Implementation10">Node Lookup - Implementation</a></h2>
 <p>Let's start with a baseline implementation that for the moment:</p>
 <ol>
 	<li>Doesn't deal with the issue of parallelism.</li>
@@ -216,7 +253,7 @@ the basic algorithm, then add the parallelism and <i>a</i> concept later, and
 our unit tests should still pass.</p>
 <p>Also, the methods here are all marked as <code>virtual</code> in case you want to override 
 the implementation.&nbsp; First, some helper methods:</p>
-<h3>FindClosestNonEmptyKBucket</h3>
+<h3><a name="FindClosestNonEmptyKBucket11">FindClosestNonEmptyKBucket</a></h3>
 <pre>/// &lt;summary&gt;
 /// Using the k-bucket's key (it's high value), find the closest 
 /// k-bucket the given key that isn't empty.
@@ -233,7 +270,7 @@ the implementation.&nbsp; First, some helper methods:</p>
   return closest;
 }
 </pre>
-<h3>GetClosestNodes</h3>
+<h3><a name="GetClosestNodes12">GetClosestNodes</a></h3>
 <pre>/// &lt;summary&gt;
 /// Get sorted list of closest nodes to the given key.
 /// &lt;/summary&gt;
@@ -245,7 +282,7 @@ the implementation.&nbsp; First, some helper methods:</p>
 {
   return bucket.Contacts.OrderBy(c =&gt; c.ID.Value ^ key.Value).ToList();
 }</pre>
-<h3>RpcFindNodes</h3>
+<h3><a name="RpcFindNodes13">RpcFindNodes</a></h3>
 <pre>/// &lt;summary&gt;
 /// For each contact, call the FindNodes and return all the nodes whose contacts responded
 /// within a &quot;reasonable&quot; period of time.
@@ -257,7 +294,7 @@ protected List&lt;Contact&gt; RpcFindNodes(ID key, List&lt;Contact&gt; contacts)
 
   return nodes;
 }</pre>
-<h3>GetCloserNodes</h3>
+<h3><a name="GetCloserNodes14">GetCloserNodes</a></h3>
 <p><img border="0" src="note.png" width="24" height="32"> Note that we always 
 exclude our own node and the nodes we're contacting.</p>
 <pre>/// &lt;summary&gt;
@@ -285,7 +322,7 @@ protected void GetCloserNodes(ID key, List&lt;Contact&gt; nodesToQuery, List&lt;
       Where(p =&gt; (p.ID.Value ^ key.Value) &gt;= nearestNodeDistance),
       (a, b) =&gt; a.ID.Value == b.ID.Value);
 }</pre>
-<h3>Lookup</h3>
+<h3><a name="Lookup15">Lookup</a></h3>
 <p>This flowchart all comes together here:</p>
 <pre>public virtual List&lt;Contact&gt; Lookup(ID key, bool giveMeAll = false)
 {
@@ -370,9 +407,9 @@ KBucket bucket = FindClosestNonEmptyKBucket(key);
 <p><img border="0" src="note.png" width="24" height="32"> This algorithm is 
 iteration, not recursion, as the specification states.&nbsp; Every 
 implementation I've seen uses iteration.</p>
-<h3>Extension Methods</h3>
+<h3><a name="ExtensionMethods16">Extension Methods</a></h3>
 <p>A few extension methods that are used:</p>
-<h4>AddRangeDistinctBy</h4>
+<h4><a name="AddRangeDistinctBy17">AddRangeDistinctBy</a></h4>
 <pre>public static void AddRangeDistinctBy&lt;T&gt;(this List&lt;T&gt; target, IEnumerable&lt;T&gt; src, Func&lt;T, T, bool&gt; equalityComparer)
 {
   src.ForEach(item =&gt;
@@ -384,7 +421,7 @@ implementation I've seen uses iteration.</p>
     }
   });
 }</pre>
-<h4>ExceptBy</h4>
+<h4><a name="ExceptBy18">ExceptBy</a></h4>
 <pre>public static IEnumerable&lt;T&gt; ExceptBy&lt;T, TKey&gt;(this IEnumerable&lt;T&gt; src, T item, Func&lt;T, TKey&gt; keySelector)
 {
   TKey itemKey = keySelector(item);
@@ -418,10 +455,10 @@ public static IEnumerable&lt;T&gt; ExceptBy&lt;T, TKey&gt;(this IEnumerable&lt;T
     }
   }
 }</pre>
-<h2>Node Lookup - Unit Tests</h2>
+<h2><a name="NodeLookup-UnitTests19">Node Lookup - Unit Tests</a></h2>
 <p>Before Getting Into Unit Tests we need to be able to create virtual nodes, which means implementing a 
 minimal virtual protocol:</p>
-<h3>Virtual Node/Protocol</h3>
+<h3><a name="VirtualNode/Protocol20">Virtual Node/Protocol</a></h3>
 <pre>public class VirtualProtocol : IProtocol
 {
   public Node Node { get { return node; } set { node = value; } }
@@ -451,7 +488,7 @@ minimal virtual protocol:</p>
     return node.FindNode(sender, key).contacts;
   }
 }</pre>
-<h3>Missing Implementation Needs to be Added Now</h3>
+<h3><a name="MissingImplementationNeedstobeAddedNow21">Missing Implementation Needs to be Added Now</a></h3>
 <p>We also have to implement FindNode in the Node class:</p>
 <pre>/// &lt;summary&gt;
 /// From the spec: FindNode takes a 160-bit ID as an argument. The recipient of the RPC returns (IP address, UDP port, Node ID) triples 
@@ -491,7 +528,7 @@ public List&lt;Contact&gt; GetCloseContacts(ID toFind, ID exclude)
   // Spec (sort of): Return max(k) closer nodes, sorted by distance.
   return ret.Take(Constants.K).OrderBy(c=&gt;c.ID.Value ^ key.Value).ToList();
 }</pre>
-<h3>GetCloseContacts Test</h3>
+<h3><a name="GetCloseContactsTest22">GetCloseContacts Test</a></h3>
 <p>This tests the 
 sorting and the maximum number of contacts returned limit.&nbsp; Note that it's 
 probably not the most ideal situation that I'm using all random ID's, however, 
@@ -534,7 +571,7 @@ public void GetCloseContactsOrderedTest()
   var others = node.BucketList.Buckets.SelectMany(b =&gt; b.Contacts.Except(closest)).Where(c =&gt; (c.ID.Value ^ key.Value) &lt; lastDistance);
   Assert.IsTrue(others.Count() == 0, &quot;Expected no other contacts with a smaller distance than the greatest distance to exist.&quot;);
 }</pre>
-<h3>NoNodesToQuery Test</h3>
+<h3><a name="NoNodesToQueryTest23">NoNodesToQuery Test</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> This test simply 
 verifies that we get no new nodes to query given that all the nodes we're 
 contacting are already being contacted.</p>
@@ -572,7 +609,7 @@ public void NoNodesToQueryTest()
   Assert.IsTrue(closerContacts.Count == 0, &quot;No new nodes expected.&quot;);
   Assert.IsTrue(fartherContacts.Count == 0, &quot;No new nodes expected.&quot;);
 }</pre>
-<h3>GetCloserNodes Test</h3>
+<h3><a name="GetCloserNodesTest24">GetCloserNodes Test</a></h3>
 <p>Getting the system to exercise the different paths in the flowchart is an 
 interesting exercise.&nbsp; Again, note that it's probably not the most ideal 
 situation that I'm using all random ID's.&nbsp; Let's start with one of the first more complicated 
@@ -666,7 +703,7 @@ the system, and interestingly, as a result of these two different approaches, I 
 -- so much for &quot;it's not practical testing all the simple methods.&quot;&nbsp; As a 
 side note, it's interesting to see how much shorter the Linq for the code that 
 obtains the close and far contacts.</p>
-<h3>Lookup Unit Test</h3>
+<h3><a name="LookupUnitTest25">Lookup Unit Test</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> Ironically, there really is no alternative way of getting these nodes, 
 particularly with regards to the <code>while</code> loop in the <code>Lookup</code> method.&nbsp; 
 So without beating my head over the issue, I implemented this test:</p>
@@ -697,7 +734,7 @@ public void LookupTest()
     closerContactsAltComputation.ForEach(c =&gt; Assert.IsTrue(closeContacts.Contains(c)));
   });
 }</pre>
-<h3>Simple Closer Contacts Test</h3>
+<h3><a name="SimpleCloserContactsTest26">Simple Closer Contacts Test</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> This test, and the 
 next one, essentially exercises the part of the <code>Lookup</code> algorithm before the 
 <code>while</code> loop.&nbsp;
@@ -738,7 +775,7 @@ public void SimpleAllCloserContacts()
   Assert.IsTrue(router.CloserContacts.Count == Constants.K, &quot;All contacts should be closer.&quot;);
   Assert.IsTrue(router.FartherContacts.Count == 0, &quot;Did not expected farther contacts.&quot;);
 }</pre>
-<h3>Simple Farther Contacts Test</h3>
+<h3><a name="SimpleFartherContactsTest27">Simple Farther Contacts Test</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32">
 <img border="0" src="note.png" width="24" height="32"> Again note how the bucket 
 and ID's 
@@ -780,7 +817,7 @@ public void SimpleAllFartherContacts()
 }</pre>
 
 <p><b>To Be Continued...</b><a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-IV">Part IV - Value Looup</a></p>
-<h2>References</h2>
+<h2><a name="References28">References</a></h2>
 <p>[1] -
 <a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
 http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>

@@ -1,0 +1,286 @@
+<html>
+
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<title>New Page 1</title>
+</head>
+
+<body>
+<a href="PartI">Part I - Introduction and Basic Concepts</a><br>
+<a href="PartII">Part II - Adding Contacts</a><br>
+<a href="PartIII">Part III - Node Lookup</a><br>
+<a href="PartIV">Part IV - Value Lookup</a><br>
+<a href="PartV">Part V - The DHT</a><br>
+<a href="PartVI">Part VI - Bucket and Key-Value Management</a><br>
+<a href="PartVII">Part VII - Asynchronous Considerations and Parallel Queries</a><br>
+<a href="PartVIII">Part VIII - A Basic TCP Subnet Procotol</a><br>
+<a href="PartIX">Part IX - Demo and Conclusion</a> (This Article)<br>
+<p>
+<!-- INSERT contents -->
+</p>
+
+<h2>Putting It Together - A Demo</h2>
+<p><img border="0" src="demo1.png" width="191" height="324"></p>
+<p>As usual, there's nothing like a visual demo to see what is happening.&nbsp; 
+This demo uses <a href="https://www.codeproject.com/Articles/1136050/FlowSharp">
+FlowSharp</a> as the drawing canvas.&nbsp; 
+We start with 60 peers (green), five of which are known peers (red):</p>
+<pre>protected void InitializeDhts()
+{
+  dhts = new List&lt;Dht&gt;();
+  dhtPos = new List&lt;Rectangle&gt;();
+
+  NUM_DHT.ForEach((n) =&gt;
+  {
+    IProtocol protocol = new VirtualProtocol();
+    Dht dht = new Dht(ID.RandomID, protocol, () =&gt; new VirtualStorage(), new Router());
+    ((VirtualProtocol)protocol).Node = dht.Node;
+    dhts.Add(dht);
+    dhtPos.Add(new Rectangle(XOFFSET + rnd.Next(-JITTER, JITTER) + (n % ITEMS_PER_ROW) * XSPACING, YOFFSET + rnd.Next(-JITTER, JITTER) + (n / ITEMS_PER_ROW) * YSPACING, SIZE, SIZE));
+  });
+}
+
+protected void InitializeKnownPeers()
+{
+  knownPeers = new List&lt;Dht&gt;();
+  List&lt;Dht&gt; workingList = new List&lt;Dht&gt;(dhts);
+
+  NUM_KNOWN_PEERS.ForEach(() =&gt;
+  {
+    Dht knownPeer = workingList[rnd.Next(workingList.Count)];
+    knownPeers.Add(knownPeer);
+    workingList.Remove(knownPeer);
+  });
+}</pre>
+<p><img border="0" src="bootstrap0.png" width="611" height="469"></p>
+<h3>Bootstrapping</h3>
+<pre>protected void BootstrapWithAPeer()
+{
+  Dht dht = dhts[peerBootstrappingIdx];
+  var peerList = knownPeers.ExceptBy(dht, c =&gt; c.ID).ToList();
+  Dht bootstrapWith = peerList[rnd.Next(peerList.Count)];
+  dht.Bootstrap(bootstrapWith.Contact);
+
+  WebSocketHelpers.ClearCanvas();
+  DrawDhts();
+}</pre>
+<p>After each peer bootstraps with one of the known peers (randomly selected) the peer network is established:</p>
+<p><img border="0" src="bootstrap.png" width="592" height="474"></p>
+<p>The directionality of the connection is not shown -- arrows would get lost in 
+this drawing!</p>
+<h3>Bucket Refresh</h3>
+<p>To illustrate bucket refresh, let's start with a smaller set of peers (25):</p>
+<p><img border="0" src="bucketRefresh1.png" width="466" height="474"></p>
+<p>A bucket refresh calls FindNode all the contacts in each bucket:</p>
+<pre>#if DEBUG
+public void PerformBucketRefresh()
+{
+  // Get current bucket list in a separate collection because the bucket list might be modified
+  // as the result of a bucket split.
+  List&lt;KBucket&gt; currentBuckets = new List&lt;KBucket&gt;(node.BucketList.Buckets);
+  currentBuckets.ForEach(b =&gt; RefreshBucket(b));
+}
+#endif
+
+protected void RefreshBucket(KBucket bucket)
+{
+  bucket.Touch();
+  ID rndId = ID.RandomIDWithinBucket(bucket);
+  // Isolate in a separate list as contacts collection for this bucket might change.
+  List&lt;Contact&gt; contacts = bucket.Contacts.ToList();
+  contacts.ForEach(c =&gt; c.Protocol.FindNode(ourContact, rndId).ForEach(otherContact =&gt; node.BucketList.AddContact(otherContact)));
+}</pre>
+<p>The method <code>PerformBucketRefresh</code> is available only in debug mode for testing 
+and the demo.&nbsp; This updates the contacts for each peer based on the <i>k</i> closest 
+contacts returned by the contact:</p>
+<p><img border="0" src="bucketRefresh2.png" width="460" height="463">&nbsp; </p>
+<p>The newly discovered contacts are drawn in purple.&nbsp; In a small network 
+like this, just about every peer learns about every other peer -- another 
+iteration of bucket refreshing results in only a couple more contacts being 
+discovered.</p>
+<h3>Store Value</h3>
+<p>When a non-cached value is stored to a peer, it is republished to close 
+peers.&nbsp; We can see this by coloring the originator with yellow, the 
+immediate peer we're storing the value to in blue, and the peers to which the 
+value is republished in orange:</p>
+<pre> /// &lt;summary&gt;
+/// Color the originator with yellow
+/// the immediate peer we're storing the value to in blue
+/// and the peers to which the value is republished in orange:
+/// &lt;/summary&gt;
+private void btnPublish_Click(object sender, EventArgs e)
+{
+  firstContacts = new List&lt;Dht&gt;();
+  ID key = ID.RandomID;
+  Dht originatorDht = dhts[(int)nudPeerNumber.Value];
+  originatorDht.Store(key, &quot;Test&quot;);
+  UpdatePeerColors();
+  DrawDhts();
+}</pre>
+<p>In a small network, because the store gets published to <i>k</i> peers, most of the 
+peers are involved:</p>
+<p><img border="0" src="publish1.png" width="467" height="465"></p>
+<h3>Store Republish</h3>
+<p>When we force an immediate store republish, we see that one node, that is a 
+closer contact, getting the republished key-value:</p>
+<p><img border="0" src="publish2.png" width="459" height="462"></p>
+<p>In a larger network, this becomes more obvious (nodes have been moved to the 
+topmost in the rendering):</p>
+<p><img border="0" src="publish3.png" width="596" height="474"></p>
+<p>Remember that key-values are republished only on <i>k</i> closer contacts, so 
+not every peer gets the republished key-value.</p>
+<h2>Not Implemented</h2>
+<h3>UDP Drop Outs</h3>
+<p><font color="#FF00FF">A related problem is that because Kademlia uses UDP, 
+valid contacts will sometimes fail to respond when network packets are dropped. 
+Since packet loss often indicates network congestion, Kademlia locks 
+unresponsive contacts and avoids sending them any further RPCs for an 
+exponentially increasing backoff interval. Because at most stages Kademlia’s 
+lookup only needs to hear from one of k nodes, the system typically does not 
+retransmit dropped RPCs to the same node.</font></p>
+<font color="#FF00FF"> When a contact fails to respond to 5 RPCs in a row, it 
+is considered stale. If a fe-bucket is not full or its replacement cache is 
+empty, Kademlia merely flags stale contacts rather than remove them. This 
+ensures, among other things, that if a node’s own network connection goes down 
+temporarily, the node won’t completely void all of its k-buckets.</font>
+<p>This is true not just for UDP packets but any connection -- it may go down 
+for a while.&nbsp; This algorithm is somewhat entangled with delayed eviction.&nbsp; 
+In delayed eviction, the spec state &quot;any unresponsive ones can be evicted.&quot;&nbsp; 
+It is the spec's description of UDP drop outs that actually defines what 
+&quot;unresponsive&quot; actually means.</p>
+<h3>Accelerated Lookups</h3>
+<font color="#FF00FF">When a contact fails to respond to 5 RPCs in a row, it 
+is considered stale. If a fe-bucket is not full or its replacement cache is 
+empty, Kademlia merely flags stale contacts rather than remove them. This 
+ensures, among other things, that if a node’s own network connection goes down 
+temporarily, the node won’t completely void all of its k-buckets.</font>
+<p><font color="#FF00FF">Another optimization in the implementation is to 
+achieve fewer hops per lookup by increasing the routing table size. 
+Conceptually, this is done by considering IDs <i>b</i> bits at a time instead of just 
+one bit at a time. As previously described, the expected number of hops per 
+lookup is log<sub>2</sub>n. By increasing the routing table’s size to an expected 2<sup>b</sup> log<sub>2</sub><sup>b</sup>
+<i>n</i> <i>k</i>-buckets, we can reduce the number of expected hops to log<sub>2</sub><sup>b</sup>
+<i>n</i>.</font></p>
+<p>In this implementation we have bucket ranges rather than a bucket per 
+prefix bits in the key space, therefore the accelerated lookup optimization is 
+irrelevant because the bucket ranges typically span many prefix bits.</p>
+<h3>Sybil Attacks</h3>
+<p>Peer-to-peer networks are vulnerable to Sybil attacks: </p>
+<blockquote>
+	<p>&quot;In a Sybil attack, the attacker subverts the reputation system of a 
+	peer-to-peer network by creating a large number of pseudonymous identities, 
+	using them to gain a disproportionately large influence. A reputation 
+	system's vulnerability to a Sybil attack depends on how cheaply identities 
+	can be generated, the degree to which the reputation system accepts inputs 
+	from entities that do not have a chain of trust linking them to a trusted 
+	entity, and whether the reputation system treats all entities identically.&quot;<sup>21</sup></p>
+</blockquote>
+<p>In the current implementation, if the peer network is already well populated 
+(most k-buckets are full) a Sybil attack would not replace &quot;good&quot; known peers -- 
+the attack would simply place the attempt into the DHT's pending contact buffer.&nbsp; 
+In a mostly unpopulated network (most k-buckets have room for more peers) the 
+subsequent failure to get a response from a peer would result in its eventual 
+eviction.&nbsp; The piggyback ping approach is also a means for the recipient of 
+the RPC call to verify the sender.</p>
+<h2>Conclusion</h2>
+<p>How does one write a conclusion to an article that is over 120 pages in Word?&nbsp; 
+Petar Maymounkov wrote &quot;...my opinion is that Kademlia is so simple, that with a 
+modern language like Go, a good implementation of Kademlia (the algorithm) is no 
+more than 100 lines of code.&quot;<sup>20</sup>&nbsp; Perhaps when looking at just 
+the algorithm, the router in particular, this may be true, but there is a 
+tremendous amount of detail that has to go into the architecture and 
+implementation of the Kademlia protocol.&nbsp; As one dives deep into the spec, 
+there are contradictions between the two versions of the spec, between 
+implementations out there in the wild and the spec, and numerous ambiguities 
+that must be resolved by carefully understanding the spec and carefully 
+inspecting other implementations and descriptions of the protocol.&nbsp; Anyone 
+adopting a library that implements the Kademlia protocol should have a thorough 
+understanding of these contradictions and ambiguities, and also must go through 
+any implementation with a fine tooth comb to see how these are addressed, if 
+they are addressed at all.&nbsp; In particular, when looking at other 
+implementations, does the implementation (in no particular order of importance):</p>
+<ul>
+	<li>Address delayed eviction?</li>
+	<li>Create fixed buckets (one per prefix) or dynamic buckets?</li>
+	<li>Improve performance with asynchronous behavior?</li>
+	<li>Handle not just non-responsive peers, but exceptions that peers 
+	generate, etc.?</li>
+	<li>Provide reasonable enough documentation to associate the code with the 
+	spec?</li>
+<li>Address the difference between local store, cache store, and remote store 
+updates?</li>
+	<li>Allow for different protocols?</li>
+<li>Address Sybil attacks?</li>
+	<li>Provide detailed unit testing and analysis of the implementation and its 
+	performance?</li>
+</ul>
+<p>These are some of the issues that one should look for.&nbsp; Even in the 
+initial release of this implementation, I have not addressed all 
+these concerns.&nbsp; Regardless, if you made it this far through the document, 
+I suspect you have a much better understanding of the Kademlia protocol, which 
+also gives you some tools to look at other P2P protocols.</p>
+<h3>All the Unit Tests</h3>
+<p>There's a total of 35 unit tests, and even so it seems like there certainly 
+could be more!</p>
+<p><img border="0" src="allunittests.png" width="304" height="730"></p>
+<h2>References</h2>
+<p>[1] -
+<a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
+http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>
+</p>
+<p>[2] -
+<a href="https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia">
+https://github.com/zencoders/sambatyon/tree/master/Kademlia/Kademlia</a></p>
+<p>[3] -
+<a href="http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#FIND_NODE">
+http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html</a></p>
+<p>[4] -
+<a href="https://github.com/bmuller/kademlia">
+https://github.com/bmuller/kademlia</a></p>
+
+<p>[5] - <a href="https://en.wikipedia.org/wiki/Smart_contract">
+https://en.wikipedia.org/wiki/Smart_contract</a></p>
+<p>[6] -
+<a href="http://sandhill.com/article/is-data-decentralization-the-new-trend/">
+http://sandhill.com/article/is-data-decentralization-the-new-trend/</a></p>
+<p>[7] - <a href="https://arxiv.org/pdf/1506.03471.pdf">
+https://arxiv.org/pdf/1506.03471.pdf</a></p>
+<p>[8] - <a href="https://en.wikipedia.org/wiki/BitTorrent">
+https://en.wikipedia.org/wiki/BitTorrent</a></p>
+<p>[9] - <a href="https://en.wikipedia.org/wiki/Kad_network">
+https://en.wikipedia.org/wiki/Kad_network</a></p>
+<p>[10] - <a href="https://en.wikipedia.org/wiki/Chord_(peer-to-peer)">https://en.wikipedia.org/wiki/Chord_(peer-to-peer)</a> </p>
+<p>[11] - <a href="https://en.wikipedia.org/wiki/Pastry_(DHT)">https://en.wikipedia.org/wiki/Pastry_(DHT)</a> </p>
+<p>[12] -
+<a href="https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html">
+https://www.mail-archive.com/p2p-hackers@lists.zooko.com/msg00042.html</a> </p>
+
+<p>[13] -
+<a href="https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table">
+https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table</a></p>
+<p>[14] -
+<a href="https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170">
+https://github.com/the8472/mldht/blob/9fb056390b50e9ddf84ed7709283b528a77a0fe5/src/lbms/plugins/mldht/kad/KClosestNodesSearch.java#L104-L170</a></p>
+<p>[15] - <a href="https://en.wikipedia.org/wiki/Kademlia">
+https://en.wikipedia.org/wiki/Kademlia</a> </p>
+
+[16] - <a href="https://forum.emule-project.net/index.php?showtopic=32335">
+https://forum.emule-project.net/index.php?showtopic=32335</a>
+
+<p>[17] - <a href="http://www.emule-project.net/home/perl/general.cgi?l=1">
+http://www.emule-project.net/home/perl/general.cgi?l=1</a> </p>
+<p>[18] -
+<a href="https://forum.emule-project.net/index.php?showtopic=32335&view=findpost&p=214837">
+https://forum.emule-project.net/index.php?showtopic=32335&amp;view=findpost&amp;p=214837</a> </p>
+<p>[19] - <a href="http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf">
+http://pub.tik.ee.ethz.ch/students/2006-So/SA-2006-19.pdf</a> </p>
+<p>[20] - <a href="http://www.maymounkov.org/kademlia">
+http://www.maymounkov.org/kademlia</a> </p>
+
+<p>[21] - <a href="https://en.wikipedia.org/wiki/Sybil_attack">
+https://en.wikipedia.org/wiki/Sybil_attack</a></p>
+<p>&nbsp;</p>
+
+</body>
+
+</html>

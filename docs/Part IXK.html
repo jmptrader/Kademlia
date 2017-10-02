@@ -5,9 +5,45 @@
 <title>New Page 1</title>
 </head>
 
-<body>
+<body><p>
+<img border="0" src="bucketRefresh2.png" width="460" height="463">
+</p>
 
-<h2>Putting It Together - A Demo</h2>
+
+<a href="PartI">Part I - Introduction and Basic Concepts</a><br>
+<a href="PartII">Part II - Adding Contacts</a><br>
+<a href="PartIII">Part III - Node Lookup</a><br>
+<a href="PartIV">Part IV - Value Lookup</a><br>
+<a href="PartV">Part V - The DHT</a><br>
+<a href="PartVI">Part VI - Bucket and Key-Value Management</a><br>
+<a href="PartVII">Part VII - Asynchronous Considerations and Parallel Queries</a><br>
+<a href="PartVIII">Part VIII - A Basic TCP Subnet Procotol</a><br>
+<a href="PartIX">Part IX - Demo and Conclusion</a> (This Article)<br>
+<p>
+<h2>Contents</h2><ul>
+<li><a href="#PuttingItTogether-ADemo0">Putting It Together - A Demo</a></li>
+<ul>
+<li><a href="#Bootstrapping1">Bootstrapping</a></li>
+<li><a href="#BucketRefresh2">Bucket Refresh</a></li>
+<li><a href="#StoreValue3">Store Value</a></li>
+<li><a href="#StoreRepublish4">Store Republish</a></li>
+</ul>
+<li><a href="#NotImplemented5">Not Implemented</a></li>
+<ul>
+<li><a href="#UDPDropOuts6">UDP Drop Outs</a></li>
+<li><a href="#AcceleratedLookups7">Accelerated Lookups</a></li>
+<li><a href="#SybilAttacks8">Sybil Attacks</a></li>
+</ul>
+<li><a href="#Conclusion9">Conclusion</a></li>
+<ul>
+<li><a href="#AlltheUnitTests10">All the Unit Tests</a></li>
+</ul>
+<li><a href="#References11">References</a></li>
+</ul>
+
+</p>
+
+<h2><a name="PuttingItTogether-ADemo0">Putting It Together - A Demo</a></h2>
 <p><img border="0" src="demo1.png" width="191" height="324"></p>
 <p>As usual, there's nothing like a visual demo to see what is happening.&nbsp; 
 This demo uses <a href="https://www.codeproject.com/Articles/1136050/FlowSharp">
@@ -41,7 +77,7 @@ protected void InitializeKnownPeers()
   });
 }</pre>
 <p><img border="0" src="bootstrap0.png" width="611" height="469"></p>
-<h3>Bootstrapping</h3>
+<h3><a name="Bootstrapping1">Bootstrapping</a></h3>
 <pre>protected void BootstrapWithAPeer()
 {
   Dht dht = dhts[peerBootstrappingIdx];
@@ -56,7 +92,7 @@ protected void InitializeKnownPeers()
 <p><img border="0" src="bootstrap.png" width="592" height="474"></p>
 <p>The directionality of the connection is not shown -- arrows would get lost in 
 this drawing!</p>
-<h3>Bucket Refresh</h3>
+<h3><a name="BucketRefresh2">Bucket Refresh</a></h3>
 <p>To illustrate bucket refresh, let's start with a smaller set of peers (25):</p>
 <p><img border="0" src="bucketRefresh1.png" width="466" height="474"></p>
 <p>A bucket refresh calls FindNode all the contacts in each bucket:</p>
@@ -86,7 +122,7 @@ contacts returned by the contact:</p>
 like this, just about every peer learns about every other peer -- another 
 iteration of bucket refreshing results in only a couple more contacts being 
 discovered.</p>
-<h3>Store Value</h3>
+<h3><a name="StoreValue3">Store Value</a></h3>
 <p>When a non-cached value is stored to a peer, it is republished to close 
 peers.&nbsp; We can see this by coloring the originator with yellow, the 
 immediate peer we're storing the value to in blue, and the peers to which the 
@@ -108,7 +144,7 @@ private void btnPublish_Click(object sender, EventArgs e)
 <p>In a small network, because the store gets published to <i>k</i> peers, most of the 
 peers are involved:</p>
 <p><img border="0" src="publish1.png" width="467" height="465"></p>
-<h3>Store Republish</h3>
+<h3><a name="StoreRepublish4">Store Republish</a></h3>
 <p>When we force an immediate store republish, we see that one node, that is a 
 closer contact, getting the republished key-value:</p>
 <p><img border="0" src="publish2.png" width="459" height="462"></p>
@@ -117,42 +153,42 @@ topmost in the rendering):</p>
 <p><img border="0" src="publish3.png" width="596" height="474"></p>
 <p>Remember that key-values are republished only on <i>k</i> closer contacts, so 
 not every peer gets the republished key-value.</p>
-<h2>Not Implemented</h2>
-<h3>UDP Drop Outs</h3>
+<h2><a name="NotImplemented5">Not Implemented</a></h2>
+<h3><a name="UDPDropOuts6">UDP Drop Outs</a></h3>
 <p><font color="#FF00FF">A related problem is that because Kademlia uses UDP, 
 valid contacts will sometimes fail to respond when network packets are dropped. 
 Since packet loss often indicates network congestion, Kademlia locks 
 unresponsive contacts and avoids sending them any further RPCs for an 
-exponentially increasing backoff interval. Because at most stages Kademlia’s 
+exponentially increasing backoff interval. Because at most stages Kademliaï¿½s 
 lookup only needs to hear from one of k nodes, the system typically does not 
 retransmit dropped RPCs to the same node.</font></p>
 <font color="#FF00FF"> When a contact fails to respond to 5 RPCs in a row, it 
 is considered stale. If a fe-bucket is not full or its replacement cache is 
 empty, Kademlia merely flags stale contacts rather than remove them. This 
-ensures, among other things, that if a node’s own network connection goes down 
-temporarily, the node won’t completely void all of its k-buckets.</font>
+ensures, among other things, that if a nodeï¿½s own network connection goes down 
+temporarily, the node wonï¿½t completely void all of its k-buckets.</font>
 <p>This is true not just for UDP packets but any connection -- it may go down 
 for a while.&nbsp; This algorithm is somewhat entangled with delayed eviction.&nbsp; 
 In delayed eviction, the spec state &quot;any unresponsive ones can be evicted.&quot;&nbsp; 
 It is the spec's description of UDP drop outs that actually defines what 
 &quot;unresponsive&quot; actually means.</p>
-<h3>Accelerated Lookups</h3>
+<h3><a name="AcceleratedLookups7">Accelerated Lookups</a></h3>
 <font color="#FF00FF">When a contact fails to respond to 5 RPCs in a row, it 
 is considered stale. If a fe-bucket is not full or its replacement cache is 
 empty, Kademlia merely flags stale contacts rather than remove them. This 
-ensures, among other things, that if a node’s own network connection goes down 
-temporarily, the node won’t completely void all of its k-buckets.</font>
+ensures, among other things, that if a nodeï¿½s own network connection goes down 
+temporarily, the node wonï¿½t completely void all of its k-buckets.</font>
 <p><font color="#FF00FF">Another optimization in the implementation is to 
 achieve fewer hops per lookup by increasing the routing table size. 
 Conceptually, this is done by considering IDs <i>b</i> bits at a time instead of just 
 one bit at a time. As previously described, the expected number of hops per 
-lookup is log<sub>2</sub>n. By increasing the routing table’s size to an expected 2<sup>b</sup> log<sub>2</sub><sup>b</sup>
+lookup is log<sub>2</sub>n. By increasing the routing tableï¿½s size to an expected 2<sup>b</sup> log<sub>2</sub><sup>b</sup>
 <i>n</i> <i>k</i>-buckets, we can reduce the number of expected hops to log<sub>2</sub><sup>b</sup>
 <i>n</i>.</font></p>
 <p>In this implementation we have bucket ranges rather than a bucket per 
 prefix bits in the key space, therefore the accelerated lookup optimization is 
 irrelevant because the bucket ranges typically span many prefix bits.</p>
-<h3>Sybil Attacks</h3>
+<h3><a name="SybilAttacks8">Sybil Attacks</a></h3>
 <p>Peer-to-peer networks are vulnerable to Sybil attacks: </p>
 <blockquote>
 	<p>&quot;In a Sybil attack, the attacker subverts the reputation system of a 
@@ -170,7 +206,7 @@ In a mostly unpopulated network (most k-buckets have room for more peers) the
 subsequent failure to get a response from a peer would result in its eventual 
 eviction.&nbsp; The piggyback ping approach is also a means for the recipient of 
 the RPC call to verify the sender.</p>
-<h2>Conclusion</h2>
+<h2><a name="Conclusion9">Conclusion</a></h2>
 <p>How does one write a conclusion to an article that is over 120 pages in Word?&nbsp; 
 Petar Maymounkov wrote &quot;...my opinion is that Kademlia is so simple, that with a 
 modern language like Go, a good implementation of Kademlia (the algorithm) is no 
@@ -207,11 +243,11 @@ initial release of this implementation, I have not addressed all
 these concerns.&nbsp; Regardless, if you made it this far through the document, 
 I suspect you have a much better understanding of the Kademlia protocol, which 
 also gives you some tools to look at other P2P protocols.</p>
-<h3>All the Unit Tests</h3>
+<h3><a name="AlltheUnitTests10">All the Unit Tests</a></h3>
 <p>There's a total of 35 unit tests, and even so it seems like there certainly 
 could be more!</p>
 <p><img border="0" src="allunittests.png" width="304" height="730"></p>
-<h2>References</h2>
+<h2><a name="References11">References</a></h2>
 <p>[1] -
 <a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
 http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>

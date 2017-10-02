@@ -6,34 +6,68 @@
 </head>
 
 <body>
-<a href="PartI">Part I - Introduction and Basic Concepts</a><br>
-<a href="PartII">Part II - Adding Contacts</a><br>
-<a href="PartIII">Part III - Node Lookup</a><br>
-<a href="PartIV">Part IV - Value Looup</a><br>
-<a href="PartV">Part V - The DHT</a><br>
-<a href="PartVI">Part VI - Bucket and Key-Value Management</a><br>
-<a href="PartVII">Part VII - Asynchronous Considerations and Parallel Queries</a><br>
-<a href="PartVIII">Part VIII - A Basic TCP Subnet Procotol</a><br>
-<a href="PartIX">Part IX - Demo and Conclusion</a>
-<p>Contents</p>
+<p><img border="0" src="bucketRefresh2.png" width="460" height="463"></p>
+<a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-I">Part I - Introduction and Basic Concepts</a><br>
+<a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-II">Part II - Adding Contacts</a> (This Article)<br>
+<a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-III">Part III - Node Lookup</a><br>
+<a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-IV">Part IV - Value Lookup</a><br>
+<a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-V">Part V - The DHT</a><br>
+<a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-VI">Part VI - Bucket and Key-Value Management</a><br>
+<a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-VII">Part VII - Asynchronous Considerations and Parallel Queries</a><br>
+<a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-VIII">Part VIII - A Basic TCP Subnet Procotol</a><br>
+<a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-IX">Part IX - Demo and Conclusion</a>
 <p>
-<!-- INSERT contents -->
+<h2>Contents</h2><ul>
+<li><a href="#AddingContacts-Discussion0">Adding Contacts - Discussion</a></li>
+<ul>
+<li><a href="#Contradiction#21">Contradiction #2</a></li>
+<ul>
+<li><a href="#Terminology2">Terminology</a></li>
+</ul>
+<li><a href="#Contradiction#33">Contradiction #3</a></li>
+<ul>
+<li><a href="#Terminology4">Terminology</a></li>
+</ul>
+<li><a href="#Contradiction#45">Contradiction #4</a></li>
+<ul>
+<li><a href="#Terminology6">Terminology</a></li>
+</ul>
+<li><a href="#Ambiguity#27">Ambiguity #2</a></li>
+<li><a href="#WhatistheBucketSplittingAlgorithmActuallyDoing8">What is the Bucket Splitting Algorithm Actually Doing?</a></li>
+<li><a href="#FailingtoaddYourselftoaPeer-SelfCorrecting9">Failing to add Yourself to a Peer - Self Correcting</a></li>
+<li><a href="#DegradingaKademliaPeer10">Degrading a Kademlia Peer</a></li>
+</ul>
+<li><a href="#AddingContacts-Implementation11">Adding Contacts - Implementation</a></li>
+<ul>
+<li><a href="#BasicUnitTests12">Basic Unit Tests</a></li>
+</ul>
+<li><a href="#AddingContacts-DistributionTestsRevealImportanceofRandomness13">Adding Contacts - Distribution Tests Reveal Importance of Randomness</a></li>
+<ul>
+<li><a href="#DistributionTests14">Distribution Tests</a></li>
+<ul>
+<li><a href="#TheQuestionofRandomness15">The Question of Randomness</a></li>
+</ul>
+<li><a href="#HowaContactIDAffectsDistribution16">How a Contact ID Affects Distribution</a></li>
+</ul>
+<li><a href="#References17">References</a></li>
+</ul>
+
 </p>
 
-<h2>Adding Contacts - Discussion</h2>
+<h2><a name="AddingContacts-Discussion0">Adding Contacts - Discussion</a></h2>
 <p>Version 2, Section 2.2 of the specification initially states this simple 
 algorithm for dealing adding contacts:</p>
 <p><font color="#FF00FF">When a Kademlia node receives any message (request or 
-reply) from another node, it updates the appropriate k-bucket for the sender’s 
-node ID. If the sending node already exists in the recipient’s k-bucket, the 
+reply) from another node, it updates the appropriate k-bucket for the senderï¿½s 
+node ID. If the sending node already exists in the recipientï¿½s k-bucket, the 
 recipient moves it to the tail of the list. If the node is not already in the 
 appropriate k-bucket and the bucket has fewer than k entries, then the recipient 
 just inserts the new sender at the tail of the list. If the appropriate k-bucket 
-is full, however, then the recipient pings the k-bucket’s least-recently seen 
+is full, however, then the recipient pings the k-bucketï¿½s least-recently seen 
 node to decide what to do. If the least recently seen node fails to respond, it 
 is evicted from the k-bucket and the new sender inserted at the tail. Otherwise, 
 if the least-recently seen node responds, it is moved to the tail of the list, 
-and the new sender’s contact is discarded.</font></p>
+and the new senderï¿½s contact is discarded.</font></p>
 <p>Let's define a few terms (if you aren't sure, don't know, or just want some 
 clarity):</p>
 <ul>
@@ -59,17 +93,17 @@ k-buckets when old nodes leave the system.</font></p>
 <p>We also observe that this has nothing to do with binary trees, which is 
 something version 2 of the spec introduced.&nbsp; This is basically a hang-over 
 from version 1 of the spec.</p>
-<h3>Contradiction #2</h3>
+<h3><a name="Contradiction#21">Contradiction #2</a></h3>
 <p>Section 2.4 states something slightly different:</p>
 <p><font color="#FF00FF">Nodes in the routing tree are allocated dynamically, as 
-needed. Initially, a node u’s routing tree has a single node— one k-bucket 
+needed. Initially, a node uï¿½s routing tree has a single nodeï¿½ one k-bucket 
 covering the entire ID space. When u learns of a new contact, it attempts to 
 insert the contact in the appropriate k-bucket. If that bucket is not full, the 
-new contact is simply inserted. Otherwise, if the k-bucket’s range includes u’s 
+new contact is simply inserted. Otherwise, if the k-bucketï¿½s range includes uï¿½s 
 own node ID, then the bucket is split into two new buckets, the old contents 
 divided between the two, and the insertion attempt repeated. If a k-bucket with 
 a different range is full, the new contact is simply dropped.</font></p>
-<h4>Terminology</h4>
+<h4><a name="Terminology2">Terminology</a></h4>
 <ul>
 	<li>&quot;u's routing tree&quot; - the host's bucket list.</li>
 	<li>&quot;if a k-bucket with a different range is full&quot; - meaning, a k-bucket 
@@ -82,18 +116,18 @@ difference (more on this whole XOR thing later.)</p>
 <p>So this algorithm looks like this:</p>
 <p align="center"><img border="0" src="addContact2.png" width="761" height="625"></p>
 <p>What happened to pinging the least seen contact and replacing it?&nbsp; </p>
-<h3>Contradiction #3</h3>
+<h3><a name="Contradiction#33">Contradiction #3</a></h3>
 <p>But the spec then goes on to say:</p>
 <p><font color="#FF00FF">One complication arises in highly unbalanced trees.&nbsp; 
 Suppose node <i>u</i> joins the system and is the only node whose ID begins 000. 
 Suppose further that the system already has more than k nodes with prefix 001. 
 Every node with prefix 001 would have an empty k-bucket into which <i>u</i> 
-should be inserted, yet <i>u</i>’s bucket refresh would only notify k of the 
+should be inserted, yet <i>u</i>ï¿½s bucket refresh would only notify k of the 
 nodes.&nbsp; To avoid this problem, Kademlia nodes keep all valid contacts in a 
 subtree of size at least k nodes, even if this requires splitting buckets in 
-which the node’s own ID does not reside. Figure 5 illustrates these additional 
+which the nodeï¿½s own ID does not reside. Figure 5 illustrates these additional 
 splits.</font></p>
-<h4>Terminology</h4>
+<h4><a name="Terminology4">Terminology</a></h4>
 <ul>
 	<li>&quot;a subtree of size at least k nodes&quot; - ok, we can vaguely see that a 
 	subtree contains other subtrees where the total number of contacts is 
@@ -134,28 +168,28 @@ I present in full here:</p>
 <p>So my decision, given the lack of clarity and by the authors of the spec, is 
 to ignore this, because, as you will see next, there is yet another version of 
 how contacts are added.</p>
-<h3>Contradiction #4</h3>
+<h3><a name="Contradiction#45">Contradiction #4</a></h3>
 <p>In Section 4.2, on Accelerated Lookups, we have a different specification for 
 how contacts are added:</p>
 <p><font color="#FF00FF">Section 2.4 describes how a Kademlia node splits a 
-k-bucket when the bucket is full and its range includes the node’s own ID. The 
-implementation, however, also splits ranges not containing the node’s ID, up to 
+k-bucket when the bucket is full and its range includes the nodeï¿½s own ID. The 
+implementation, however, also splits ranges not containing the nodeï¿½s ID, up to 
 b - 1 levels. If b = 2, for instance, the half of the ID space not containing 
-the node’s ID gets split once (into two ranges); if b = 3, it gets split at two 
+the nodeï¿½s ID gets split once (into two ranges); if b = 3, it gets split at two 
 levels into a maximum of four ranges, etc. The general splitting rule is that a 
-node splits a full k-bucket if the bucket’s range contains the node’s own ID or 
+node splits a full k-bucket if the bucketï¿½s range contains the nodeï¿½s own ID or 
 the depth d of the k-bucket in the routing tree satisfies d&nbsp; (mod b) != 0.</font></p>
-<h4>Terminology</h4>
+<h4><a name="Terminology6">Terminology</a></h4>
 <ul>
 	<li>depth - According to the spec: <font color="#FF00FF">The depth is just 
-	the length of the prefix shared by all nodes in the k-bucket’s range. </font>
+	the length of the prefix shared by all nodes in the k-bucketï¿½s range. </font>
 	Do not confuse that with this statement: <font color="#FF00FF">Define the 
 	depth, h, of a node to be 160 - <i>i</i>, where <i>i</i> is the smallest 
 	index of a non-empty bucket.</font>&nbsp; The former is referring to the 
 	depth of <i>a k-bucket</i>, the 
 	latter the depth of <i>the node</i>.</li>
 </ul>
-<h3>Ambiguity #2</h3>
+<h3><a name="Ambiguity#27">Ambiguity #2</a></h3>
 <p>With regards to the definition of depth, does this mean &quot;the length of prefix 
 shared by <i>any</i> node that would <i>reside in the k-bucket's range</i>&quot; or 
 does it mean &quot;the length of a prefix shared by <i>all</i> nodes <i>currently in the k-bucket</i>?&quot;</p>
@@ -172,7 +206,7 @@ def sharedPrefix(args):
     i += 1
   return args[0][:i]</pre>
 <p>Here, the depth is determined by the shared prefixes in the nodes.</p>
-<h3>What is the Bucket Splitting Algorithm Actually Doing?</h3>
+<h3><a name="WhatistheBucketSplittingAlgorithmActuallyDoing8">What is the Bucket Splitting Algorithm Actually Doing?</a></h3>
 <p>So, when we use the following algorithm to determine whether a bucket can be 
 split:</p>
 <pre>kbucket.HasInRange(ourID) || ((kbucket.Depth() % Constants.B) != 0)</pre>
@@ -202,7 +236,7 @@ the bucket when split, will result in less &quot;room&quot; for new contacts.&nb
 Eventually, when the bucket range becomes narrow enough, the number of bits 
 shared in the prefix of the contacts in the bucket reaches the threshold <i>b</i> 
 which the spec says should be 5.</p>
-<h3>Failing to add Yourself to a Peer - Self Correcting</h3>
+<h3><a name="FailingtoaddYourselftoaPeer-SelfCorrecting9">Failing to add Yourself to a Peer - Self Correcting</a></h3>
 <p>Let's say your a new node and you want to register yourself with a known 
 peer, but that peer is basically maxed out for the number of contacts that it 
 can hold in the particular bucket for your ID -- the depth is <i>b</i>.&nbsp; In 
@@ -213,7 +247,7 @@ a contact or not, you will receive back &quot;nearby&quot; peers.&nbsp; Any time
 contact those peers (to store a value, for example) all the peers that you 
 contact will try to add your contact.&nbsp; When one succeeds, your contact ID 
 will be disseminated slowly through the network. </p>
-<h3>Degrading a Kademlia Peer</h3>
+<h3><a name="DegradingaKademliaPeer10">Degrading a Kademlia Peer</a></h3>
 <p>Given a peer with both an ID and a single contact ID of less than 2<sup>159</sup>, 
 it 
 will initially split once for 20 contacts that are added having ID's greater than 2<sup>159</sup>.&nbsp; 
@@ -307,7 +341,7 @@ providing a unique ID in its contact request.</li>
 	allow the depth for bucket splitting to be greater than the recommended <i>b</i> 
 	= 5.</li>
 </ol>
-<h2>Adding Contacts - Implementation</h2>
+<h2><a name="AddingContacts-Implementation11">Adding Contacts - Implementation</a></h2>
 <p>This is the flowchart of what we're implementing:</p>
 <p align="center">
 <img border="0" src="addContact3.png" width="664" height="838"></p>
@@ -474,7 +508,7 @@ public static IEnumerable&lt;bool&gt; Bits(this byte[] bytes)
 
   return bytes.SelectMany(GetBits);
 }</pre>
-<h3>Basic Unit Tests</h3>
+<h3><a name="BasicUnitTests12">Basic Unit Tests</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> A few basic unit tests:</p>
 <pre>[TestMethod]
 public void UniqueIDAddTest()
@@ -504,12 +538,12 @@ public void BucketSplitTest()
   bucketList.AddContact(new Contact(null, ID.RandomID));
   Assert.IsTrue(bucketList.Buckets.Count &gt; 1, &quot;Bucket should have split into two or more buckets.&quot;);
 }</pre>
-<h2>Adding Contacts - Distribution Tests Reveal Importance of Randomness</h2>
+<h2><a name="AddingContacts-DistributionTestsRevealImportanceofRandomness13">Adding Contacts - Distribution Tests Reveal Importance of Randomness</a></h2>
 <p>Some very interesting things are revealed with the above implementation.&nbsp; 
 Let's write a unit test that runs the process of adding 3200 contacts, and we do 
 this 100 times, to get some results about the number of contacts that are 
 actually added:</p>
-<h3>Distribution Tests</h3>
+<h3><a name="DistributionTests14">Distribution Tests</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"></p>
 <pre>[TestMethod]
 public void RandomIDDistributionTest()
@@ -547,7 +581,7 @@ succeed at adding around 720 contacts.</li>
 	<li>If we increase <i>b </i>we can affect this number.&nbsp; For example, 
 	increasing b to 6 (from 5) doubles the number of contacts that are added.</li>
 </ol>
-<h4>The Question of Randomness</h4>
+<h4><a name="TheQuestionofRandomness15">The Question of Randomness</a></h4>
 <p>As noted above, the ID was determined by a random value of 0-255 for each 
 byte in the 20 bytes ID space.&nbsp; What happens instead if we randomize the ID 
 based instead on its prefix?&nbsp; Meaning that the distribution of ID's, based 
@@ -636,7 +670,7 @@ public void RandomPrefixDistributionTest()
 <p>Notice how 
 large the standard deviation is -- there is something go on here, which we'll 
 explore next.</p>
-<h3>How a Contact ID Affects Distribution</h3>
+<h3><a name="HowaContactIDAffectsDistribution16">How a Contact ID Affects Distribution</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> Let's look at what happens when we assign a node ID as one of 2<sup>i</sup> 
 where 0 &lt;= i &lt; 160 and add 3200 integer random contact ID's.&nbsp; Here's the unit test, which outputs the count of 
 contacts added to each node ID in the set of <i>i</i>:</p>
@@ -692,8 +726,8 @@ If we want to support more than an average of ~700 contacts in our peer, we can
 always increase <i>b</i>. </p>
 <p align="left">
 <b>To Be Continued...</b>
-<a href="PartIII">Part III - Node Lookup</a></p>
-<h2>References</h2>
+<a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-III">Part III - Node Lookup</a></p>
+<h2><a name="References17">References</a></h2>
 <p>[1] -
 <a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
 http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>

@@ -6,6 +6,18 @@
 </head>
 
 <body>
+<a href="PartI">Part I - Introduction and Basic Concepts</a><br>
+<a href="PartII">Part II - Adding Contacts</a><br>
+<a href="PartIII">Part III - Node Lookup</a><br>
+<a href="PartIV">Part IV - Value Lookup</a><br>
+<a href="PartV">Part V - The DHT</a><br>
+<a href="PartVI">Part VI - Bucket and Key-Value Management</a><br>
+<a href="PartVII">Part VII - Asynchronous Considerations and Parallel Queries</a><br>
+<a href="PartVIII">Part VIII - A Basic TCP Subnet Procotol</a> (This Article)<br>
+<a href="PartIX">Part IX - Demo and Conclusion</a>
+<p>
+<!-- INSERT contents -->
+</p>
 
 <h2>A Basic TCP Subnet Protocol</h2>
 <p>There's a few points to make in this implementation:</p>
@@ -644,6 +656,7 @@ Assert.IsTrue(dht.PendingContacts.Count == 0, &quot;Pending contact list should 
 Assert.IsFalse(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nonRespondingContact), &quot;Expected bucket to NOT contain non-responding contact.&quot;);
 Assert.IsTrue(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nextNewContact), &quot;Expected bucket to contain new contact.&quot;);
 Assert.IsTrue(dht.EvictionCount.Count == 0, &quot;Expected no contacts to be pending eviction.&quot;);</pre>
+<p><b>To Be Continued...</b><a href="PartIX"> Part IX - Demo and Conclusion</a></p>
 <h2>References</h2>
 <p>[1] -
 <a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">

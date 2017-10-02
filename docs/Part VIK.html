@@ -11,17 +11,60 @@
 <a href="PartIII">Part III - Node Lookup</a><br>
 <a href="PartIV">Part IV - Value Lookup</a><br>
 <a href="PartV">Part V - The DHT</a><br>
-<a href="PartVI">Part VI - Bucket and Key-Value Management</a><br>
+<a href="PartVI">Part VI - Bucket and Key-Value Management</a> (This Article)<br>
 <a href="PartVII">Part VII - Asynchronous Considerations and Parallel Queries</a><br>
 <a href="PartVIII">Part VIII - A Basic TCP Subnet Procotol</a><br>
 <a href="PartIX">Part IX - Demo and Conclusion</a>
 <p>
-<!-- INSERT contents -->
+<h2>Contents</h2><ul>
+<li><a href="#BucketManagement0">Bucket Management</a></li>
+<ul>
+<li><a href="#EvictingUnresponsiveContactsInFullBuckets1">Evicting Unresponsive Contacts In Full Buckets</a></li>
+<li><a href="#BucketRefresh-Discussion2">Bucket Refresh - Discussion</a></li>
+<ul>
+<li><a href="#Ambiguity#133">Ambiguity #13</a></li>
+</ul>
+<li><a href="#BucketRefresh-Implementation4">Bucket Refresh - Implementation</a></li>
+</ul>
+<li><a href="#Key-ValueManagement5">Key-Value Management</a></li>
+<ul>
+<li><a href="#OriginalPublisherStore6">Original Publisher Store</a></li>
+<li><a href="#RepublishedStore7">Republished Store</a></li>
+<li><a href="#CachedStore8">Cached Store</a></li>
+<li><a href="#StorageMechanismsintheDhtClass9">Storage Mechanisms in the Dht Class</a></li>
+<li><a href="#RepublishingKey-Values10">Republishing Key-Values</a></li>
+<li><a href="#ExpiringKey-ValuePairs11">Expiring Key-Value Pairs</a></li>
+<li><a href="#OriginatorRepublishing-Discussion12">Originator Republishing - Discussion</a></li>
+<li><a href="#OriginatorRepublishing-Implementation13">Originator Republishing - Implementation</a></li>
+<li><a href="#StoringKey-ValuesOntothenewNodeWhenanewNodeRegisters-Discussion14">Storing Key-Values Onto the new Node When a new Node Registers - Discussion</a></li>
+<ul>
+<li><a href="#Interpretation15">Interpretation</a></li>
+<li><a href="#Ambiguity#1416">Ambiguity #14</a></li>
+</ul>
+<li><a href="#StoringKey-ValuesOntothenewNodeWhenanewNodeRegisters-UnitTest17">Storing Key-Values Onto the new Node When a new Node Registers - Unit Test</a></li>
+<li><a href="#KeyRepublishing-Discussion18">Key Republishing - Discussion</a></li>
+<ul>
+<li><a href="#FirstOptimization19">First Optimization</a></li>
+<li><a href="#SecondOptimization20">Second Optimization</a></li>
+</ul>
+<li><a href="#KeyRepublishing-Implementation21">Key Republishing - Implementation</a></li>
+<li><a href="#Over-Caching-Discussion22">Over-Caching - Discussion</a></li>
+<ul>
+<li><a href="#Ambiguity#1523">Ambiguity #15</a></li>
+<li><a href="#Ambiguity#1624">Ambiguity #16</a></li>
+<li><a href="#Ambiguity#1725">Ambiguity #17</a></li>
+</ul>
+<li><a href="#Over-Caching-Implementation26">Over-Caching - Implementation</a></li>
+<li><a href="#NeverExpiringRepublishedKey-Values27">Never Expiring Republished Key-Values</a></li>
+</ul>
+<li><a href="#References28">References</a></li>
+</ul>
+
 </p>
 
 
-<h2>Bucket Management</h2>
-<h3>Evicting Unresponsive Contacts In Full Buckets</h3>
+<h2><a name="BucketManagement0">Bucket Management</a></h2>
+<h3><a name="EvictingUnresponsiveContactsInFullBuckets1">Evicting Unresponsive Contacts In Full Buckets</a></h3>
 <p>We should now address this in the <code>AddContact</code> method:</p>
 <pre>// TODO: Ping the oldest contact to see if it's still 
 // around and replace it if not.
@@ -94,14 +137,14 @@ public void NonRespondingContactTest()
   Assert.IsFalse(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nonRespondingContact), &quot;Expected bucket to NOT contain non-responding contact.&quot;);
   Assert.IsTrue(bucketList.Buckets.SelectMany(b =&gt; b.Contacts).Contains(nextNewContact), &quot;Expected bucket to contain new contact.&quot;);
 }</pre>
-<h3>Bucket Refresh - Discussion</h3>
+<h3><a name="BucketRefresh-Discussion2">Bucket Refresh - Discussion</a></h3>
 <p>From the spec: <font color="#FF00FF">Buckets are generally kept fresh by the 
 traffic of requests traveling through nodes. To handle pathological cases in 
 which there are no lookups for a particular ID range, each node refreshes any 
 bucket to which it has not performed a node lookup in the past hour. Refreshing 
-means picking a random ID in the bucket’s range and performing a node search for 
+means picking a random ID in the bucketï¿½s range and performing a node search for 
 that ID.</font></p>
-<h4>Ambiguity #13</h4>
+<h4><a name="Ambiguity#133">Ambiguity #13</a></h4>
 <p>The phrase &quot;any bucket to which it has not performed a node lookup&quot; is 
 subject to interpretation.&nbsp; One way to interpret this is possibly &quot;the 
 bucket whose range contains the key in the key-value pair for a Store or 
@@ -112,7 +155,7 @@ because&nbsp;the original alpha contacts is determined from the list of closest
 contacts across all buckets, but it then becomes arbitrary as to whether to also touch 
 the buckets containing the contacts returned by the FindNodes query that are 
 then queried further.&nbsp; </p>
-<h3>Bucket Refresh - Implementation</h3>
+<h3><a name="BucketRefresh-Implementation4">Bucket Refresh - Implementation</a></h3>
 <p>I am choosing the first interpretation, which 
 means that the bucket containing the key gets touched in the Store and FindValue 
 methods:</p>
@@ -163,7 +206,7 @@ timestamp:</p>
 {
   TimeStamp = DateTime.Now;
 }</pre>
-<h2>Key-Value Management</h2>
+<h2><a name="Key-ValueManagement5">Key-Value Management</a></h2>
 <p>In this section you will learn something that is not at all clearly stated in 
 the Kademlia specification -- there are actually three kinds of data store:</p>
 <ol>
@@ -179,13 +222,13 @@ at the discussion on the emule project forum, particularly &quot;miniminime's&qu
 discussion of the roles that a node can take on<sup>18</sup>.&nbsp; Implementing 
 this approach requires that the receiver peer knows whether to store the 
 key-value in the republish store or in the cache store.</p>
-<h3>Original Publisher Store</h3>
+<h3><a name="OriginalPublisherStore6">Original Publisher Store</a></h3>
 <p>The original publisher store is never written to as a result of an RPC store.&nbsp; 
 This store is updated only by the peer itself when it is the originator of the 
 key-value and wants to publish the key-value to other peers. </p>
 <p><img border="0" src="important.png" width="38" height="32"> Key-values from 
 this store are republished once every 24 hours.</p>
-<h3>Republished Store</h3>
+<h3><a name="RepublishedStore7">Republished Store</a></h3>
 <p>This store contains key-values that have been republished by other peers as 
 part of process of distributing the data among peers.&nbsp; This store never 
 contains the peer's (as an originator) own storage, but only key-values received 
@@ -198,7 +241,7 @@ algorithm:</p>
 	<li>For a particular bucket if it has already been queried for closer nodes.</li>
 <li>If the key has been republished in the last hour.</li>
 </ol>
-<h3>Cached Store</h3>
+<h3><a name="CachedStore8">Cached Store</a></h3>
 <p>The cached store is used when republishing a FindValue request onto the <i>
 next closest node</i>.&nbsp; The intention here is to avoid hotspots during 
 lookup of popular keys by temporarily republishing them onto other nearby peers.&nbsp; 
@@ -206,7 +249,7 @@ These temporary key-values have an expiration time.</p>
 <p><img border="0" src="important.png" width="38" height="32">&nbsp; Key-values 
 in the cached store are never republished and are removed after the expiration 
 time.</p>
-<h3>Storage Mechanisms in the Dht Class</h3>
+<h3><a name="StorageMechanismsintheDhtClass9">Storage Mechanisms in the Dht Class</a></h3>
 <p>These are implemented in the <code>Dht</code> class:</p>
 <pre>protected IStorage originatorStorage;
 protected IStorage republishStorage;
@@ -257,7 +300,7 @@ public void Store(Contact sender, ID key, string val, bool isCached = false, int
     storage.Set(key, val, Constants.EXPIRATION_TIME_SECONDS);
   }
 }</pre>
-<h3>Republishing Key-Values</h3>
+<h3><a name="RepublishingKey-Values10">Republishing Key-Values</a></h3>
 <p>Key-values in the republish store are republished at a particular time 
 interval, typically every hour:</p>
 <pre>/// &lt;summary&gt;
@@ -305,7 +348,7 @@ protected void StoreOnCloserContacts(ID key, string val)
     HandleError(error, c);
   });
 }</pre>
-<h3>Expiring Key-Value Pairs</h3>
+<h3><a name="ExpiringKey-ValuePairs11">Expiring Key-Value Pairs</a></h3>
 <p>Expire the key-values are removed from the republish and cache storage, 
 which happens in the <code>Dht</code> class:</p>
 <pre>/// &lt;summary&gt;
@@ -326,14 +369,14 @@ protected void RemoveExpiredData(IStorage store)
     store.Remove(k);
   });
 }</pre>
-<h3>Originator Republishing - Discussion</h3>
-<p><font color="#FF00FF">For Kademlia’s current application (file sharing), we 
+<h3><a name="OriginatorRepublishing-Discussion12">Originator Republishing - Discussion</a></h3>
+<p><font color="#FF00FF">For Kademliaï¿½s current application (file sharing), we 
 also require the original publisher of a (key,value) pair to republish it every 
 24 hours. Otherwise, (key,value) pairs expire 24 hours after publication, so as 
 to limit stale index information in the system. For other applications, such as 
 digital certificates or cryptographic hash to value mappings, longer expiration 
 times may be appropriate.</font></p>
-<h3>Originator Republishing - Implementation</h3>
+<h3><a name="OriginatorRepublishing-Implementation13">Originator Republishing - Implementation</a></h3>
 <p>Republishing originator data is handled in a timer event that resends the 
 key-values in the originator's storage.</p>
 <pre>protected void OriginatorRepublishElapsed(object sender, ElapsedEventArgs e)
@@ -350,15 +393,15 @@ key-values in the originator's storage.</p>
   });
 }</pre>
 <p>Republished key-values persist for 24 hours.</p>
-<h3>Storing Key-Values Onto the new Node When a new Node Registers - Discussion</h3>
+<h3><a name="StoringKey-ValuesOntothenewNodeWhenanewNodeRegisters-Discussion14">Storing Key-Values Onto the new Node When a new Node Registers - Discussion</a></h3>
 <p><font color="#FF00FF">When a new node joins the system, it must store any 
 key-value pair to which it is one of the k closest. Existing nodes, by similarly 
 exploiting complete knowledge of their surrounding subtrees, will know which 
 key-value pairs the new node should store. Any node learning of a new node 
 therefore issues STORE RPCs to transfer relevant key-value pairs to the new 
 node. To avoid redundant STORE RPCs, however, a node only transfers a key-value 
-pair if it’s own ID is closer to the key than are the IDs of other nodes.</font></p>
-<h4>Interpretation</h4>
+pair if itï¿½s own ID is closer to the key than are the IDs of other nodes.</font></p>
+<h4><a name="Interpretation15">Interpretation</a></h4>
 <ol>
 	<li>a new node (contact) will be instructed to store key-values that exist 
 	on the bootstrapping node (the one it's boostrapping with) for key-values 
@@ -366,7 +409,7 @@ pair if it’s own ID is closer to the key than are the IDs of other nodes.</font>
 	<li>the key XOR'd with the bootstrapping node's ID &lt; (closer than) the key 
 	XOR'd the ID's of other nodes.</li>
 </ol>
-<h4>Ambiguity #14</h4>
+<h4><a name="Ambiguity#1416">Ambiguity #14</a></h4>
 <p>What does &quot;other nodes&quot; mean?&nbsp; Are these all other 
 contacts the bootstrapping node knows about, or just the <i>k</i> closest 
 contacts in the joining node's bucket, or some other determination?&nbsp; We 
@@ -448,7 +491,7 @@ protected bool IsNewContact(Contact sender)
 
   return !ret;
 }</pre>
-<h3>Storing Key-Values Onto the new Node When a new Node Registers - Unit Test</h3>
+<h3><a name="StoringKey-ValuesOntothenewNodeWhenanewNodeRegisters-UnitTest17">Storing Key-Values Onto the new Node When a new Node Registers - Unit Test</a></h3>
 <p><img border="0" src="unittest.png" width="14" height="32"> There's a lot of 
 setup here to for creating two existing contacts and two key-values and their 
 ID's have been specifically set.&nbsp; See the comments for the XOR distance 
@@ -504,7 +547,7 @@ public void TestNewContactGetsStoredContactsTest()
   Assert.IsTrue(unseen.Storage.Contains(ID.Mid), &quot;Expected valMid to be stored.&quot;);
   Assert.IsTrue(unseen.Storage.Get(ID.Mid) == valMid, &quot;Expected valMid value to match.&quot;);
 }</pre>
-<h3>Key Republishing - Discussion</h3>
+<h3><a name="KeyRepublishing-Discussion18">Key Republishing - Discussion</a></h3>
 <p>
 <font color="#FF00FF">To ensure the persistence of key-value pairs, nodes 
 must periodically republish keys. Otherwise, two phenomena may cause lookups for 
@@ -517,7 +560,7 @@ the k nodes closest to the key.</font></font> </p>
 <p>
 <font color="#FF00FF"> To compensate for nodes leaving the network, Kademlia 
 republishes each key-value pair once an hour. A naive implementation of this 
-strategy would require many messages—each of up to k nodes storing a key-value 
+strategy would require many messagesï¿½each of up to k nodes storing a key-value 
 pair would perform a node lookup followed by k - 1 STORE RPCs every hour.&nbsp; 
 </font></font></p>
 <p>From wikipedia<sup>15</sup>, which can be helpful for understanding the spec with 
@@ -536,7 +579,7 @@ the key&quot; - in other words, for each key, a FindNode is called to find close
 nodes and the value is republished.&nbsp; Without the optimizations, this can be 
 a time consuming process if there's a lot of key-values in a node's store, which 
 is addressed in an optimization later.</p>
-<h4>First Optimization</h4>
+<h4><a name="FirstOptimization19">First Optimization</a></h4>
 <p><font color="#FF00FF">Fortunately, the republishing process can be heavily 
 optimized. First, when a node receives a STORE RPC for a given key-value pair, 
 it assumes the RPC was also issued to the other k - 1 closest nodes, and thus 
@@ -551,7 +594,7 @@ last hour is not republished as we can assume:</p>
 	<li>If it's been republished by another node, that node republished it to <i>
 	k</i> closer nodes.</li>
 </ol>
-<h4>Second Optimization</h4>
+<h4><a name="SecondOptimization20">Second Optimization</a></h4>
 <p><font color="#FF00FF">A second 
 optimization avoids performing node lookups before republishing keys. As 
 described in Section 2.4, to handle unbalanced trees, nodes split k-buckets as 
@@ -632,7 +675,7 @@ farther bucket contacts are in red):</p>
 <p>So for this reason, we use the bucket for which the key is in range.&nbsp; 
 Also, new key-values that are published onto to closer nodes persist for 24 
 hours.</p>
-<h3>Key Republishing - Implementation</h3>
+<h3><a name="KeyRepublishing-Implementation21">Key Republishing - Implementation</a></h3>
 <p>One refactoring that has to occur is that the storage mechanism needs to 
 associate a timestamp with the key-value, which you'll see used in the following 
 code.</p>
@@ -666,16 +709,16 @@ protected void KeyValueRepublishElapsed(object sender, ElapsedEventArgs e)
     storage.Touch(k);
   });
 }</pre>
-<h3>Over-Caching - Discussion</h3>
+<h3><a name="Over-Caching-Discussion22">Over-Caching - Discussion</a></h3>
 <p><font color="#FF00FF">To avoid &quot;over-caching,&quot; we make the expiration time of 
-a (key,value) pair in any node’s database exponentially inversely proportional 
+a (key,value) pair in any nodeï¿½s database exponentially inversely proportional 
 to the number of nodes between the current node and the node whose ID is closest 
 to the key ID.</font></p>
 <p>&quot;Inversely proportional&quot; - meaning that the expiration time is shorter the 
 more nodes that are between the current node and the closest node.</p>
 <p>&quot;Exponentially inversely proportional&quot; - meaning the expiration time is <i>a lot 
 shorter</i> the more nodes that are between the current node and closest node.</p>
-<h4>Ambiguity #15</h4>
+<h4><a name="Ambiguity#1523">Ambiguity #15</a></h4>
 <p>The specification provides no guidance for what the calculation for 
 &quot;exponentially inversely proportional&quot; should actually be.&nbsp; It's also 
 undefined as to what the time constants are -- what is a baseline time for which 
@@ -687,7 +730,7 @@ where the value of <i>b </i>comes from.&nbsp; In this implementation, where we
 have bucket ranges, rather than a bucket per bit in the key space, the 
 accelerated lookup optimization is irrelevant, so we'll use b==5 which is the 
 spec's recommended value for that optimization. </p>
-<h4>Ambiguity #16</h4>
+<h4><a name="Ambiguity#1624">Ambiguity #16</a></h4>
 <p>Who does the computation &quot;between the current node and the node whose ID is 
 closest to the key ID?&quot;&nbsp; Is the &quot;current node:&quot;</p>
 <ol>
@@ -696,12 +739,12 @@ closest to the key ID?&quot;&nbsp; Is the &quot;current node:&quot;</p>
 	<li>The receiver that is handling the store request, and counts the number 
 	of nodes between itself and the sender node?</li>
 </ol>
-<h4>Ambiguity #17</h4>
+<h4><a name="Ambiguity#1725">Ambiguity #17</a></h4>
 <p>As discussed earlier, the entire concept of having a separate stores 
 (originator, republished, cached) is never discussed in the Kademlia 
 specification.&nbsp; Without understanding these three different stores, trying 
 to understand how caching works is probably impossible.</p>
-<h3>Over-Caching - Implementation</h3>
+<h3><a name="Over-Caching-Implementation26">Over-Caching - Implementation</a></h3>
 <p>Caching occurs in only one place -- when a value being looked up (and 
 successfully found) is stored on a &quot;close&quot; node:</p>
 <pre>...
@@ -731,7 +774,7 @@ Assert.IsFalse(store3.Contains(key), &quot;Key should not be in the republish st
 Assert.IsTrue(cache3.Contains(key), &quot;Key should be in the cache store.&quot;);
 Assert.IsTrue(cache3.GetExpirationTimeSec(key.Value) == Constants.EXPIRATION_TIME_SECONDS / 2, &quot;Expected 12 hour expiration.&quot;);
 </pre>
-<h3>Never Expiring Republished Key-Values</h3>
+<h3><a name="NeverExpiringRepublishedKey-Values27">Never Expiring Republished Key-Values</a></h3>
 <p>It is reasonable for a cached key-value to expire, but we may never want to 
 expire originator or republished key-values.&nbsp; One good example is a 
 distributed blockchain (or distributed ledger) where data should never 
@@ -744,7 +787,7 @@ There are a variety of ways to do this, such as overriding:</p>
 }</pre>
 <p>so that only the cached store expires.</p>
 <p><b>To Be Continued...</b><a href="PartVII"> Part VII - Asynchronous Considerations and Parallel Queries</a></p>
-<h2>References</h2>
+<h2><a name="References28">References</a></h2>
 <p>[1] -
 <a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
 http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>

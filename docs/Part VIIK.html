@@ -16,11 +16,27 @@
 <a href="PartVIII">Part VIII - A Basic TCP Subnet Procotol</a><br>
 <a href="PartIX">Part IX - Demo and Conclusion</a>
 <p>
-<!-- INSERT contents -->
+<h2>Contents</h2><ul>
+<li><a href="#ConsiderationsforanAsynchronousImplementation0">Considerations for an Asynchronous Implementation</a></li>
+<ul>
+<li><a href="#ThreadSafety1">Thread Safety</a></li>
+<li><a href="#ParallelQueries-Discussion2">Parallel Queries - Discussion</a></li>
+<ul>
+<li><a href="#Ambiguity#183">Ambiguity #18</a></li>
+</ul>
+<li><a href="#ParallelQueries-Implementation4">Parallel Queries - Implementation</a></li>
+<ul>
+<li><a href="#TheBaseRouter5">The BaseRouter</a></li>
+<li><a href="#TheParallelRouter6">The ParallelRouter</a></li>
+</ul>
+</ul>
+<li><a href="#References7">References</a></li>
+</ul>
+
 </p>
 
-<h2>Considerations for an Asynchronous Implementation</h2>
-<h3>Thread Safety</h3>
+<h2><a name="ConsiderationsforanAsynchronousImplementation0">Considerations for an Asynchronous Implementation</a></h2>
+<h3><a name="ThreadSafety1">Thread Safety</a></h3>
 <p>The entry points to the node:</p>
 <ul>
 	<li>Ping</li>
@@ -47,7 +63,7 @@ itself is being modified, however I leave those to some other time.</p>
 <p>It is also assumed that the storage implementation can be re-entrant.&nbsp; 
 In the virtual storage, this is handled by <code>ConcurrentDictionary</code> instances:</p>
 <pre>protected ConcurrentDictionary&lt;BigInteger, StoreValue&gt; store;</pre>
-<h3>Parallel Queries - Discussion</h3>
+<h3><a name="ParallelQueries-Discussion2">Parallel Queries - Discussion</a></h3>
 <p><font color="#FF00FF">The initiator then sends parallel, asynchronous 
 find_node RPCs to the a nodes it has chosen, a is a system-wide concurrency 
 parameter, such as 3.</font></p>
@@ -57,7 +73,7 @@ timeout delays from failed nodes.&nbsp; Waiting for at least some of the nodes
 to respond in each batch of 3 closest nodes gives the system a chance to get 
 even closer nodes to those first set of close nodes with the hope of acquiring
 <i>k</i> closer contacts without having to explore farther contacts.&nbsp;&nbsp;&nbsp; </p>
-<h4>Ambiguity #18</h4>
+<h4><a name="Ambiguity#183">Ambiguity #18</a></h4>
 <p>It's not particularly clear why all the <i>k</i> closer contacts aren't 
 queried in parallel to start with.&nbsp; Maybe the idea is that you want to try 
 to get closer contacts from already close contacts.&nbsp; Certainly all the 
@@ -65,7 +81,7 @@ contacts could be queried and from the ones that respond first, we can select <i
 k</i> closer ones.&nbsp; On the other hand, querying all the contacts 
 simultaneously probably results in unnecessary network traffic as many of the 
 FindNode RPC calls will be ignored. </p>
-<h3>Parallel Queries - Implementation</h3>
+<h3><a name="ParallelQueries-Implementation4">Parallel Queries - Implementation</a></h3>
 <p>The lookup algorithm requires some refactoring, as currently we're passing 
 the collection of nodes to query to the method that makes the RPC call.&nbsp; 
 For example:</p>
@@ -85,7 +101,7 @@ results as they come in.&nbsp; This requires:</p>
 	<li>Changing the algorithm at the top level so that processing continues as 
 	soon as the results appear from the RPC call.</li>
 </ol>
-<h4>The BaseRouter</h4>
+<h4><a name="TheBaseRouter5">The BaseRouter</a></h4>
 <p>For unit testing, it's useful to keep the non-parallel implementation, but 
 ideally both parallel and non-parallel calls to the <code>Router</code> should be made in the 
 same way.&nbsp; An abstract <code>BaseRouter</code> class allows for this:</p>
@@ -137,7 +153,7 @@ out Contact foundBy)
   }
   ...
 }</pre>
-<h4>The ParallelRouter</h4>
+<h4><a name="TheParallelRouter6">The ParallelRouter</a></h4>
 <p>The <code>ParallelRouter</code> queues contacts to query, in addition to some other 
 information each thread needs to know about when executing the RPC call.</p>
 <pre>public class ContactQueueItem
@@ -315,7 +331,7 @@ lock both the <code>closerContacts</code> collection and the <code>findResult</c
 <p><img border="0" src="important.png" width="38" height="32"> The Lookup method 
 itself is not intended to be re-entrant.</p>
 <p><b>To Be Continued...</b><a href="PartVIII"> Part VIII - A Basic TCP Subnet Procotol</a></p>
-<h2>References</h2>
+<h2><a name="References7">References</a></h2>
 <p>[1] -
 <a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
 http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>

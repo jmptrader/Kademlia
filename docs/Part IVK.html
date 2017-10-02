@@ -10,7 +10,7 @@
 <a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-I">Part I - Introduction and Basic Concepts</a><br>
 <a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-II">Part II - Adding Contacts</a><br>
 <a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-III">Part III - Node Lookup</a><br>
-<a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-IV">Part IV - Value Looup</a> (This Article)<br>
+<a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-IV">Part IV - Value Lookup</a> (This Article)<br>
 <a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-V">Part V - The DHT</a><br>
 <a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-VI">Part VI - Bucket and Key-Value Management</a><br>
 <a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-VII">Part VII - Asynchronous Considerations and Parallel Queries</a><br>
@@ -18,10 +18,29 @@
 <a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-IX">Part IX - Demo and Conclusion</a></br>
 </p>
 <p>
-<!-- INSERT contents -->
+<h2>Contents</h2><ul>
+<li><a href="#ValueLookup-Discussion0">Value Lookup - Discussion</a></li>
+<ul>
+<li><a href="#Ambiguity#111">Ambiguity #11</a></li>
+<li><a href="#Refactorings2">Refactorings</a></li>
+<ul>
+<li><a href="#RefactoringtheRouter.LookupMethod3">Refactoring the Router.Lookup Method</a></li>
+<li><a href="#RefactoringtheGetCloserNodesMethod4">Refactoring the GetCloserNodes Method</a></li>
+<li><a href="#RefactoringtheRpcFindNodesMethod5">Refactoring the RpcFindNodes Method</a></li>
+</ul>
+<li><a href="#AddingtheRpcFindValueMethod6">Adding the RpcFindValue Method</a></li>
+</ul>
+<li><a href="#ValueLookup-Implementation7">Value Lookup - Implementation</a></li>
+<ul>
+<li><a href="#TheStoreImplementation8">The Store Implementation</a></li>
+<li><a href="#TheFindValueImplementation9">The FindValue Implementation</a></li>
+</ul>
+<li><a href="#References10">References</a></li>
+</ul>
+
 </p>
 
-<h2>Value Lookup - Discussion</h2>
+<h2><a name="ValueLookup-Discussion0">Value Lookup - Discussion</a></h2>
 <p>From the spec: <font color="#FF00FF">FIND_VALUE behaves like FIND_NODE - 
 returning (IP address, UDP port, Node ID) triples - with one exception. If the 
 RPC recipient has received a STORE RPC for the key, it just returns the stored 
@@ -39,7 +58,7 @@ operations are implemented in terms of the above lookup procedure.</font>&quot;&
 When we're performing a lookup, the initiator will be using the lookup call for 
 both finding nodes and finding values.&nbsp; If it's finding values, it needs to 
 stop if/when the value is found.&nbsp; </p>
-<h3>Ambiguity #11</h3>
+<h3><a name="Ambiguity#111">Ambiguity #11</a></h3>
 <p>&nbsp;This statement: <font color="#FF00FF">For caching purposes, once a 
 lookup succeeds, the requesting node stores the (key,value) pair at the closest node it 
 observed to the key that did not return the value.</font> can be ambiguous -- 
@@ -47,10 +66,10 @@ what does &quot;requesting node&quot; mean?&nbsp; Is it the requesting performin
 lookup, or the node that made the GetValue request?&nbsp; It would seem to be 
 the former, because &quot;it observed to the key that did not return the value&quot; would 
 otherwise not make any sense.</p>
-<h3>Refactorings</h3>
+<h3><a name="Refactorings2">Refactorings</a></h3>
 <p>We need to some refactoring to pass in 
 the RPC call that we want to make, and how we handle a found value for the FindValue RPC call.</p>
-<h4>Refactoring the Router.Lookup Method</h4>
+<h4><a name="RefactoringtheRouter.LookupMethod3">Refactoring the Router.Lookup Method</a></h4>
 <p>We have some major refactoring to do to how lookups are performed.&nbsp; The 
 signature of the Lookup method changes so that:</p>
 <ol>
@@ -74,7 +93,7 @@ be true for when the RPC call is for finding values):</p>
 <p>This stops the lookup immediately when a value is found.&nbsp; There are 
 other refactoring's in the router's <code>Lookup</code> method (for example the method 
 signature) that I'm omitting.</p>
-<h4>Refactoring the GetCloserNodes Method</h4>
+<h4><a name="RefactoringtheGetCloserNodesMethod4">Refactoring the GetCloserNodes Method</a></h4>
 <p>The signature changes:</p>
 <pre>public bool GetCloserNodes(
   ID key, 
@@ -90,7 +109,7 @@ val = foundVal;
 List&lt;Contact&gt; peersNodes = contacts.ExceptBy(node.OurContact, c =&gt; c.ID.Value).ExceptBy(nodesToQuery, c =&gt; c.ID.Value).ToList();
 ...
 return val != null;</pre>
-<h4>Refactoring the RpcFindNodes Method</h4>
+<h4><a name="RefactoringtheRpcFindNodesMethod5">Refactoring the RpcFindNodes Method</a></h4>
 <p>A minor change here (also handling something we haven't talked about yet), in that we know we're finding only nodes, but we need a 
 unified return with <code>RpcFindValue</code>.&nbsp; Notice the method is now 
 public so that the Dht (discussed later) and our unit tests can specify the 
@@ -103,7 +122,7 @@ appropriate RPC call.</p>
   return (nodes, null, null);
 }
 </pre>
-<h3>Adding the RpcFindValue Method</h3>
+<h3><a name="AddingtheRpcFindValueMethod6">Adding the RpcFindValue Method</a></h3>
 <p>The <code>foundBy</code> tuple field will be illustrated later when we talk about the Dht 
 class.</p>
 <pre> /// &lt;summary&gt;
@@ -143,7 +162,7 @@ structural.)&nbsp; </p>
 <p><img border="0" src="note.png" width="24" height="32"> Discussing value 
 lookup tests doesn't make sense outside of the context of the <code>Dht</code> wrapper, so 
 the unit tests for the value lookup will be done in the <code>Dht</code> testing.</p>
-<h2>Value Lookup - Implementation</h2>
+<h2><a name="ValueLookup-Implementation7">Value Lookup - Implementation</a></h2>
 <p>First, we need to implement a simple virtual (in memory) storage mechanism:</p>
 <pre>public class VirtualStorage : IStorage
 {
@@ -171,7 +190,7 @@ the unit tests for the value lookup will be done in the <code>Dht</code> testing
 }</pre>
 <p>We can get away with using <code>BigInteger</code> as the key to the dictionary as it is a 
 <code>struct</code>.</p>
-<h3>The Store Implementation</h3>
+<h3><a name="TheStoreImplementation8">The Store Implementation</a></h3>
 <p>In the <code>Node</code> class:</p>
 <pre>/// &lt;summary&gt;
 /// Store a key-value pair in our storage space, updating the contact if it's not us.
@@ -184,7 +203,7 @@ public void Store(Contact sender, ID key, string val)
   storage.Set(key, val);
 }
 </pre>
-<h3>The FindValue Implementation</h3>
+<h3><a name="TheFindValueImplementation9">The FindValue Implementation</a></h3>
 <p>In the <code>Node</code> class:</p>
 <pre>/// &lt;summary&gt;
 /// Returns either a list of close contacts or a the value, if the node's storage contains the value for the key.
@@ -205,7 +224,7 @@ public (List&lt;Contact&gt; contacts, string val) FindValue(Contact sender, ID k
   }
 }</pre>
 <p><b>To Be Continued...</b><a href="https://www.codeproject.com/Articles/???/Kademlia-Protocol-Part-V"> Part V - The DHT</a></p>
-<h2>References</h2>
+<h2><a name="References10">References</a></h2>
 <p>[1] -
 <a href="http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&journalCode=uinm20">
 http://www.tandfonline.com/doi/abs/10.1080/15427951.2015.1051674?src=recsys&amp;journalCode=uinm20</a>
